@@ -1,8 +1,7 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import {
 	Component,
-	ChangeEvent,
+	type ChangeEvent,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -19,9 +18,12 @@ import useTitleBar from "../hooks/useTitleBar";
 import { helpers, processLiveGameEvents, toWorker } from "../util";
 import type { View } from "../../common/types";
 import { bySport, getPeriodName, isSport } from "../../common";
-import { useLocalStorageState } from "use-local-storage-state";
+import useLocalStorageState from "use-local-storage-state";
+import type { SportState } from "../util/processLiveGameEvents.baseball";
+import { HeadlineScore } from "../components/BoxScoreWrapper";
 
 type PlayerRowProps = {
+	exhibition?: boolean;
 	forceUpdate?: boolean;
 	i: number;
 	liveGameInProgress?: boolean;
@@ -34,6 +36,7 @@ class PlayerRow extends Component<PlayerRowProps> {
 	// Can't just switch to hooks and React.memo because p is mutated, so there is no way to access the previous value of inGame in the memo callback function
 	override shouldComponentUpdate(nextProps: PlayerRowProps) {
 		return bySport({
+			baseball: true,
 			basketball: !!(
 				this.prevInGame ||
 				nextProps.p.inGame ||
@@ -56,6 +59,7 @@ class PlayerRow extends Component<PlayerRowProps> {
 		this.prevInGame = p.inGame;
 
 		const classes = bySport({
+			baseball: undefined,
 			basketball: classNames({
 				"table-warning": p.inGame,
 			}),
@@ -70,28 +74,48 @@ class PlayerRow extends Component<PlayerRowProps> {
 	}
 }
 
-// @ts-ignore
-PlayerRow.propTypes = {
-	p: PropTypes.object.isRequired,
-};
-
 const updatePhaseAndLeagueTopBar = () => {
 	// Send to worker, rather than doing `localActions.update({ liveGameInProgress: false });`, so it works in all tabs
 	toWorker("main", "uiUpdateLocal", { liveGameInProgress: false });
 };
 
-const getSeconds = (time: string) => {
-	const [min, sec] = time.split(":").map(x => parseInt(x));
+const getSeconds = (time: string | undefined) => {
+	if (!time) {
+		return 0;
+	}
+
+	const parts = time.split(":").map(x => parseInt(x));
+	if (parts.length < 2) {
+		return 0;
+	}
+	const [min, sec] = parts;
 	return min * 60 + sec;
 };
 
-const LiveGame = (props: View<"liveGame">) => {
+export const DEFAULT_SPORT_STATE = isSport("baseball")
+	? ({
+			bases: [undefined, undefined, undefined] as [
+				number | undefined,
+				number | undefined,
+				number | undefined,
+			],
+			outs: 0,
+			balls: 0,
+			strikes: 0,
+			batterPid: -1,
+			pitcherPid: -1,
+	  } as SportState)
+	: undefined;
+
+export const LiveGame = (props: View<"liveGame">) => {
 	const [paused, setPaused] = useState(false);
 	const pausedRef = useRef(paused);
-	const [speed, setSpeed] = useLocalStorageState("live-game-speed", "7");
+	const [speed, setSpeed] = useLocalStorageState("live-game-speed", {
+		defaultValue: "7",
+	});
 	const speedRef = useRef(parseInt(speed));
 	const [playIndex, setPlayIndex] = useState(-1);
-	const [started, setStarted] = useState(!!props.events);
+	const [started, setStarted] = useState(false);
 	const [confetti, setConfetti] = useState<{
 		colors?: [string, string, string];
 		display: boolean;
@@ -105,10 +129,13 @@ const LiveGame = (props: View<"liveGame">) => {
 
 	const overtimes = useRef(0);
 	const playByPlayDiv = useRef<HTMLDivElement | null>(null);
-	const quarters = useRef(isSport("hockey") ? [1] : ["Q1"]);
+	const quarters = useRef([]);
 	const possessionChange = useRef<boolean | undefined>();
 	const componentIsMounted = useRef(false);
 	const events = useRef<any[] | undefined>();
+	const sportState = useRef(
+		DEFAULT_SPORT_STATE ? { ...DEFAULT_SPORT_STATE } : undefined,
+	);
 
 	// Make sure to call setPlayIndex after calling this! Can't be done inside because React is not always smart enough to batch renders
 	const processToNextPause = useCallback(
@@ -123,18 +150,69 @@ const LiveGame = (props: View<"liveGame">) => {
 				throw new Error("events.current is undefined");
 			}
 
+			// Save here since it is mutated in processLiveGameEvents
+			const prevOuts = sportState.current?.outs;
+			const prevPts =
+				boxScore.current.teams[0].pts + boxScore.current.teams[1].pts;
+
 			const output = processLiveGameEvents({
 				boxScore: boxScore.current,
 				events: events.current,
 				overtimes: overtimes.current,
 				quarters: quarters.current,
+				sportState: sportState.current,
 			});
-			const text = output.text;
+			let text = output.text;
+			const showOuts =
+				isSport("baseball") && output.sportState.outs > prevOuts!;
+			const currentPts =
+				boxScore.current.teams[0].pts + boxScore.current.teams[1].pts;
+			const showScore = isSport("baseball") && currentPts !== prevPts;
+
 			overtimes.current = output.overtimes;
 			quarters.current = output.quarters;
 			possessionChange.current = output.possessionChange;
+			sportState.current = output.sportState;
 
 			if (text !== undefined) {
+				if (isSport("baseball")) {
+					if (showOuts) {
+						let endWithPeriod = true;
+						if (!text.endsWith("!") && !text.endsWith(".")) {
+							text += ",";
+							endWithPeriod = false;
+						}
+
+						const outs = output.sportState.outs;
+
+						text += ` ${outs} out${outs === 1 ? "" : "s"}${
+							endWithPeriod ? "." : ""
+						}`;
+					}
+
+					if (showScore) {
+						if (!text.endsWith("!") && !text.endsWith(".")) {
+							text += ",";
+						}
+
+						const tied =
+							boxScore.current.teams[0].pts === boxScore.current.teams[1].pts;
+						const leader =
+							boxScore.current.teams[0].pts > boxScore.current.teams[1].pts
+								? 0
+								: 1;
+						const other = leader === 0 ? 1 : 0;
+
+						if (tied) {
+							text += " The game is tied ";
+						} else {
+							text += ` ${boxScore.current.teams[leader].abbrev} leads `;
+						}
+
+						text += `${boxScore.current.teams[leader].pts}-${boxScore.current.teams[other].pts}.`;
+					}
+				}
+
 				const p = document.createElement("p");
 				if (isSport("football") && text.startsWith("Penalty")) {
 					p.innerHTML = text
@@ -152,7 +230,8 @@ const LiveGame = (props: View<"liveGame">) => {
 						(isSport("basketball") &&
 							text.startsWith("Elam Ending activated! First team to")) ||
 						(isSport("hockey") &&
-							(text.includes("Goal!") || text.includes("penalty")))
+							(text.includes("Goal!") || text.includes("penalty"))) ||
+						output.bold
 					) {
 						const b = document.createElement("b");
 						b.appendChild(node);
@@ -188,38 +267,37 @@ const LiveGame = (props: View<"liveGame">) => {
 
 				// Update team records with result of game
 				// Keep in sync with liveGame.ts
-				for (const t of boxScore.current.teams) {
-					if (boxScore.current.playoffs) {
-						if (t.playoffs) {
-							if (boxScore.current.won.tid === t.tid) {
-								t.playoffs.won += 1;
+				if (!boxScore.current.exhibition) {
+					for (const t of boxScore.current.teams) {
+						if (boxScore.current.playoffs) {
+							if (t.playoffs) {
+								if (boxScore.current.won.tid === t.tid) {
+									t.playoffs.won += 1;
 
-								if (
-									props.finals &&
-									t.playoffs.won >= boxScore.current.numGamesToWinSeries
-								) {
-									setConfetti({
-										display: true,
-										colors: t.colors,
-									});
+									if (props.confetti) {
+										setConfetti({
+											display: true,
+											colors: t.colors,
+										});
+									}
+								} else if (boxScore.current.lost.tid === t.tid) {
+									t.playoffs.lost += 1;
 								}
+							}
+						} else {
+							if (boxScore.current.won.pts === boxScore.current.lost.pts) {
+								// Tied!
+								if (t.tied !== undefined) {
+									t.tied += 1;
+								}
+							} else if (boxScore.current.won.tid === t.tid) {
+								t.won += 1;
 							} else if (boxScore.current.lost.tid === t.tid) {
-								t.playoffs.lost += 1;
-							}
-						}
-					} else {
-						if (boxScore.current.won.pts === boxScore.current.lost.pts) {
-							// Tied!
-							if (t.tied !== undefined) {
-								t.tied += 1;
-							}
-						} else if (boxScore.current.won.tid === t.tid) {
-							t.won += 1;
-						} else if (boxScore.current.lost.tid === t.tid) {
-							if (boxScore.current.overtimes > 0 && props.otl) {
-								t.otl += 1;
-							} else {
-								t.lost += 1;
+								if (boxScore.current.overtimes > 0 && props.otl) {
+									t.otl += 1;
+								} else {
+									t.lost += 1;
+								}
 							}
 						}
 					}
@@ -234,7 +312,7 @@ const LiveGame = (props: View<"liveGame">) => {
 			const elapsedSeconds = startSeconds - endSeconds;
 			return elapsedSeconds;
 		},
-		[props.finals, props.otl],
+		[props.confetti, props.otl],
 	);
 
 	useEffect(() => {
@@ -292,8 +370,13 @@ const LiveGame = (props: View<"liveGame">) => {
 
 	const handlePlay = useCallback(() => {
 		setPaused(false);
-		pausedRef.current = false;
-		processToNextPause();
+
+		// Without pausedRef check, this was a race condition and could lead to incorrect post-game records (counting as 2 or more wins)
+		if (pausedRef.current) {
+			pausedRef.current = false;
+			processToNextPause();
+		}
+
 		setPlayIndex(prev => prev + 1);
 	}, [processToNextPause]);
 
@@ -379,31 +462,34 @@ const LiveGame = (props: View<"liveGame">) => {
 				processToNextPause(true);
 				numPlays += 1;
 			}
+
 			setPlayIndex(prev => prev + numPlays);
 		};
 
-		let skipMinutes = [
-			{
-				minutes: 1,
-				key: "O",
-			},
-			{
-				minutes: helpers.bound(
-					Math.round(props.quarterLength / 4),
-					1,
-					Infinity,
-				),
-				key: "T",
-			},
-			{
-				minutes: helpers.bound(
-					Math.round(props.quarterLength / 2),
-					1,
-					Infinity,
-				),
-				key: "S",
-			},
-		];
+		let skipMinutes = isSport("baseball")
+			? []
+			: [
+					{
+						minutes: 1,
+						key: "O",
+					},
+					{
+						minutes: helpers.bound(
+							Math.round(props.quarterLength / 4),
+							1,
+							Infinity,
+						),
+						key: "T",
+					},
+					{
+						minutes: helpers.bound(
+							Math.round(props.quarterLength / 2),
+							1,
+							Infinity,
+						),
+						key: "S",
+					},
+			  ];
 
 		// Dedupe
 		const skipMinutesValues = new Set();
@@ -416,6 +502,10 @@ const LiveGame = (props: View<"liveGame">) => {
 			return true;
 		});
 
+		const getNumSidesSoFar = () =>
+			boxScore.current.teams[0].ptsQtrs.length +
+			boxScore.current.teams[1].ptsQtrs.length;
+
 		const menuItems = [
 			...skipMinutes.map(({ minutes, key }) => ({
 				label: `${minutes} minute${minutes === 1 ? "" : "s"}`,
@@ -424,24 +514,150 @@ const LiveGame = (props: View<"liveGame">) => {
 					playSeconds(60 * minutes);
 				},
 			})),
-			{
-				label: `End of ${
-					boxScore.current.elamTarget !== undefined
-						? "game"
-						: boxScore.current.overtime
-						? "period"
-						: getPeriodName(boxScore.current.numPeriods)
-				}`,
-				key: "Q",
-				onClick: () => {
-					playSeconds(Infinity);
-				},
-			},
+			...(isSport("baseball")
+				? [
+						{
+							label: "Next batter",
+							key: "O",
+							onClick: () => {
+								let numPlays = 0;
+
+								const initialBatter = sportState.current?.batterPid;
+								while (!boxScore.current.gameOver) {
+									processToNextPause(true);
+									numPlays += 1;
+
+									const currentBatter = sportState.current?.batterPid;
+									if (
+										currentBatter !== undefined &&
+										currentBatter >= 0 &&
+										initialBatter !== currentBatter
+									) {
+										break;
+									}
+								}
+
+								setPlayIndex(prev => prev + numPlays);
+							},
+						},
+						{
+							label: "Next baserunner",
+							key: "T",
+							onClick: () => {
+								const initialBases = sportState.current?.bases ?? [];
+								const initialBaserunners = new Set(
+									initialBases.filter(pid => pid !== undefined),
+								);
+
+								const initialHR =
+									boxScore.current.teams[0].hr + boxScore.current.teams[1].hr;
+
+								let numPlays = 0;
+
+								while (!boxScore.current.gameOver) {
+									processToNextPause(true);
+									numPlays += 1;
+
+									// Any new baserunner -> stop
+									const baserunners = (sportState.current?.bases ?? []).filter(
+										pid => pid !== undefined,
+									);
+									if (baserunners.length === 0) {
+										// Handle case where it's a new inning and the same guy gets on base
+										initialBaserunners.clear();
+									}
+									if (baserunners.some(pid => !initialBaserunners.has(pid))) {
+										break;
+									}
+
+									// Home run counts as new baserunner
+									const currentHR =
+										boxScore.current.teams[0].hr + boxScore.current.teams[1].hr;
+									if (initialHR !== currentHR) {
+										break;
+									}
+								}
+
+								setPlayIndex(prev => prev + numPlays);
+							},
+						},
+						{
+							label: "Side is retired",
+							key: "C",
+							onClick: () => {
+								let numPlays = 0;
+
+								const numSidesSoFar = getNumSidesSoFar();
+								while (!boxScore.current.gameOver) {
+									processToNextPause(true);
+									numPlays += 1;
+
+									if (numSidesSoFar !== getNumSidesSoFar()) {
+										break;
+									}
+								}
+
+								setPlayIndex(prev => prev + numPlays);
+							},
+						},
+						{
+							label: "End of inning",
+							key: "Q",
+							onClick: () => {
+								let numPlays = 0;
+
+								const numSidesSoFar = getNumSidesSoFar();
+								while (!boxScore.current.gameOver) {
+									processToNextPause(true);
+									numPlays += 1;
+
+									const newNum = getNumSidesSoFar();
+									if (numSidesSoFar !== newNum && newNum % 2 === 1) {
+										break;
+									}
+								}
+
+								setPlayIndex(prev => prev + numPlays);
+							},
+						},
+						{
+							label: `${helpers.ordinal(boxScore.current.numPeriods)} inning`,
+							key: "U",
+							onClick: () => {
+								let numPlays = 0;
+
+								while (
+									getNumSidesSoFar() <= (boxScore.current.numPeriods - 1) * 2 &&
+									!boxScore.current.gameOver
+								) {
+									processToNextPause(true);
+									numPlays += 1;
+								}
+
+								setPlayIndex(prev => prev + numPlays);
+							},
+						},
+				  ]
+				: [
+						{
+							label: `End of ${
+								boxScore.current.elamTarget !== undefined
+									? "game"
+									: boxScore.current.overtime
+									? "period"
+									: getPeriodName(boxScore.current.numPeriods)
+							}`,
+							key: "Q",
+							onClick: () => {
+								playSeconds(Infinity);
+							},
+						},
+				  ]),
 		];
 
-		if (!boxScore.current.elam) {
+		if (!boxScore.current.elam && !isSport("baseball")) {
 			menuItems.push({
-				label: "Until last 2 minutes",
+				label: "Last 2 minutes",
 				key: "U",
 				onClick: () => {
 					playUntilLastTwoMinutes();
@@ -451,13 +667,14 @@ const LiveGame = (props: View<"liveGame">) => {
 
 		if (
 			bySport({
+				baseball: false,
 				basketball: false,
 				football: true,
 				hockey: false,
 			})
 		) {
 			menuItems.push({
-				label: "Until change of possession",
+				label: "Change of possession",
 				key: "C",
 				onClick: () => {
 					playUntilChangeOfPossession();
@@ -467,13 +684,14 @@ const LiveGame = (props: View<"liveGame">) => {
 
 		if (
 			bySport({
+				baseball: true,
 				basketball: false,
 				football: true,
 				hockey: true,
 			})
 		) {
 			menuItems.push({
-				label: `Until next ${bySport({
+				label: `Next ${bySport({
 					hockey: "goal",
 					default: "score",
 				})}`,
@@ -484,9 +702,13 @@ const LiveGame = (props: View<"liveGame">) => {
 			});
 		}
 
-		if (boxScore.current.elam && boxScore.current.elamTarget === undefined) {
+		if (
+			boxScore.current.elam &&
+			!boxScore.current.elamOvertime &&
+			boxScore.current.elamTarget === undefined
+		) {
 			menuItems.push({
-				label: "Until Elam Ending",
+				label: "Elam Ending",
 				key: "U",
 				onClick: () => {
 					playUntilElamEnding();
@@ -503,24 +725,113 @@ const LiveGame = (props: View<"liveGame">) => {
 		processToNextPause,
 	]);
 
+	const scrollTop = useRef<HTMLDivElement>(null);
+
 	// Needs to return actual div, not fragment, for AutoAffix!!!
 	return (
 		<div>
 			{confetti.display ? <Confetti colors={confetti.colors} /> : null}
 
 			<p className="text-danger">
-				If you navigate away from this page, you won't be able to see these
-				play-by-play results again because they are not stored anywhere. The
-				results of this game are already final, though.
+				{boxScore.current.exhibition
+					? "If you navigate away from this page, you won't be able to see this box score again because it is not stored anywhere."
+					: "If you navigate away from this page, you won't be able to see these play-by-play results again because they are not stored anywhere. The results of this game are already final, though."}
 			</p>
 
-			<div className="row">
+			{boxScore.current.gid >= 0 ? (
+				<div className="live-game-affix-mobile mb-3 d-md-none">
+					<div className="bg-white pt-2">
+						<HeadlineScore boxScore={boxScore.current} small />
+						<div className="d-flex align-items-center">
+							<PlayPauseNext
+								className="me-2"
+								disabled={boxScore.current.gameOver}
+								fastForwardAlignRight
+								fastForwards={fastForwardMenuItems}
+								onPlay={handlePlay}
+								onPause={handlePause}
+								onNext={handleNextPlay}
+								paused={paused}
+								titlePlay="Resume Simulation"
+								titlePause="Pause Simulation"
+								titleNext="Show Next Play"
+								// Since we have two PlayPauseNexts rendered, ignore shortcuts on one
+								ignoreKeyboardShortcuts
+							/>
+							<input
+								type="range"
+								className="form-range flex-grow-1"
+								disabled={boxScore.current.gameOver}
+								min="1"
+								max="33"
+								step="1"
+								value={speed}
+								onChange={handleSpeedChange}
+								title="Speed"
+							/>
+						</div>
+					</div>
+					<div className="d-flex">
+						<div className="ms-auto btn-group">
+							<button
+								className="btn btn-light-bordered"
+								onClick={() => {
+									scrollTop.current?.scrollIntoView();
+								}}
+							>
+								Top
+							</button>
+							{!isSport("football") ? (
+								<>
+									<button
+										className="btn btn-light-bordered"
+										onClick={() => {
+											document
+												.getElementById("scroll-team-1")
+												?.scrollIntoView();
+										}}
+									>
+										{boxScore.current.teams[0].abbrev}
+									</button>
+									<button
+										className="btn btn-light-bordered"
+										onClick={() => {
+											document
+												.getElementById("scroll-team-2")
+												?.scrollIntoView();
+										}}
+									>
+										{boxScore.current.teams[1].abbrev}
+									</button>
+								</>
+							) : null}
+							<button
+								className="btn btn-light-bordered"
+								onClick={() => {
+									playByPlayDiv.current?.scrollIntoView();
+								}}
+							>
+								Plays
+							</button>
+						</div>
+					</div>
+				</div>
+			) : null}
+
+			<div
+				className="row"
+				ref={scrollTop}
+				style={{
+					scrollMarginTop: 174,
+				}}
+			>
 				<div className="col-md-9">
 					{boxScore.current.gid >= 0 ? (
 						<BoxScoreWrapper
 							boxScore={boxScore.current}
 							Row={PlayerRow}
 							playIndex={playIndex}
+							sportState={sportState.current}
 						/>
 					) : (
 						<h2>Loading...</h2>
@@ -528,41 +839,39 @@ const LiveGame = (props: View<"liveGame">) => {
 				</div>
 				<div className="col-md-3">
 					<div className="live-game-affix">
-						{boxScore.current.gid >= 0 ? (
-							<div className="d-flex align-items-center mb-3">
-								<PlayPauseNext
-									className="me-2"
-									disabled={boxScore.current.gameOver}
-									fastForwardAlignRight
-									fastForwards={fastForwardMenuItems}
-									onPlay={handlePlay}
-									onPause={handlePause}
-									onNext={handleNextPlay}
-									paused={paused}
-									titlePlay="Resume Simulation"
-									titlePause="Pause Simulation"
-									titleNext="Show Next Play"
-								/>
-								<div className="mb-3 flex-grow-1 mb-0">
-									<input
-										type="range"
-										className="form-range"
-										disabled={boxScore.current.gameOver}
-										min="1"
-										max="33"
-										step="1"
-										value={speed}
-										onChange={handleSpeedChange}
-										title="Speed"
-									/>
-								</div>
-							</div>
-						) : null}
-
+						<div className="d-none d-md-flex align-items-center mb-3">
+							<PlayPauseNext
+								className="me-2"
+								disabled={boxScore.current.gameOver}
+								fastForwardAlignRight
+								fastForwards={fastForwardMenuItems}
+								onPlay={handlePlay}
+								onPause={handlePause}
+								onNext={handleNextPlay}
+								paused={paused}
+								titlePlay="Resume Simulation"
+								titlePause="Pause Simulation"
+								titleNext="Show Next Play"
+							/>
+							<input
+								type="range"
+								className="form-range flex-grow-1"
+								disabled={boxScore.current.gameOver}
+								min="1"
+								max="33"
+								step="1"
+								value={speed}
+								onChange={handleSpeedChange}
+								title="Speed"
+							/>
+						</div>
 						<div
 							className="live-game-playbyplay"
 							ref={c => {
 								playByPlayDiv.current = c;
+							}}
+							style={{
+								scrollMarginTop: 174,
 							}}
 						/>
 					</div>
@@ -572,23 +881,10 @@ const LiveGame = (props: View<"liveGame">) => {
 	);
 };
 
-// @ts-ignore
-LiveGame.propTypes = {
-	events: PropTypes.arrayOf(
-		PropTypes.shape({
-			type: PropTypes.string.isRequired,
-		}),
-	),
-	initialBoxScore: PropTypes.object,
-};
-
 const LiveGameWrapper = (props: View<"liveGame">) => {
 	useTitleBar({ title: "Live Game Simulation", hideNewWindow: true });
 
 	return <LiveGame {...props} />;
 };
-
-// @ts-ignore
-LiveGameWrapper.propTypes = LiveGame.propTypes;
 
 export default LiveGameWrapper;

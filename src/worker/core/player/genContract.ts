@@ -20,9 +20,13 @@ const genContract = (
 	randomizeAmount: boolean = true,
 	noLimit: boolean = false,
 ): PlayerContract => {
-	const ratings = p.ratings.at(-1);
-	let factor = g.get("hardCap") ? 1.6 : 3.4;
+	const ratings = p.ratings.at(-1)!;
+	let factor = g.get("salaryCapType") === "hard" ? 1.6 : 2;
 	let factor2 = 1;
+
+	if (isSport("basketball")) {
+		factor *= 1.7;
+	}
 
 	if (isSport("football")) {
 		if (ratings.pos === "QB") {
@@ -34,6 +38,10 @@ const genContract = (
 		} else if (ratings.pos === "K" || ratings.pos === "P") {
 			factor *= 0.25;
 		}
+	}
+
+	if (isSport("baseball")) {
+		factor *= 1.4;
 	}
 
 	let amount =

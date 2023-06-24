@@ -1,11 +1,13 @@
-import { Fragment } from "react";
+import { Fragment, type MouseEvent } from "react";
 import type { ScaleLinear } from "d3-scale";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { curveMonotoneX } from "@visx/curve";
+import { localPoint } from "@visx/event";
 import { Group } from "@visx/group";
 import { ParentSize } from "@visx/responsive";
 import { LinePath } from "@visx/shape";
 import { scaleLinear } from "@visx/scale";
+import { useTooltip, TooltipWithBounds } from "@visx/tooltip";
 import type { View } from "../../../common/types";
 import { helpers } from "../../util";
 import { PHASE } from "../../../common";
@@ -19,6 +21,7 @@ const Chart = ({
 	phase,
 	season,
 	seasonsToPlot,
+	stat,
 	teams,
 	title,
 	valueKey,
@@ -30,21 +33,46 @@ const Chart = ({
 	"phase" | "season" | "seasonsToPlot" | "teams"
 > & {
 	className?: string;
+	stat: string;
 	title: string;
-	valueKey: "ptsPct" | "winp" | "stat";
+	valueKey: "ptsPct" | "winp" | "stat" | "statTeam";
 	xDomain: [number, number];
 	yScale: ScaleLinear<number, number, never>;
 	yTickFormat?: (x: number) => string;
 }) => {
 	const MAX_WIDTH = 400;
 	const STROKE_WIDTH = 1;
+	const STAR_SIZE = 20;
 	const colors = ["var(--bs-blue)", "var(--bs-green)"];
+	const colorChamp = "var(--bs-yellow)";
 
 	const margin = {
 		top: 15,
 		right: 15,
 		bottom: 30,
 		left: 30,
+	};
+
+	type TooltipData = (typeof seasonsToPlot)[number]["teams"][number];
+
+	const {
+		tooltipData,
+		tooltipLeft,
+		tooltipTop,
+		tooltipOpen,
+		showTooltip,
+		hideTooltip,
+	} = useTooltip<TooltipData>();
+
+	const handleMouseOver = (event: MouseEvent, datum: TooltipData) => {
+		const coords = localPoint((event.target as any).ownerSVGElement, event);
+		if (coords) {
+			showTooltip({
+				tooltipLeft: coords.x,
+				tooltipTop: coords.y,
+				tooltipData: datum,
+			});
+		}
 	};
 
 	return (
@@ -74,7 +102,7 @@ const Chart = ({
 
 					return (
 						<svg
-							width={width + margin.left + margin.right}
+							width={parent.width}
 							height={HEIGHT + margin.top + margin.bottom}
 						>
 							<Group transform={`translate(${margin.left},${margin.top})`}>
@@ -87,36 +115,6 @@ const Chart = ({
 									}
 									color="var(--bs-secondary)"
 								/>
-								{[0, 1].map(i => {
-									const filtered = seasonsToPlot.filter(
-										row => row.teams[i][valueKey] !== undefined,
-									);
-
-									return (
-										<Fragment key={i}>
-											<LinePath
-												className="chart-line"
-												curve={curveMonotoneX}
-												data={filtered}
-												x={d => xScale(d.season)}
-												y={d => yScale(d.teams[i][valueKey] ?? 0)}
-												stroke={colors[i]}
-												strokeWidth={STROKE_WIDTH}
-											/>
-											{filtered.map((d, j) => (
-												<circle
-													key={j}
-													className="chart-point"
-													r={5 * Math.sqrt(STROKE_WIDTH)}
-													cx={xScale(d.season)}
-													cy={yScale(d.teams[i][valueKey] ?? 0)}
-													stroke={colors[i]}
-													strokeWidth={STROKE_WIDTH}
-												/>
-											))}
-										</Fragment>
-									);
-								})}
 								<ReferenceLine
 									x={[xMarker, xMarker]}
 									y={yScale.range() as [number, number]}
@@ -139,11 +137,85 @@ const Chart = ({
 									tickFormat={yTickFormat as any}
 									tickLength={5}
 								/>
+								{[0, 1].map(i => {
+									const filtered = seasonsToPlot.filter(
+										row => row.teams[i][valueKey] !== undefined,
+									);
+
+									return (
+										<Fragment key={i}>
+											<LinePath
+												className="chart-line"
+												curve={curveMonotoneX}
+												data={filtered}
+												x={d => xScale(d.season)}
+												y={d => yScale(d.teams[i][valueKey] ?? 0)}
+												stroke={colors[i]}
+												strokeWidth={STROKE_WIDTH}
+											/>
+											{filtered.map((d, j) =>
+												d.teams[i].champ ? (
+													<text
+														key={j}
+														className="user-select-none fill-yellow"
+														x={xScale(d.season)}
+														y={yScale(d.teams[i][valueKey] ?? 0)}
+														fontSize={STAR_SIZE}
+														textAnchor="middle"
+														alignmentBaseline="middle"
+														onMouseOver={event =>
+															handleMouseOver(event, d.teams[i])
+														}
+														onMouseOut={hideTooltip}
+													>
+														★
+													</text>
+												) : (
+													<circle
+														key={j}
+														className="fill-white"
+														r={5 * Math.sqrt(STROKE_WIDTH)}
+														cx={xScale(d.season)}
+														cy={yScale(d.teams[i][valueKey] ?? 0)}
+														stroke={d.teams[i].champ ? colorChamp : colors[i]}
+														strokeWidth={STROKE_WIDTH}
+														onMouseOver={event =>
+															handleMouseOver(event, d.teams[i])
+														}
+														onMouseOut={hideTooltip}
+													/>
+												),
+											)}
+										</Fragment>
+									);
+								})}
 							</Group>
 						</svg>
 					);
 				}}
 			</ParentSize>
+			{tooltipOpen && tooltipData ? (
+				<TooltipWithBounds
+					key={Math.random()}
+					top={tooltipTop}
+					left={tooltipLeft}
+				>
+					{tooltipData.season} {tooltipData.region} {tooltipData.name}
+					<br />
+					{helpers.formatRecord({
+						won: tooltipData.won ?? 0,
+						lost: tooltipData.lost ?? 0,
+						otl: tooltipData.otl,
+						tied: tooltipData.tied,
+					})}
+					{tooltipData.roundsWonText ? `, ${tooltipData.roundsWonText}` : null}
+					<br />
+					{helpers.roundStat(tooltipData.stat ?? 0, "ws")} {stat} (total)
+					<br />
+					{helpers.roundStat(tooltipData.statTeam ?? 0, "ws")} {stat} (with{" "}
+					{tooltipData.abbrev})
+				</TooltipWithBounds>
+			) : null}
 			<div
 				className="chart-legend"
 				style={{
@@ -206,6 +278,7 @@ const Charts = ({
 				phase={phase}
 				season={season}
 				seasonsToPlot={seasonsToPlot}
+				stat={stat}
 				teams={teams}
 				title={`Team ${
 					usePts ? "point" : "winning"
@@ -222,9 +295,23 @@ const Charts = ({
 				phase={phase}
 				season={season}
 				seasonsToPlot={seasonsToPlot}
+				stat={stat}
 				teams={teams}
-				title={`${stat} by assets received in trade`}
+				title={`${stat} by assets received in trade (total)`}
 				valueKey={"stat"}
+				xDomain={xDomain}
+				yScale={yScale2}
+			/>
+
+			<Chart
+				className="mt-3"
+				phase={phase}
+				season={season}
+				seasonsToPlot={seasonsToPlot}
+				stat={stat}
+				teams={teams}
+				title={`${stat} by assets received in trade (with team)`}
+				valueKey={"statTeam"}
 				xDomain={xDomain}
 				yScale={yScale2}
 			/>

@@ -9,13 +9,14 @@ import {
 } from "../../util";
 import { wrap } from "../../util/g";
 import type { GameAttributesLeague } from "../../../common/types";
-import { finances, draft, team } from "..";
+import { draft, team } from "..";
 import gameAttributesToUI from "./gameAttributesToUI";
 import { unwrapGameAttribute } from "../../../common";
 import { getAutoTicketPriceByTid } from "../game/attendance";
 import goatFormula from "../../util/goatFormula";
 import updateMeta from "./updateMeta";
 import { initDefaults } from "../../util/loadNames";
+import { gameAttributesKeysOtherSports } from "../../../common/defaultGameAttributes";
 
 const updateMetaDifficulty = async (difficulty: number) => {
 	await updateMeta({
@@ -30,7 +31,7 @@ const setGameAttributes = async (
 
 	if (
 		gameAttributes.difficulty !== undefined &&
-		g.hasOwnProperty("lowestDifficulty") &&
+		Object.hasOwn(g, "lowestDifficulty") &&
 		gameAttributes.difficulty < g.get("lowestDifficulty")
 	) {
 		gameAttributes.lowestDifficulty = gameAttributes.difficulty;
@@ -60,15 +61,20 @@ const setGameAttributes = async (
 	if (gameAttributes.goatFormula === goatFormula.DEFAULT_FORMULA) {
 		gameAttributes.goatFormula = undefined;
 	}
+	if (gameAttributes.goatSeasonFormula === goatFormula.DEFAULT_FORMULA_SEASON) {
+		gameAttributes.goatSeasonFormula = undefined;
+	}
 
 	for (const key of helpers.keys(gameAttributes)) {
+		if (gameAttributesKeysOtherSports.has(key)) {
+			continue;
+		}
+
 		const currentValue = unwrapGameAttribute(g, key);
 
 		if (
-			// @ts-ignore
 			(gameAttributes[key] === undefined ||
 				currentValue !== gameAttributes[key]) &&
-			// @ts-ignore
 			!Number.isNaN(gameAttributes[key])
 		) {
 			// No needless update for arrays - this matters for wrapped values like numGamesPlayoffSeries so it doesn't create an extra entry every year!
@@ -106,13 +112,6 @@ const setGameAttributes = async (
 				);
 				const popRanks = helpers.getPopRanks(teamSeasons);
 
-				const keys: (keyof typeof teams[number]["budget"])[] = [
-					"scouting",
-					"coaching",
-					"health",
-					"facilities",
-				];
-
 				for (let i = 0; i < teamSeasons.length; i++) {
 					const t = teams.find(t => t.tid === teamSeasons[i].tid);
 					const popRank = popRanks[i];
@@ -128,41 +127,29 @@ const setGameAttributes = async (
 						!g.get("spectator")
 					) {
 						if (t.adjustForInflation) {
-							for (const key of keys) {
-								const factor =
-									helpers.defaultBudgetAmount(t.budget[key].rank, value) /
-									helpers.defaultBudgetAmount(t.budget[key].rank);
-
-								t.budget[key].amount =
-									Math.round((t.budget[key].amount * factor) / 10) * 10;
-							}
-
 							if (t.autoTicketPrice !== false) {
-								t.budget.ticketPrice.amount = await getAutoTicketPriceByTid(
-									t.tid,
-								);
+								t.budget.ticketPrice = await getAutoTicketPriceByTid(t.tid);
 							} else {
 								const factor =
-									helpers.defaultTicketPrice(t.budget.ticketPrice.rank, value) /
-									helpers.defaultTicketPrice(t.budget.ticketPrice.rank);
+									helpers.defaultTicketPrice(popRank, value) /
+									helpers.defaultTicketPrice(popRank);
 
-								t.budget.ticketPrice.amount = parseFloat(
-									(t.budget.ticketPrice.amount * factor).toFixed(2),
+								t.budget.ticketPrice = parseFloat(
+									(t.budget.ticketPrice * factor).toFixed(2),
 								);
 							}
 
 							updated = true;
 						}
 					} else {
-						await team.autoBudgetSettings(t, popRank, value);
+						await team.resetTicketPrice(t, popRank, value);
+						updated = true;
 					}
 
 					if (updated) {
 						await idb.cache.teams.put(t);
 					}
 				}
-
-				await finances.updateRanks(["budget"]);
 			}
 		}
 
@@ -193,7 +180,9 @@ const setGameAttributes = async (
 	// Reset playerBioInfo caches
 	if (toUpdate.includes("playerBioInfo")) {
 		local.playerBioInfo = undefined;
-		await initDefaults(true);
+		await initDefaults({
+			force: true,
+		});
 	}
 };
 

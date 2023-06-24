@@ -1,8 +1,15 @@
 // This should never be directly imported. Instead, ui/util/helpers and ui/worker/helpers should be used.
-import type { TeamBasic, PlayerWithoutKey } from "./types";
+import type {
+	TeamBasic,
+	Phase,
+	PlayerContract,
+	GameAttributesLeague,
+	RelativeType,
+} from "./types";
 import getTeamInfos from "./getTeamInfos";
 import orderBy from "lodash-es/orderBy";
 import isSport from "./isSport";
+import { PHASE } from "./constants";
 
 const getPopRanks = (
 	teamSeasons: {
@@ -68,7 +75,190 @@ const gameScore = (arg: { [key: string]: number }): number => {
 
 function getTeamsDefault(): TeamBasic[] {
 	let teams: TeamBasic[];
-	if (isSport("basketball")) {
+	if (isSport("baseball")) {
+		teams = getTeamInfos([
+			{
+				tid: 0,
+				cid: 1,
+				did: 3,
+				abbrev: "ATL",
+			},
+			{
+				tid: 1,
+				cid: 0,
+				did: 0,
+				abbrev: "BAL",
+			},
+			{
+				tid: 2,
+				cid: 1,
+				did: 3,
+				abbrev: "BKN",
+			},
+			{
+				tid: 3,
+				cid: 0,
+				did: 0,
+				abbrev: "BOS",
+			},
+			{
+				tid: 4,
+				cid: 1,
+				did: 4,
+				abbrev: "CHI",
+			},
+			{
+				tid: 5,
+				cid: 1,
+				did: 4,
+				abbrev: "CIN",
+			},
+			{
+				tid: 6,
+				cid: 0,
+				did: 1,
+				abbrev: "CLE",
+			},
+			{
+				tid: 7,
+				cid: 0,
+				did: 2,
+				abbrev: "DAL",
+			},
+			{
+				tid: 8,
+				cid: 1,
+				did: 5,
+				abbrev: "DEN",
+			},
+			{
+				tid: 9,
+				cid: 0,
+				did: 1,
+				abbrev: "DET",
+			},
+			{
+				tid: 10,
+				cid: 0,
+				did: 2,
+				abbrev: "HOU",
+			},
+			{
+				tid: 11,
+				cid: 0,
+				did: 1,
+				abbrev: "IND",
+			},
+			{
+				tid: 12,
+				cid: 0,
+				did: 1,
+				abbrev: "KC",
+			},
+			{
+				tid: 13,
+				cid: 0,
+				did: 2,
+				abbrev: "LAE",
+			},
+			{
+				tid: 14,
+				cid: 1,
+				did: 5,
+				abbrev: "LAL",
+			},
+			{
+				tid: 15,
+				cid: 1,
+				did: 3,
+				abbrev: "MIA",
+			},
+			{
+				tid: 16,
+				cid: 1,
+				did: 4,
+				abbrev: "MIL",
+			},
+			{
+				tid: 17,
+				cid: 0,
+				did: 1,
+				abbrev: "MIN",
+			},
+			{
+				tid: 18,
+				cid: 0,
+				did: 0,
+				abbrev: "NYC",
+			},
+			{
+				tid: 19,
+				cid: 0,
+				did: 2,
+				abbrev: "OAK",
+			},
+			{
+				tid: 20,
+				cid: 1,
+				did: 3,
+				abbrev: "PHI",
+			},
+			{
+				tid: 21,
+				cid: 1,
+				did: 5,
+				abbrev: "PHO",
+			},
+			{
+				tid: 22,
+				cid: 1,
+				did: 4,
+				abbrev: "PIT",
+			},
+			{
+				tid: 23,
+				cid: 1,
+				did: 5,
+				abbrev: "SD",
+			},
+			{
+				tid: 24,
+				cid: 0,
+				did: 2,
+				abbrev: "SEA",
+			},
+			{
+				tid: 25,
+				cid: 1,
+				did: 5,
+				abbrev: "SF",
+			},
+			{
+				tid: 26,
+				cid: 1,
+				did: 4,
+				abbrev: "STL",
+			},
+			{
+				tid: 27,
+				cid: 0,
+				did: 0,
+				abbrev: "TOR",
+			},
+			{
+				tid: 28,
+				cid: 0,
+				did: 0,
+				abbrev: "TPA",
+			},
+			{
+				tid: 29,
+				cid: 1,
+				did: 3,
+				abbrev: "WAS",
+			},
+		]);
+	} else if (isSport("basketball")) {
 		teams = getTeamInfos([
 			{
 				tid: 0,
@@ -286,14 +476,14 @@ function getTeamsDefault(): TeamBasic[] {
 			{
 				tid: 0,
 				cid: 0,
-				did: 0,
-				abbrev: "BOS",
+				did: 1,
+				abbrev: "BKN",
 			},
 			{
 				tid: 1,
 				cid: 0,
-				did: 1,
-				abbrev: "BKN",
+				did: 0,
+				abbrev: "BOS",
 			},
 			{
 				tid: 2,
@@ -347,85 +537,85 @@ function getTeamsDefault(): TeamBasic[] {
 				tid: 10,
 				cid: 1,
 				did: 3,
-				abbrev: "LA",
+				abbrev: "EDM",
 			},
 			{
 				tid: 11,
 				cid: 1,
 				did: 3,
-				abbrev: "LV",
+				abbrev: "LAL",
 			},
 			{
 				tid: 12,
 				cid: 1,
-				did: 2,
-				abbrev: "MEM",
+				did: 3,
+				abbrev: "LAE",
 			},
 			{
 				tid: 13,
-				cid: 0,
-				did: 0,
-				abbrev: "MIA",
+				cid: 1,
+				did: 3,
+				abbrev: "LV",
 			},
 			{
 				tid: 14,
 				cid: 1,
 				did: 2,
-				abbrev: "MIL",
+				abbrev: "MEM",
 			},
 			{
 				tid: 15,
+				cid: 0,
+				did: 0,
+				abbrev: "MIA",
+			},
+			{
+				tid: 16,
 				cid: 1,
 				did: 2,
 				abbrev: "MIN",
 			},
 			{
-				tid: 16,
+				tid: 17,
 				cid: 0,
 				did: 0,
 				abbrev: "MON",
 			},
 			{
-				tid: 17,
-				cid: 0,
-				did: 1,
-				abbrev: "NYC",
-			},
-			{
 				tid: 18,
 				cid: 0,
-				did: 0,
-				abbrev: "OTT",
+				did: 1,
+				abbrev: "NJ",
 			},
 			{
 				tid: 19,
 				cid: 0,
 				did: 1,
-				abbrev: "PHI",
+				abbrev: "NYC",
 			},
 			{
 				tid: 20,
-				cid: 1,
-				did: 2,
-				abbrev: "PHO",
+				cid: 0,
+				did: 0,
+				abbrev: "OTT",
 			},
 			{
 				tid: 21,
 				cid: 0,
 				did: 1,
-				abbrev: "PIT",
+				abbrev: "PHI",
 			},
 			{
 				tid: 22,
 				cid: 1,
-				did: 3,
-				abbrev: "POR",
+				did: 2,
+				abbrev: "PHO",
 			},
 			{
 				tid: 23,
-				cid: 1,
-				did: 3,
-				abbrev: "SD",
+				cid: 0,
+				did: 1,
+				abbrev: "PIT",
 			},
 			{
 				tid: 24,
@@ -467,13 +657,13 @@ function getTeamsDefault(): TeamBasic[] {
 				tid: 30,
 				cid: 0,
 				did: 1,
-				abbrev: "VB",
+				abbrev: "WAS",
 			},
 			{
 				tid: 31,
-				cid: 0,
-				did: 1,
-				abbrev: "WAS",
+				cid: 1,
+				did: 2,
+				abbrev: "WPG",
 			},
 		]);
 	} else {
@@ -693,16 +883,15 @@ function deepCopy<T>(obj: T): T {
 		return obj;
 	}
 
-	// @ts-ignore
 	if (obj.constructor === RegExp) {
 		return obj;
 	}
 
-	// @ts-ignore
+	// @ts-expect-error
 	const retVal = new obj.constructor();
 
 	for (const key of Object.keys(obj)) {
-		// @ts-ignore
+		// @ts-expect-error
 		retVal[key] = deepCopy(obj[key]);
 	}
 
@@ -715,10 +904,10 @@ function deepCopy<T>(obj: T): T {
  * @param {Array.<string|number>} components Array of components for the URL after the league ID, which will be combined with / in between.
  * @return {string} URL
  */
-function leagueUrlFactory(
+const leagueUrlFactory = (
 	lid: number,
 	components: (number | string | undefined)[],
-): string {
+) => {
 	let url = `/l/${lid}`;
 
 	for (let i = 0; i < components.length; i++) {
@@ -728,7 +917,7 @@ function leagueUrlFactory(
 	}
 
 	return url;
-}
+};
 
 /**
  * Format a number as currency, correctly handling negative values.
@@ -739,11 +928,11 @@ function leagueUrlFactory(
  * @param {number|string|undefined} precision Number of decimal places. Default is 2 (like $17.62).
  * @return {string} Formatted currency string.
  */
-function formatCurrency(
+const formatCurrency = (
 	amount: number,
 	append: string = "",
 	precision: number = 2,
-): string {
+) => {
 	const sign = amount < 0 ? "-" : "";
 	let abs = Math.abs(amount);
 
@@ -788,7 +977,7 @@ function formatCurrency(
 	}
 
 	return `${sign}$${numberString}${append}`;
-}
+};
 
 /**
  * Bound a number so that it can't exceed min and max values.
@@ -840,19 +1029,19 @@ const numberWithCommas = (x: number | string): string => {
 	return y.toLocaleString("en-US", { maximumFractionDigits: 10 });
 };
 
-function roundWinp(winp: number): string {
+const roundWinp = (winp: number): string => {
 	let output = winp.toFixed(3);
 
 	if (output[0] === "0") {
 		// Delete leading 0
 		output = output.slice(1, output.length);
-	} else if (output[0] !== "-") {
-		// Delete trailing digit if positive and no leading 0
-		output = output.slice(0, output.length - 1);
+	} else if (output === "1.000") {
+		// 1.000 => 1.00, but for higher numbers leave 3 decimal places, like for OPS
+		output = "1.00";
 	}
 
 	return output;
-}
+};
 
 const upperCaseFirstLetter = <T extends string>(string: T) => {
 	return `${string.charAt(0).toUpperCase()}${string.slice(1)}` as Capitalize<T>;
@@ -969,6 +1158,19 @@ const states = [
 	"District of Columbia",
 ];
 
+const provinces = [
+	"Ontario",
+	"Quebec",
+	"Nova Scotia",
+	"New Brunswick",
+	"Manitoba",
+	"British Columbia",
+	"Prince Edward Island",
+	"Saskatchewan",
+	"Alberta",
+	"Newfoundland and Labrador",
+];
+
 const isAmerican = (loc: string) => {
 	if (loc.endsWith("USA")) {
 		return true;
@@ -977,11 +1179,26 @@ const isAmerican = (loc: string) => {
 	const parts = loc.split(", ");
 	const state = parts.at(-1);
 
-	if (state === "Georgia") {
+	if (state === "Georgia" || state === undefined) {
 		return false;
 	}
 
 	return states.includes(state);
+};
+
+const isCanadian = (loc: string) => {
+	if (loc.endsWith("Canada")) {
+		return true;
+	}
+
+	const parts = loc.split(", ");
+	const province = parts.at(-1);
+
+	if (province === undefined) {
+		return false;
+	}
+
+	return provinces.includes(province);
 };
 
 const getCountry = (bornLoc?: string) => {
@@ -989,12 +1206,15 @@ const getCountry = (bornLoc?: string) => {
 
 	if (isAmerican(name)) {
 		name = "USA";
+	} else if (isCanadian(name)) {
+		name = "Canada";
 	} else {
 		// Find part after last comma/colon
 		for (const delimiter of [", ", ": "]) {
 			const parts = name.split(delimiter);
-			if (parts.length > 1) {
-				name = parts.at(-1);
+			const nameTemp = parts.at(-1);
+			if (nameTemp !== undefined) {
+				name = nameTemp;
 			}
 		}
 	}
@@ -1003,7 +1223,10 @@ const getCountry = (bornLoc?: string) => {
 };
 
 const getJerseyNumber = (
-	p: PlayerWithoutKey,
+	p: {
+		jerseyNumber?: string;
+		stats: any[];
+	},
 	type: "mostCommon" | "current" = "current",
 ): string | undefined => {
 	if (type === "current") {
@@ -1046,6 +1269,7 @@ const roundsWonText = (
 	playoffRoundsWon: number,
 	numPlayoffRounds: number,
 	numConfs: number,
+	showMissedPlayoffs?: boolean,
 ): string => {
 	const playoffsByConf = numConfs === 2;
 
@@ -1073,7 +1297,7 @@ const roundsWonText = (
 		return `Made ${ordinal(playoffRoundsWon + 1)} round`;
 	}
 
-	return "";
+	return showMissedPlayoffs ? "Missed playoffs" : "";
 };
 
 // Based on the currnet number of active teams, the number of draft rounds, and the number of expansion teams, what is the minimum valid number for the max number of players that can be taken per team?
@@ -1099,7 +1323,6 @@ const percentage = (numerator: number, denominator: number) => {
 	return 100 * ratio(numerator, denominator);
 };
 
-// There are a bunch of places where formatRecord is not used and it's done manually :(
 const formatRecord = ({
 	won,
 	lost,
@@ -1120,6 +1343,136 @@ const formatRecord = ({
 	}
 
 	return record;
+};
+
+const overtimeText = (
+	numOvertimes: number | undefined,
+	numPeriods: number | undefined,
+) => {
+	let overtimes = "";
+
+	if (numOvertimes !== undefined && numOvertimes > 0) {
+		if (isSport("baseball")) {
+			overtimes = `${(numPeriods ?? 0) + numOvertimes}`;
+		} else {
+			if (numOvertimes === 1) {
+				overtimes = "OT";
+			} else if (numOvertimes > 1) {
+				overtimes = `${numOvertimes}OT`;
+			}
+		}
+	}
+
+	return overtimes;
+};
+
+const sum = (values: (number | undefined)[]) => {
+	let total = 0;
+	for (const value of values) {
+		if (value !== undefined) {
+			total += value;
+		}
+	}
+	return total;
+};
+
+// If a player was just drafted and the regular season hasn't started, then he can be released without paying anything
+const justDrafted = (
+	p: {
+		draft: {
+			year: number;
+		};
+		contract: PlayerContract;
+	},
+	phase: Phase,
+	season: number,
+) => {
+	return (
+		!!p.contract.rookie &&
+		((p.draft.year === season && phase >= PHASE.DRAFT) ||
+			(p.draft.year === season - 1 &&
+				phase < PHASE.REGULAR_SEASON &&
+				phase >= 0))
+	);
+};
+
+const getRelativeType = (
+	gender: GameAttributesLeague["gender"],
+	type: RelativeType | "grandfather" | "uncle" | "grandson" | "nephew",
+) => {
+	if (type === "brother") {
+		return gender === "male" ? "Brother" : "Sister";
+	} else if (type === "son") {
+		return gender === "male" ? "Son" : "Daughter";
+	} else if (type === "father") {
+		return gender === "male" ? "Father" : "Mother";
+	} else if (type === "grandfather") {
+		return gender === "male" ? "Grandfather" : "Grandmother";
+	} else if (type === "grandson") {
+		return gender === "male" ? "Grandson" : "Granddaughter";
+	} else if (type === "nephew") {
+		return gender === "male" ? "Nephew" : "Niece";
+	} else {
+		return gender === "male" ? "Uncle" : "Aunt";
+	}
+};
+
+const pronoun = (
+	gender: GameAttributesLeague["gender"],
+	pronoun: "he" | "He" | "him" | "Him" | "his" | "His" | "himself" | "Himself",
+) => {
+	if (gender === "female") {
+		switch (pronoun) {
+			case "he":
+				return "she";
+			case "He":
+				return "She";
+			case "him":
+				return "her";
+			case "Him":
+				return "Her";
+			case "his":
+				return "her";
+			case "His":
+				return "her";
+			case "himself":
+				return "herself";
+			case "Himself":
+				return "Herself";
+			default:
+				return "???";
+		}
+	}
+
+	return pronoun;
+};
+
+const getRecordNumericValue = (record: string | null) => {
+	if (record === null) {
+		return -Infinity;
+	}
+
+	let [won, lost, otl, tied] = record.split("-").map(num => parseInt(num));
+
+	// Technically, if only one of "tied" or "otl" is present, we can't distinguish. Assume it's tied, in that case.
+	if (typeof otl === "number" && typeof tied !== "number") {
+		tied = otl;
+		otl = 0;
+	}
+
+	if (typeof otl !== "number") {
+		otl = 0;
+	}
+	if (typeof tied !== "number") {
+		tied = 0;
+	}
+
+	if (won + lost + otl + tied > 0) {
+		// Sort by wins, winp
+		return won + (won + 0.5 * tied) / (won + lost + otl + tied);
+	}
+
+	return 0;
 };
 
 export default {
@@ -1144,4 +1497,10 @@ export default {
 	ratio,
 	percentage,
 	formatRecord,
+	overtimeText,
+	sum,
+	justDrafted,
+	getRelativeType,
+	pronoun,
+	getRecordNumericValue,
 };

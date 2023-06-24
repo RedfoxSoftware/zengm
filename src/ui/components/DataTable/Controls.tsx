@@ -1,5 +1,4 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import type { SyntheticEvent } from "react";
 import { Dropdown } from "react-bootstrap";
 import { bySport } from "../../../common";
@@ -36,6 +35,12 @@ const Controls = ({
 	searchText: string;
 }) => {
 	const positionFilterText = bySport({
+		baseball: (
+			<>
+				<code>SS|3B</code> under a Position column to display shortstops and
+				third basemen
+			</>
+		),
 		basketball: (
 			<>
 				<code>C|PF</code> under a Position column to display centers and power
@@ -128,7 +133,7 @@ const Controls = ({
 					}}
 					title="Actions"
 				>
-					<span className="glyphicon glyphicon-option-vertical text-muted" />
+					<span className="glyphicon glyphicon-option-vertical text-body-secondary" />
 				</Dropdown.Toggle>
 				<Dropdown.Menu>
 					<Dropdown.Item onClick={onSelectColumns}>
@@ -142,16 +147,6 @@ const Controls = ({
 			</Dropdown>
 		</div>
 	);
-};
-
-Controls.propTypes = {
-	enableFilters: PropTypes.bool.isRequired,
-	name: PropTypes.string.isRequired,
-	onExportCSV: PropTypes.func.isRequired,
-	onResetTable: PropTypes.func.isRequired,
-	onSearch: PropTypes.func.isRequired,
-	onToggleFilters: PropTypes.func.isRequired,
-	searchText: PropTypes.string.isRequired,
 };
 
 export default Controls;

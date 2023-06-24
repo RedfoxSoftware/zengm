@@ -2,6 +2,7 @@ import { season } from "..";
 import {
 	DIFFICULTY,
 	gameAttributeHasHistory,
+	isSport,
 	PHASE,
 	unwrapGameAttribute,
 	WEBSITE_ROOT,
@@ -64,10 +65,14 @@ const createGameAttributes = async (
 				(gameAttributes as any)[key] = value;
 			}
 
-			// Hack to replace null with -Infinity, cause Infinity is not in JSON spec
-			// @ts-ignore
-			if (Array.isArray(value) && value.length > 0 && value[0].start === null) {
-				// @ts-ignore
+			// Hack to replace null with -Infinity, cause Infinity is not in JSON spec. ? after value[0] is in case first entry is null/undefined, which could happen for riggedLottery and maybe others
+			if (
+				Array.isArray(value) &&
+				value.length > 0 &&
+				// @ts-expect-error
+				value[0]?.start === null
+			) {
+				// @ts-expect-error
 				value[0].start = -Infinity;
 			}
 		}
@@ -78,7 +83,7 @@ const createGameAttributes = async (
 
 			// Handle league file with userTid history, but user selected a new team maybe
 			if (gameAttributeHasHistory(value)) {
-				const last = value.at(-1);
+				const last = value.at(-1)!;
 				if (last.value === userTid) {
 					// Bring over history
 					gameAttributes.userTid = value;
@@ -277,6 +282,25 @@ const createGameAttributes = async (
 				conditions,
 			);
 		}
+	}
+
+	if ((gameAttributes as any).hardCap !== undefined) {
+		gameAttributes.salaryCapType = (gameAttributes as any).hardCap
+			? "hard"
+			: "soft";
+		delete (gameAttributes as any).hardCap;
+	}
+
+	if (!isSport("basketball") && (version === undefined || version <= 51)) {
+		if (gameAttributes.pace === 100) {
+			gameAttributes.pace = 1;
+		}
+	}
+
+	if (typeof gameAttributes.challengeThanosMode === "boolean") {
+		gameAttributes.challengeThanosMode = gameAttributes.challengeThanosMode
+			? 20
+			: 0;
 	}
 
 	return gameAttributes;

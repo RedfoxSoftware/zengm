@@ -1,6 +1,6 @@
 import orderBy from "lodash-es/orderBy";
 import { draft, player, freeAgents } from "../..";
-import { PHASE, isSport, POSITION_COUNTS } from "../../../../common";
+import { PHASE, POSITION_COUNTS } from "../../../../common";
 import { groupBy } from "../../../../common/groupBy";
 import type {
 	PlayerWithoutKey,
@@ -12,11 +12,11 @@ import { g, random } from "../../../util";
 
 const createRandomPlayers = async ({
 	activeTids,
-	scoutingRank,
+	scoutingLevel,
 	teams,
 }: {
 	activeTids: number[];
-	scoutingRank: number;
+	scoutingLevel: number;
 	teams: Pick<Team, "tid" | "retiredJerseyNumbers">[];
 }) => {
 	const players: PlayerWithoutKey[] = [];
@@ -52,7 +52,7 @@ const createRandomPlayers = async ({
 	) {
 		let draftClass = await draft.genPlayersWithoutSaving(
 			g.get("season"),
-			scoutingRank,
+			scoutingLevel,
 			[],
 		);
 
@@ -107,9 +107,7 @@ const createRandomPlayers = async ({
 				p.contract.exp = -Infinity;
 			} else {
 				let years;
-				if (isSport("hockey")) {
-					years = 3;
-				} else if (!g.get("hardCap")) {
+				if (g.get("draftPickAutoContract")) {
 					years = draft.getRookieContractLength(round);
 				} else {
 					// 2 years for 2nd round, 3 years for 1st round;
@@ -120,7 +118,7 @@ const createRandomPlayers = async ({
 					amount: rookieSalaries[i],
 					exp: g.get("season") - numYearsAgo + years,
 				};
-				if (!g.get("hardCap")) {
+				if (g.get("draftPickAutoContract")) {
 					contract.rookie = true;
 				}
 
@@ -187,7 +185,7 @@ const createRandomPlayers = async ({
 		}
 
 		// Keep rookie contract, or no?
-		if (p.contract.exp >= g.get("season") && !g.get("hardCap")) {
+		if (p.contract.exp >= g.get("season") && g.get("draftPickAutoContract")) {
 			delete p.contract.temp;
 		}
 

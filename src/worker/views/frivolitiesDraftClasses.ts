@@ -5,13 +5,15 @@ import type {
 	Player,
 	MinimalPlayerRatings,
 } from "../../common/types";
-import { bySport, isSport, PHASE } from "../../common";
+import { bySport, PHASE } from "../../common";
 import orderBy from "lodash-es/orderBy";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const playerValue = (p: Player<MinimalPlayerRatings>) => {
 	let sum = 0;
 	for (const ps of p.stats) {
 		sum += bySport({
+			baseball: ps.war,
 			basketball: ps.ows + ps.dws,
 			football: ps.av,
 			hockey: ps.dps + ps.ops + ps.gps,
@@ -84,15 +86,7 @@ const updateFrivolitiesDraftClasses = async (
 				if (p.awards.some(award => award.type === "Most Valuable Player")) {
 					draftClass.numMVP += 1;
 				}
-				if (
-					p.awards.some(award => {
-						if (isSport("football") || isSport("hockey")) {
-							return award.type.includes("All-League");
-						}
-
-						return award.type === "All-Star";
-					})
-				) {
+				if (p.awards.some(award => award.type === "All-Star")) {
 					draftClass.numAS += 1;
 				}
 				if (p.retiredYear === Infinity) {
@@ -102,6 +96,7 @@ const updateFrivolitiesDraftClasses = async (
 		);
 
 		const stats = bySport({
+			baseball: ["gp", "keyStats", "war"],
 			basketball: [
 				"gp",
 				"min",
@@ -120,22 +115,25 @@ const updateFrivolitiesDraftClasses = async (
 		const bestPlayersAll = draftClasses.map(
 			draftClass => draftClass.bestPlayer.p,
 		);
-		const bestPlayers = processPlayersHallOfFame(
-			await idb.getCopies.playersPlus(bestPlayersAll, {
-				attrs: [
-					"pid",
-					"name",
-					"draft",
-					"retiredYear",
-					"statsTids",
-					"born",
-					"diedYear",
-					"jerseyNumber",
-				],
-				ratings: ["ovr", "pos"],
-				stats: ["season", "abbrev", "tid", ...stats],
-				fuzz: true,
-			}),
+		const bestPlayers = addFirstNameShort(
+			processPlayersHallOfFame(
+				await idb.getCopies.playersPlus(bestPlayersAll, {
+					attrs: [
+						"pid",
+						"firstName",
+						"lastName",
+						"draft",
+						"retiredYear",
+						"statsTids",
+						"born",
+						"diedYear",
+						"jerseyNumber",
+					],
+					ratings: ["ovr", "pos"],
+					stats: ["season", "abbrev", "tid", ...stats],
+					fuzz: true,
+				}),
+			),
 		);
 
 		const draftClasses2 = orderBy(

@@ -6,7 +6,7 @@ import type {
 	PlayerWithoutKey,
 } from "../../../common/types";
 import valueCombineOvrPot from "./valueCombineOvrPot";
-import { isSport } from "../../../common";
+import { bySport, isSport } from "../../../common";
 
 /**
  * Returns a numeric value for a given player, representing is general worth to a typical team
@@ -57,21 +57,29 @@ const value = (
 		pr.pot = p.ratings[s].pot;
 	}
 
-	// Normalize ovr/pot, other sports need testing
-	if (isSport("basketball")) {
-		const defaultOvrMean = 47;
-		const defaultOvrStd = 10;
-		if (options.ovrStd > 0) {
-			pr.ovr =
-				((pr.ovr - options.ovrMean) / options.ovrStd) * defaultOvrStd +
-				defaultOvrMean;
-			pr.pot =
-				((pr.pot - options.ovrMean) / options.ovrStd) * defaultOvrStd +
-				defaultOvrMean;
-		} else {
-			pr.ovr = pr.ovr - options.ovrMean + defaultOvrMean;
-			pr.pot = pr.pot - options.ovrMean + defaultOvrMean;
-		}
+	// Normalize ovr/pot, these are values for a typical random players league
+	const defaultOvrMean = bySport({
+		baseball: 47,
+		basketball: 47,
+		football: 48,
+		hockey: 50,
+	});
+	const defaultOvrStd = bySport({
+		baseball: 11,
+		basketball: 10,
+		football: 11,
+		hockey: 11,
+	});
+	if (options.ovrStd > 0) {
+		pr.ovr =
+			((pr.ovr - options.ovrMean) / options.ovrStd) * defaultOvrStd +
+			defaultOvrMean;
+		pr.pot =
+			((pr.pot - options.ovrMean) / options.ovrStd) * defaultOvrStd +
+			defaultOvrMean;
+	} else {
+		pr.ovr = pr.ovr - options.ovrMean + defaultOvrMean;
+		pr.pot = pr.pot - options.ovrMean + defaultOvrMean;
 	}
 
 	// From linear regression OVR ~ PER
@@ -86,32 +94,37 @@ const value = (
 	if (isSport("basketball") && ps.length > 0) {
 		const ps1 = ps.at(-1); // Most recent stats
 
-		if (ps.length === 1 || ps[0].min >= 2000) {
-			// Only one year of stats
-			current = intercept + slope * ps1.per;
+		// PER may be undefined for exhibition game players from old historical seasons. See ps2 check below too.
+		if (Object.hasOwn(ps1, "per")) {
+			if (ps.length === 1 || ps1.min >= 2000) {
+				// Only one year of stats
+				current = intercept + slope * ps1.per;
 
-			if (ps1.min < 2000) {
-				current = (current * ps1.min) / 2000 + pr.ovr * (1 - ps1.min / 2000);
-			}
-		} else {
-			// Two most recent seasons
-			const ps2 = ps[ps.length - 2];
+				if (ps1.min < 2000) {
+					current = (current * ps1.min) / 2000 + pr.ovr * (1 - ps1.min / 2000);
+				}
+			} else {
+				// Two most recent seasons
+				const ps2 = ps[ps.length - 2];
 
-			if (ps1.min + ps2.min > 0) {
-				current =
-					intercept +
-					(slope * (ps1.per * ps1.min + ps2.per * ps2.min)) /
-						(ps1.min + ps2.min);
+				if (Object.hasOwn(ps2, "per")) {
+					if (ps1.min + ps2.min > 0) {
+						current =
+							intercept +
+							(slope * (ps1.per * ps1.min + ps2.per * ps2.min)) /
+								(ps1.min + ps2.min);
 
-				if (ps1.min + ps2.min < 2000) {
-					current =
-						(current * (ps1.min + ps2.min)) / 2000 +
-						pr.ovr * (1 - (ps1.min + ps2.min) / 2000);
+						if (ps1.min + ps2.min < 2000) {
+							current =
+								(current * (ps1.min + ps2.min)) / 2000 +
+								pr.ovr * (1 - (ps1.min + ps2.min) / 2000);
+						}
+					}
 				}
 			}
-		}
 
-		current = 0.8 * pr.ovr + 0.2 * current; // Include some part of the ratings
+			current = 0.8 * pr.ovr + 0.2 * current; // Include some part of the ratings
+		}
 	}
 
 	// 2. Potential

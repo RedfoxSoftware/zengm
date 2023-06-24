@@ -4,8 +4,9 @@ import { team, trade } from "../core";
 import { idb } from "../db";
 import { g, helpers } from "../util"; // This relies on vars being populated, so it can't be called in parallel with updateTrade
 import type { TradeTeams } from "../../common/types";
+import addFirstNameShort from "../util/addFirstNameShort";
 
-const getSummary = async (teams: TradeTeams) => {
+export const getSummary = async (teams: TradeTeams) => {
 	const summary = await trade.summary(teams);
 	const summary2 = {
 		enablePropose:
@@ -15,9 +16,12 @@ const getSummary = async (teams: TradeTeams) => {
 				teams[1].pids.length > 0 ||
 				teams[1].dpids.length > 0),
 		warning: summary.warning,
+		warningAmount: summary.warningAmount,
 		teams: [0, 1].map(i => {
 			return {
 				name: summary.teams[i].name,
+				ovrAfter: summary.teams[i].ovrAfter,
+				ovrBefore: summary.teams[i].ovrBefore,
 				payrollAfterTrade: summary.teams[i].payrollAfterTrade,
 				total: summary.teams[i].total,
 				trade: summary.teams[i].trade,
@@ -91,9 +95,11 @@ const updateTrade = async () => {
 	);
 	const attrs = [
 		"pid",
-		"name",
+		"firstName",
+		"lastName",
 		"age",
 		"contract",
+		"draft",
 		"injury",
 		"watch",
 		"untradable",
@@ -101,34 +107,39 @@ const updateTrade = async () => {
 	];
 	const ratings = ["ovr", "pot", "skills", "pos"];
 	const stats = bySport({
+		baseball: ["gp", "keyStats", "war"],
 		basketball: ["gp", "min", "pts", "trb", "ast", "per"],
 		football: ["gp", "keyStats", "av"],
 		hockey: ["gp", "keyStats", "ops", "dps", "ps"],
 	});
-	const userRoster = await idb.getCopies.playersPlus(userRosterAll, {
-		attrs,
-		ratings,
-		stats,
-		season: g.get("season"),
-		tid: g.get("userTid"),
-		showNoStats: true,
-		showRookies: true,
-		fuzz: true,
-	});
+	const userRoster = addFirstNameShort(
+		await idb.getCopies.playersPlus(userRosterAll, {
+			attrs,
+			ratings,
+			stats,
+			season: g.get("season"),
+			tid: g.get("userTid"),
+			showNoStats: true,
+			showRookies: true,
+			fuzz: true,
+		}),
+	);
 
 	for (const p of userRoster) {
 		p.included = teams[0].pids.includes(p.pid);
 		p.excluded = teams[0].pidsExcluded.includes(p.pid);
 	}
 
-	const userPicks2 = userPicks.map(dp => {
-		return {
-			...dp,
-			desc: helpers.pickDesc(dp, "short"),
-			included: teams[0].dpids.includes(dp.dpid),
-			excluded: teams[0].dpidsExcluded.includes(dp.dpid),
-		};
-	});
+	const userPicks2 = await Promise.all(
+		userPicks.map(async dp => {
+			return {
+				...dp,
+				desc: await helpers.pickDesc(dp, "short"),
+				included: teams[0].dpids.includes(dp.dpid),
+				excluded: teams[0].dpidsExcluded.includes(dp.dpid),
+			};
+		}),
+	);
 
 	const otherTid = teams[1].tid;
 	const otherRosterAll = await idb.cache.players.indexGetAll(
@@ -160,30 +171,34 @@ const updateTrade = async () => {
 		return returnValue;
 	}
 
-	const otherRoster = await idb.getCopies.playersPlus(otherRosterAll, {
-		attrs,
-		ratings,
-		stats,
-		season: g.get("season"),
-		tid: otherTid,
-		showNoStats: true,
-		showRookies: true,
-		fuzz: true,
-	});
+	const otherRoster = addFirstNameShort(
+		await idb.getCopies.playersPlus(otherRosterAll, {
+			attrs,
+			ratings,
+			stats,
+			season: g.get("season"),
+			tid: otherTid,
+			showNoStats: true,
+			showRookies: true,
+			fuzz: true,
+		}),
+	);
 
 	for (const p of otherRoster) {
 		p.included = teams[1].pids.includes(p.pid);
 		p.excluded = teams[1].pidsExcluded.includes(p.pid);
 	}
 
-	const otherPicks2 = otherPicks.map(dp => {
-		return {
-			...dp,
-			desc: helpers.pickDesc(dp, "short"),
-			included: teams[1].dpids.includes(dp.dpid),
-			excluded: teams[1].dpidsExcluded.includes(dp.dpid),
-		};
-	});
+	const otherPicks2 = await Promise.all(
+		otherPicks.map(async dp => {
+			return {
+				...dp,
+				desc: await helpers.pickDesc(dp, "short"),
+				included: teams[1].dpids.includes(dp.dpid),
+				excluded: teams[1].dpidsExcluded.includes(dp.dpid),
+			};
+		}),
+	);
 
 	const summary = await getSummary(teams); // Always run this, for multi team mode
 
@@ -212,7 +227,9 @@ const updateTrade = async () => {
 	return {
 		challengeNoRatings: g.get("challengeNoRatings"),
 		challengeNoTrades: g.get("challengeNoTrades"),
+		luxuryPayroll: g.get("luxuryPayroll") / 1000,
 		salaryCap: g.get("salaryCap") / 1000,
+		salaryCapType: g.get("salaryCapType"),
 		userDpids: teams[0].dpids,
 		userDpidsExcluded: teams[0].dpidsExcluded,
 		userPicks: userPicks2,

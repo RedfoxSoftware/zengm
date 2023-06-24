@@ -1,7 +1,9 @@
-import loadDataBasketball, { Basketball } from "./loadData.basketball";
+import loadDataBasketball, { type Basketball } from "./loadData.basketball";
+import loadStatsBasketball from "./loadStats.basketball";
 import formatScheduledEvents from "./formatScheduledEvents";
 import { groupBy } from "../../../common/groupBy";
 import orderBy from "lodash-es/orderBy";
+import range from "lodash-es/range";
 import type {
 	GetLeagueOptions,
 	DraftPickWithoutKey,
@@ -11,7 +13,7 @@ import type {
 import { defaultGameAttributes, helpers, random } from "../../util";
 import {
 	isSport,
-	MAX_SUPPORTED_LEAGUE_VERSION,
+	LEAGUE_DATABASE_VERSION,
 	PHASE,
 	PLAYER,
 	unwrapGameAttribute,
@@ -31,8 +33,8 @@ import getAwards from "./getAwards";
 import setDraftProspectRatingsBasedOnDraftPosition from "./setDraftProspectRatingsBasedOnDraftPosition";
 import getInjury from "./getInjury";
 
-export const LATEST_SEASON = 2022;
-export const LATEST_SEASON_WITH_DRAFT_POSITIONS = 2021;
+export const MIN_SEASON = 1947;
+export const LATEST_SEASON = 2023;
 export const FIRST_SEASON_WITH_ALEXNOOB_ROSTERS = 2020;
 const FREE_AGENTS_SEASON = 2020;
 
@@ -139,8 +141,8 @@ const getLeague = async (options: GetLeagueOptions) => {
 		if (options.realStats === "allActive") {
 			// Only keep players who are active this season
 			groupedRatings = groupedRatings.filter(allRatings => {
-				const lastRatings = allRatings.at(-1);
-				return lastRatings.season === options.season;
+				const lastSeason = allRatings.at(-1)?.season;
+				return lastSeason === options.season;
 			});
 		} else if (
 			options.realStats === "allActiveHOF" ||
@@ -161,7 +163,7 @@ const getLeague = async (options: GetLeagueOptions) => {
 			if (options.realStats === "allActiveHOF") {
 				// Only keep players who are active this season or in the HoF
 				groupedRatings = groupedRatings.filter(allRatings => {
-					const lastRatings = allRatings.at(-1);
+					const lastRatings = allRatings.at(-1)!;
 					return (
 						lastRatings.season === options.season ||
 						hofSlugs.has(lastRatings.slug)
@@ -170,33 +172,25 @@ const getLeague = async (options: GetLeagueOptions) => {
 			}
 		}
 
-		const players = groupedRatings.map(ratings =>
-			formatPlayer(ratings, {
+		const players = groupedRatings.map(ratings => {
+			const p = formatPlayer(ratings, {
 				randomDebuts: options.randomDebuts,
-			}),
-		);
+			});
 
-		// Manually add HoF to retired players who do eventually make the HoF, but have not yet been inducted by the tim ethis season started
-		if (hofSlugs.size > 0) {
-			for (const p of players) {
-				if (hofSlugs.has(p.srID) && !p.hof && p.tid === PLAYER.RETIRED) {
-					p.hof = 1;
-					if (!p.awards) {
-						p.awards = [];
-					}
-
-					const season =
-						options.phase <= PHASE.PLAYOFFS
-							? options.season - 1
-							: options.season;
-
-					p.awards.push({
-						type: "Inducted into the Hall of Fame",
-						season,
-					});
-				}
+			const retiredUntil = ratings.at(-1)?.retiredUntil;
+			if (retiredUntil !== undefined) {
+				scheduledEvents.push({
+					type: "unretirePlayer",
+					season: retiredUntil - 1,
+					phase: PHASE.FREE_AGENCY,
+					info: {
+						pid: p.pid,
+					},
+				});
 			}
-		}
+
+			return p;
+		});
 
 		// Find draft prospects, which can't include any active players
 		const lastPID = Math.max(...players.map(p => p.pid));
@@ -261,6 +255,11 @@ const getLeague = async (options: GetLeagueOptions) => {
 				p.draft.year = draftYears[i];
 				p.born.year += diff;
 
+				p.draft.tid = -1;
+				p.draft.originalTid = -1;
+				p.draft.round = 0;
+				p.draft.pick = 0;
+
 				if (
 					p.draft.year < options.season ||
 					(p.draft.year === options.season && options.phase > PHASE.DRAFT)
@@ -297,16 +296,28 @@ const getLeague = async (options: GetLeagueOptions) => {
 				} else {
 					// Draft prospect
 					p.tid = PLAYER.UNDRAFTED;
-
 					const rookieRatings = basketball.ratings.find(
 						row => row.slug === p.srID,
 					);
 					if (!rookieRatings) {
 						throw new Error(`No ratings found for "${p.srID}"`);
 					}
-					const ratings = getOnlyRatings(rookieRatings);
-					nerfDraftProspect(ratings);
-					p.ratings = [ratings];
+					const currentRatings = getOnlyRatings(rookieRatings);
+					nerfDraftProspect(currentRatings);
+					p.ratings = [currentRatings];
+					const bio = basketball.bios[p.srID];
+					if (
+						options.type === "real" &&
+						options.realDraftRatings === "draft" &&
+						bio
+					) {
+						const age = p.draft.year + 1 - p.born.year;
+						setDraftProspectRatingsBasedOnDraftPosition(
+							currentRatings,
+							age,
+							bio,
+						);
+					}
 				}
 			}
 		}
@@ -435,7 +446,7 @@ const getLeague = async (options: GetLeagueOptions) => {
 		let playoffSeries;
 		let playoffSeriesRange: [number, number] | undefined;
 		if (options.realStats === "all") {
-			playoffSeriesRange = [1947, options.season - 1];
+			playoffSeriesRange = [MIN_SEASON, options.season - 1];
 			if (options.phase >= PHASE.PLAYOFFS) {
 				playoffSeriesRange[1] += 1;
 			}
@@ -485,10 +496,6 @@ const getLeague = async (options: GetLeagueOptions) => {
 					}
 				}
 
-				const numActiveTeams = initialTeamsSeason.filter(
-					t => !t.disabled,
-				).length;
-
 				for (const t of initialTeamsSeason) {
 					const t2 = initialTeams.find(t2 => t2.tid === t.tid);
 					if (!t2) {
@@ -504,7 +511,6 @@ const getLeague = async (options: GetLeagueOptions) => {
 					const teamSeason = team.genSeasonRow(
 						t,
 						undefined,
-						numActiveTeams,
 						season,
 						defaultGameAttributes.defaultStadiumCapacity,
 					);
@@ -523,8 +529,15 @@ const getLeague = async (options: GetLeagueOptions) => {
 					for (const key of keys) {
 						teamSeason[key] = teamSeasonData[key];
 					}
-					teamSeason.gp = teamSeason.won + teamSeason.lost;
 					teamSeason.gpHome = teamSeason.wonHome + teamSeason.lostHome;
+
+					if (
+						teamSeason.season < options.season ||
+						(teamSeason.season === options.season &&
+							options.phase >= PHASE.PLAYOFFS)
+					) {
+						teamSeason.avgAge = teamSeasonData.avgAge;
+					}
 
 					teamSeason.srID = t.srID;
 
@@ -562,7 +575,6 @@ const getLeague = async (options: GetLeagueOptions) => {
 					const teamSeason = team.genSeasonRow(
 						t,
 						undefined,
-						activeTeams.length,
 						options.season,
 						defaultGameAttributes.defaultStadiumCapacity,
 					);
@@ -571,6 +583,88 @@ const getLeague = async (options: GetLeagueOptions) => {
 						t.seasons = [];
 					}
 					t.seasons.push(teamSeason);
+				}
+			}
+		}
+
+		// If starting in a playoff where there is a play-in tournament, add the play-in tournament before
+		if (options.phase === PHASE.PLAYOFFS && playoffSeries) {
+			const playIns = basketball.playIns[options.season];
+			if (playIns) {
+				const getTidAndWinp = (abbrev: string) => {
+					const t = initialTeams.find(
+						t => oldAbbrevTo2020BBGMAbbrev(t.srID) === abbrev,
+					);
+					if (!t) {
+						throw new Error("Missing team");
+					}
+					const teamSeason = basketball.teamSeasons[options.season][abbrev];
+					if (!teamSeason) {
+						throw new Error("Missing teamSeason");
+					}
+					const winp = helpers.calcWinp(teamSeason);
+
+					return {
+						tid: t.tid,
+						winp,
+					};
+				};
+
+				const currentPlayoffSeries = playoffSeries.at(-1);
+				if (currentPlayoffSeries) {
+					currentPlayoffSeries.playIns = playIns.map((playIn, cid) => {
+						return playIn.map(matchup => {
+							return {
+								home: {
+									cid,
+									seed: matchup.seeds[0],
+									won: 0,
+									...getTidAndWinp(matchup.abbrevs[0]),
+								},
+								away: {
+									cid,
+									seed: matchup.seeds[1],
+									won: 0,
+									...getTidAndWinp(matchup.abbrevs[1]),
+								},
+							};
+						});
+					});
+
+					const playInSeeds = [7, 8];
+					for (const round of currentPlayoffSeries.series) {
+						for (const matchup of round) {
+							const away = matchup.away;
+							if (away && playInSeeds.includes(away.seed)) {
+								away.pendingPlayIn = true;
+
+								const playInGames = currentPlayoffSeries.playIns[away.cid];
+								let tid;
+								for (const matchup of playInGames) {
+									if (matchup.home.seed === away.seed) {
+										tid = matchup.home.tid;
+										break;
+									} else if (matchup.away?.seed === away.seed) {
+										tid = matchup.away.tid;
+										break;
+									}
+								}
+
+								// Update teamSeason for this team - they did not make the playoffs yet!
+								const teamSeason = initialTeams[away.tid].seasons?.at(-1);
+								if (teamSeason) {
+									teamSeason.playoffRoundsWon = -1;
+								}
+
+								// Needs to be the correct tid from the 7/8 play-in seeds, or it won't be recognized correctly
+								if (tid !== undefined) {
+									away.tid = tid;
+								}
+							}
+						}
+					}
+
+					currentPlayoffSeries.currentRound = -1;
 				}
 			}
 		}
@@ -596,6 +690,29 @@ const getLeague = async (options: GetLeagueOptions) => {
 				if (p.tid >= 0 && !nextSeasonSlugs.has(p.srID)) {
 					p.tid = PLAYER.RETIRED;
 					(p as any).retiredYear = options.season;
+				}
+			}
+		}
+
+		// Manually add HoF to retired players who do eventually make the HoF, but have not yet been inducted by the tim ethis season started.
+		// This needs to be after the code above which sets retired players, otherwise starting after the playoffs will result in players who retired that year never making the HoF.
+		if (hofSlugs.size > 0) {
+			for (const p of players) {
+				if (hofSlugs.has(p.srID) && !p.hof && p.tid === PLAYER.RETIRED) {
+					p.hof = 1;
+					if (!p.awards) {
+						p.awards = [];
+					}
+
+					const season =
+						options.phase <= PHASE.PLAYOFFS
+							? options.season - 1
+							: options.season;
+
+					p.awards.push({
+						type: "Inducted into the Hall of Fame",
+						season,
+					});
 				}
 			}
 		}
@@ -689,11 +806,7 @@ const getLeague = async (options: GetLeagueOptions) => {
 				const currentRatings = p.ratings[0];
 				currentRatings.season = options.season;
 				nerfDraftProspect(currentRatings);
-				if (
-					options.type === "real" &&
-					options.realDraftRatings === "draft" &&
-					p.draft.year <= LATEST_SEASON_WITH_DRAFT_POSITIONS
-				) {
+				if (options.type === "real" && options.realDraftRatings === "draft") {
 					const age = currentRatings.season! - p.born.year;
 					setDraftProspectRatingsBasedOnDraftPosition(currentRatings, age, {
 						draftRound: p.draft.round,
@@ -714,9 +827,40 @@ const getLeague = async (options: GetLeagueOptions) => {
 			allRetiredJerseyNumbers: basketball.retiredJerseyNumbers,
 		});
 
+		let seasonLeaders;
+		if (options.realStats !== "none") {
+			let seasonLeadersSeasons;
+
+			if (options.realStats === "lastSeason") {
+				// Different from mostRecentLeadersSeason to keep in sync with the season that player stats get pulled from in formatPlayer
+				const statsSeason =
+					options.phase > PHASE.REGULAR_SEASON
+						? options.season
+						: options.season - 1;
+
+				seasonLeadersSeasons = [statsSeason];
+			} else {
+				const mostRecentLeadersSeason =
+					options.phase > PHASE.PLAYOFFS ? options.season : options.season - 1;
+
+				seasonLeadersSeasons = range(MIN_SEASON, mostRecentLeadersSeason + 1);
+			}
+
+			const basketballStats = await loadStatsBasketball();
+			seasonLeaders = [];
+			for (const season of seasonLeadersSeasons) {
+				if (basketballStats.seasonLeaders[season]) {
+					seasonLeaders.push({
+						season,
+						...basketballStats.seasonLeaders[season],
+					});
+				}
+			}
+		}
+
 		return {
-			version: MAX_SUPPORTED_LEAGUE_VERSION,
-			startingSeason: options.realStats === "all" ? 1947 : options.season,
+			version: LEAGUE_DATABASE_VERSION,
+			startingSeason: options.realStats === "all" ? MIN_SEASON : options.season,
 			players,
 			teams: initialTeams,
 			scheduledEvents,
@@ -725,6 +869,7 @@ const getLeague = async (options: GetLeagueOptions) => {
 			draftLotteryResults,
 			playoffSeries,
 			awards,
+			seasonLeaders,
 		};
 	} else if (options.type === "legends") {
 		const NUM_PLAYERS_PER_TEAM = 15;
@@ -796,7 +941,7 @@ const getLeague = async (options: GetLeagueOptions) => {
 		};
 	}
 
-	// @ts-ignore
+	// @ts-expect-error
 	throw new Error(`Unknown type "${options.type}"`);
 };
 

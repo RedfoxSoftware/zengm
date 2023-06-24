@@ -1,6 +1,6 @@
 import classNames from "classnames";
 import { groupBy } from "../../common/groupBy";
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers, useLocal } from "../util";
 import type { View } from "../../common/types";
@@ -9,6 +9,8 @@ import { DataTable } from "../components";
 
 const DIFFICULTIES = ["normal", "hard", "insane"] as const;
 const DIFFICULTIES_REVERSE = [...DIFFICULTIES].reverse();
+
+const makeAchievementId = (slug: string) => `achievement-${slug}`;
 
 const CompletionTable = ({ achievements }: View<"achievements">) => {
 	const filtered = achievements.filter(
@@ -31,7 +33,9 @@ const CompletionTable = ({ achievements }: View<"achievements">) => {
 	return (
 		<>
 			<h2 className="mt-4">Completion Status</h2>
-			<p className="text-muted text-small">(Ignoring the Meta achievements)</p>
+			<p className="text-body-secondary text-small">
+				(Ignoring the Meta achievements)
+			</p>
 			<table className="table table-nonfluid">
 				<tbody>
 					{levels.map(level => (
@@ -58,7 +62,7 @@ const achievementClassNames = (
 	} & {
 		total: number;
 	},
-	difficultyRequired?: typeof DIFFICULTIES[number],
+	difficultyRequired?: (typeof DIFFICULTIES)[number],
 ) => {
 	return {
 		"list-group-item-light":
@@ -99,6 +103,8 @@ const Category = ({
 			0,
 		),
 	}));
+
+	const highlightSlug = location.hash.slice(1);
 
 	if (category === "Rebuilds") {
 		const superCols = [
@@ -157,9 +163,11 @@ const Category = ({
 			if (minDifficulty >= 0) {
 				fakeCounts[DIFFICULTIES[minDifficulty]] = 1;
 			}
+			const highlight = highlightSlug === achievements[0].slug;
 			const rowClassNames = {
 				...achievementClassNames(fakeCounts),
 				"d-flex": true,
+				"fw-bold": highlight,
 			};
 
 			return {
@@ -174,6 +182,7 @@ const Category = ({
 									className="btn btn-xs btn-secondary ms-auto"
 									href={`/new_league/real#rebuild=${achievements[0].slug}`}
 									role="button"
+									id={makeAchievementId(achievements[0].slug)}
 								>
 									New league
 								</a>
@@ -191,6 +200,7 @@ const Category = ({
 									classNames: {
 										...achievementClassNames(achievement),
 										"text-center": true,
+										"fw-bold": highlight,
 									},
 								},
 								{
@@ -198,6 +208,7 @@ const Category = ({
 									classNames: {
 										...achievementClassNames(achievement, "hard"),
 										"text-center": true,
+										"fw-bold": highlight,
 									},
 								},
 								{
@@ -205,6 +216,7 @@ const Category = ({
 									classNames: {
 										...achievementClassNames(achievement, "insane"),
 										"text-center": true,
+										"fw-bold": highlight,
 									},
 								},
 							];
@@ -237,7 +249,6 @@ const Category = ({
 						name={"rebuilds"}
 						rows={rows}
 						superCols={superCols}
-						bordered={false}
 						striped={false}
 						clickable={false} // Clicking messes up achievement highlighting
 					/>
@@ -249,8 +260,14 @@ const Category = ({
 	return (
 		<div className="row g-2">
 			{achievementsWithTotal.map(achievement => {
+				const highlight = highlightSlug === achievement.slug;
+
 				return (
-					<div key={achievement.slug} className="col-sm-6 col-md-4 col-xl-3">
+					<div
+						key={achievement.slug}
+						id={makeAchievementId(achievement.slug)}
+						className="col-sm-6 col-md-4 col-xl-3"
+					>
 						<div
 							className={classNames("card", achievementClassNames(achievement))}
 							key={achievement.slug}
@@ -259,7 +276,11 @@ const Category = ({
 							}}
 						>
 							<div className="card-body">
-								<h4 className="card-title">
+								<h4
+									className={classNames("card-title", {
+										"fw-bold": highlight,
+									})}
+								>
 									{achievement.name}
 									{achievement.total > 0
 										? difficulties.map(difficulty => {
@@ -280,7 +301,13 @@ const Category = ({
 										  })
 										: null}
 								</h4>
-								<p className="card-text">{achievement.desc}</p>
+								<p
+									className={classNames("card-text", {
+										"fw-bold": highlight,
+									})}
+								>
+									{achievement.desc}
+								</p>
 							</div>
 						</div>
 					</div>
@@ -296,6 +323,21 @@ const Achievements = ({ achievements }: View<"achievements">) => {
 	});
 	const username = useLocal(state => state.username);
 	const loggedIn = !!username;
+
+	useEffect(() => {
+		// If we were linked to a specific achievement, scroll to it
+		setTimeout(() => {
+			const hash = location.hash.slice(1);
+			if (hash !== "") {
+				const achievementId = makeAchievementId(hash);
+				const achievementElement = document.getElementById(achievementId);
+				if (achievementElement) {
+					const { top } = achievementElement.getBoundingClientRect();
+					window.scroll({ top: top - 60, behavior: "smooth" });
+				}
+			}
+		}, 100);
+	}, []);
 
 	return (
 		<>

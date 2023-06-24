@@ -1,7 +1,16 @@
-import { bySport, PHASE, PLAYER } from "../../common";
+import { bySport, isSport, PHASE, PLAYER, RATINGS } from "../../common";
 import { idb } from "../db";
 import { g } from "../util";
 import type { UpdateEvents, ViewInput } from "../../common/types";
+import addFirstNameShort from "../util/addFirstNameShort";
+import { buffOvrDH } from "./depth";
+
+export const extraRatings = bySport({
+	baseball: ["ovrs", "pots"],
+	basketball: [],
+	football: ["ovrs", "pots"],
+	hockey: ["ovrs", "pots"],
+});
 
 export const getPlayers = async (
 	season: number,
@@ -33,7 +42,8 @@ export const getPlayers = async (
 	let players = await idb.getCopies.playersPlus(playersAll, {
 		attrs: [
 			"pid",
-			"name",
+			"firstName",
+			"lastName",
 			"age",
 			"contract",
 			"injury",
@@ -41,6 +51,8 @@ export const getPlayers = async (
 			"watch",
 			"tid",
 			"abbrev",
+			"draft",
+			"awards",
 			...attrs,
 		],
 		ratings: ["ovr", "pot", "skills", "pos", ...ratings],
@@ -67,6 +79,12 @@ export const getPlayers = async (
 		players = players.filter(p => p.stats.tid === tid);
 	}
 
+	if (isSport("baseball")) {
+		for (const p of players) {
+			buffOvrDH(p);
+		}
+	}
+
 	return players;
 };
 
@@ -83,6 +101,7 @@ const updatePlayers = async (
 		inputs.abbrev !== state.abbrev
 	) {
 		const ratings = bySport({
+			baseball: RATINGS,
 			basketball: [
 				"hgt",
 				"stre",
@@ -140,19 +159,16 @@ const updatePlayers = async (
 				"glk",
 			],
 		});
-		const extraRatings = bySport({
-			basketball: [],
-			football: ["ovrs", "pots"],
-			hockey: ["ovrs", "pots"],
-		});
 
-		const players = await getPlayers(
-			inputs.season,
-			inputs.abbrev,
-			[],
-			[...ratings, ...extraRatings],
-			[],
-			inputs.tid,
+		const players = addFirstNameShort(
+			await getPlayers(
+				inputs.season,
+				inputs.abbrev,
+				[],
+				[...ratings, ...extraRatings],
+				[],
+				inputs.tid,
+			),
 		);
 
 		return {

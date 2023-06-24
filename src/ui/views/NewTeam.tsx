@@ -1,5 +1,4 @@
-import PropTypes from "prop-types";
-import { useState, ChangeEvent, FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { PHASE } from "../../common";
 import useTitleBar from "../hooks/useTitleBar";
 import { helpers, realtimeUpdate, toWorker } from "../util";
@@ -7,6 +6,7 @@ import type { View } from "../../common/types";
 import { PopText, RecordAndPlayoffs } from "../components";
 
 const NewTeam = ({
+	challengeNoRatings,
 	confs,
 	disabled,
 	expansion,
@@ -34,13 +34,15 @@ const NewTeam = ({
 	const handleNewTeam = async (event: FormEvent) => {
 		event.preventDefault();
 
-		await toWorker("main", "switchTeam", tid);
-		realtimeUpdate(
-			[],
-			expansion
-				? helpers.leagueUrl(["protect_players"])
-				: helpers.leagueUrl([]),
-		);
+		if (tid !== undefined) {
+			await toWorker("main", "switchTeam", tid);
+			realtimeUpdate(
+				[],
+				expansion
+					? helpers.leagueUrl(["protect_players"])
+					: helpers.leagueUrl([]),
+			);
+		}
 	};
 
 	let title;
@@ -209,8 +211,12 @@ const NewTeam = ({
 									numPlayoffRounds={numPlayoffRounds}
 									playoffRoundsWon={t.seasonAttrs.playoffRoundsWon}
 								/>
-								<br />
-								Team rating: {t.ovr}/100
+								{!challengeNoRatings ? (
+									<>
+										<br />
+										Team rating: {t.ovr}/100
+									</>
+								) : null}
 							</>
 						)}
 						<br />
@@ -222,19 +228,6 @@ const NewTeam = ({
 			) : null}
 		</>
 	);
-};
-
-NewTeam.propTypes = {
-	gameOver: PropTypes.bool.isRequired,
-	godMode: PropTypes.bool.isRequired,
-	phase: PropTypes.number.isRequired,
-	teams: PropTypes.arrayOf(
-		PropTypes.shape({
-			name: PropTypes.string.isRequired,
-			region: PropTypes.string.isRequired,
-			tid: PropTypes.number.isRequired,
-		}),
-	).isRequired,
 };
 
 export default NewTeam;

@@ -3,6 +3,7 @@ import { getCols, helpers } from "../util";
 import { DataTable, MoreLinks } from "../components";
 import type { View } from "../../common/types";
 import { wrappedMovOrDiff } from "../components/MovOrDiff";
+import { wrappedTeamLogoAndName } from "../components/TeamLogoAndName";
 
 const HeadToHead = ({
 	abbrev,
@@ -27,6 +28,7 @@ const HeadToHead = ({
 
 	const cols = getCols([
 		"Team",
+		"stat:gp",
 		"W",
 		"L",
 		...(otl ? ["OTL"] : []),
@@ -53,6 +55,7 @@ const HeadToHead = ({
 		};
 
 		return [
+			t.won + t.lost + t.tied + t.otl,
 			t.won,
 			t.lost,
 			...(otl ? [t.otl] : []),
@@ -71,7 +74,10 @@ const HeadToHead = ({
 	};
 
 	const rows = teams.map(t => {
-		const urlParts: (string | number)[] = ["roster", `${t.abbrev}_${t.tid}`];
+		const urlParts: (string | number)[] = [
+			"roster",
+			`${t.seasonAttrs.abbrev}_${t.tid}`,
+		];
 		if (season !== "all") {
 			urlParts.push(season);
 		}
@@ -79,9 +85,7 @@ const HeadToHead = ({
 		return {
 			key: t.tid,
 			data: [
-				<a href={helpers.leagueUrl(urlParts)}>
-					{t.region} {t.name}
-				</a>,
+				wrappedTeamLogoAndName(t, helpers.leagueUrl(urlParts)),
 				...makeRow(t),
 			],
 			classNames: {
@@ -113,6 +117,7 @@ const HeadToHead = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[0, "asc"]}
+				defaultStickyCols={1}
 				name="HeadToHead"
 				nonfluid
 				rows={rows}

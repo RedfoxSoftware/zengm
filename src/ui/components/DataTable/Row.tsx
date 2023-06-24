@@ -1,5 +1,4 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import type { MouseEvent } from "react";
 import useClickable from "../../hooks/useClickable";
 // eslint-disable-next-line import/no-unresolved
@@ -7,9 +6,11 @@ import type { Argument } from "classnames";
 
 const Row = ({
 	clickable,
+	highlightCols,
 	row,
 }: {
 	clickable?: boolean;
+	highlightCols: number[];
 	row: {
 		classNames?: Argument;
 		data: any[];
@@ -26,12 +27,18 @@ const Row = ({
 			{row.data.map((value = null, i) => {
 				// Value is either the value, or an object containing the value as a property
 				const actualValue =
-					value !== null && value.hasOwnProperty("value") ? value.value : value;
+					value !== null && Object.hasOwn(value, "value") ? value.value : value;
 
 				const props: any = {};
 
+				const highlightCol = highlightCols.includes(i);
 				if (value && value.classNames) {
-					props.className = classNames(value.classNames);
+					props.className = classNames(
+						value.classNames,
+						highlightCol ? "sorting_highlight" : undefined,
+					);
+				} else if (highlightCol) {
+					props.className = "sorting_highlight";
 				}
 
 				if (value && value.title) {
@@ -79,12 +86,6 @@ const Row = ({
 			})}
 		</tr>
 	);
-};
-
-Row.propTypes = {
-	row: PropTypes.shape({
-		data: PropTypes.array.isRequired,
-	}).isRequired,
 };
 
 export default Row;

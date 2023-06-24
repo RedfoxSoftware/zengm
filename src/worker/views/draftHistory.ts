@@ -3,14 +3,23 @@ import { idb } from "../db";
 import { g } from "../util";
 import type { ViewInput } from "../../common/types";
 import maxBy from "lodash-es/maxBy";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updateDraftHistory = async (inputs: ViewInput<"draftHistory">) => {
 	// Update every time because anything could change this (unless all players from class are retired)
 
 	const stats = bySport({
+		baseball: ["gp", "keyStats", "war"],
 		basketball: ["gp", "min", "pts", "trb", "ast", "per", "ws"],
 		football: ["gp", "keyStats", "av"],
 		hockey: ["gp", "keyStats", "ops", "dps", "ps"],
+	});
+
+	const summaryStat = bySport({
+		baseball: "war",
+		basketball: "ws",
+		football: "av",
+		hockey: "ps",
 	});
 
 	let playersAll;
@@ -39,8 +48,10 @@ const updateDraftHistory = async (inputs: ViewInput<"draftHistory">) => {
 			"abbrev",
 			"draft",
 			"pid",
-			"name",
+			"firstName",
+			"lastName",
 			"age",
+			"ageAtDeath",
 			"hof",
 			"watch",
 			"awards",
@@ -62,14 +73,29 @@ const updateDraftHistory = async (inputs: ViewInput<"draftHistory">) => {
 			return {
 				// Attributes
 				pid: p.pid,
-				name: p.name,
+				firstName: p.firstName,
+				lastName: p.lastName,
 				draft: p.draft,
 				currentAge: p.age,
+				ageAtDeath: p.ageAtDeath,
 				currentAbbrev: p.abbrev,
 				currentTid: p.tid,
 				hof: p.hof,
 				watch: p.watch,
 				awards: p.awards,
+				awardCounts: {
+					allStar: p.awards.filter((award: any) => award.type === "All-Star")
+						.length,
+					mvp: p.awards.filter(
+						(award: any) => award.type === "Most Valuable Player",
+					).length,
+					champ: p.awards.filter(
+						(award: any) => award.type === "Won Championship",
+					).length,
+					hof: p.awards.filter(
+						(award: any) => award.type === "Inducted into the Hall of Fame",
+					).length,
+				},
 
 				// Ratings
 				currentOvr: p.tid !== PLAYER.RETIRED ? currentPr.ovr : null,
@@ -89,9 +115,10 @@ const updateDraftHistory = async (inputs: ViewInput<"draftHistory">) => {
 	return {
 		challengeNoRatings: g.get("challengeNoRatings"),
 		draftType: g.get("draftType"),
-		players,
+		players: addFirstNameShort(players),
 		season: inputs.season,
 		stats,
+		summaryStat,
 		userTid: g.get("userTid"),
 	};
 };

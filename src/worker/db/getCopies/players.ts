@@ -7,7 +7,53 @@ import type {
 	MinimalPlayerRatings,
 	Player,
 } from "../../../common/types";
-import { unwrap } from "idb";
+import { type IDBPDatabase, unwrap } from "idb";
+import type { LeagueDB } from "../connectLeague";
+
+export const getPlayersActiveSeason = (
+	league: IDBPDatabase<LeagueDB>,
+	season: number,
+) => {
+	return new Promise<Player<MinimalPlayerRatings>[]>((resolve, reject) => {
+		const transaction = league.transaction("players");
+
+		const players: Player<MinimalPlayerRatings>[] = [];
+
+		const index = unwrap(
+			transaction.objectStore("players").index("draft.year, retiredYear"),
+		);
+
+		// + 1 in upper range is because you don't accumulate stats until the year after the draft
+		const range = IDBKeyRange.bound(
+			[-Infinity, season],
+			[season + 1, Infinity],
+		);
+		const request = index.openCursor(range);
+
+		request.onerror = (e: any) => {
+			reject(e.target.error);
+		};
+
+		request.onsuccess = (e: any) => {
+			const cursor = e.target.result;
+
+			if (!cursor) {
+				resolve(players);
+				return;
+			}
+
+			const [draftYear2, retiredYear] = cursor.key;
+
+			// https://gist.github.com/inexorabletash/704e9688f99ac12dd336
+			if (retiredYear < season) {
+				cursor.continue([draftYear2, season]);
+			} else {
+				players.push(cursor.value);
+				cursor.continue();
+			}
+		};
+	});
+};
 
 const getCopies = async (
 	{
@@ -198,7 +244,7 @@ const getCopies = async (
 		// All except draft prospects
 		return mergeByPk(
 			[].concat(
-				// @ts-ignore
+				// @ts-expect-error
 				await getAll(
 					idb.league.transaction("players").store.index("tid"),
 					PLAYER.RETIRED,
@@ -210,7 +256,7 @@ const getCopies = async (
 					.getAll(IDBKeyRange.lowerBound(PLAYER.FREE_AGENT)),
 			),
 			[].concat(
-				// @ts-ignore
+				// @ts-expect-error
 				await idb.cache.players.indexGetAll("playersByTid", PLAYER.RETIRED),
 				await idb.cache.players.indexGetAll("playersByTid", [
 					PLAYER.FREE_AGENT,
@@ -223,47 +269,7 @@ const getCopies = async (
 	}
 
 	if (activeSeason !== undefined) {
-		const fromDB = await new Promise<Player<MinimalPlayerRatings>[]>(
-			(resolve, reject) => {
-				const transaction = idb.league.transaction("players");
-
-				const players: Player<MinimalPlayerRatings>[] = [];
-
-				const index = unwrap(
-					transaction.objectStore("players").index("draft.year, retiredYear"),
-				);
-
-				// + 1 in upper range is because you don't accumulate stats until the year after the draft
-				const range = IDBKeyRange.bound(
-					[-Infinity, activeSeason],
-					[activeSeason + 1, Infinity],
-				);
-				const request = index.openCursor(range);
-
-				request.onerror = (e: any) => {
-					reject(e.target.error);
-				};
-
-				request.onsuccess = (e: any) => {
-					const cursor = e.target.result;
-
-					if (!cursor) {
-						resolve(players);
-						return;
-					}
-
-					const [draftYear2, retiredYear] = cursor.key;
-
-					// https://gist.github.com/inexorabletash/704e9688f99ac12dd336
-					if (retiredYear < activeSeason) {
-						cursor.continue([draftYear2, activeSeason]);
-					} else {
-						players.push(cursor.value);
-						cursor.continue();
-					}
-				};
-			},
-		);
+		const fromDB = await getPlayersActiveSeason(idb.league, activeSeason);
 
 		return mergeByPk(
 			fromDB,
@@ -323,7 +329,6 @@ const getCopies = async (
 			),
 			([] as Player<MinimalPlayerRatings>[])
 				.concat(
-					// @ts-ignore
 					await idb.cache.players.indexGetAll("playersByTid", PLAYER.RETIRED),
 					await idb.cache.players.indexGetAll("playersByTid", [
 						PLAYER.FREE_AGENT,
@@ -341,15 +346,19 @@ const getCopies = async (
 		const playerStore = idb.league.transaction("players").store;
 		let fromDB = [];
 		if (watch) {
-			fromDB.push(...(await getAll(playerStore.index("watch"), 1, filter)));
+			// undefined for key returns all of the players with values, since the ones with watch/noteBool missing are not included in this index
+			fromDB.push(
+				...(await getAll(playerStore.index("watch"), undefined, filter)),
+			);
 		}
 		if (note) {
 			// If watch and note both set, don't include record twice
 			const pidsDB = new Set(fromDB.map(p => p.pid));
 			fromDB.push(
-				...(await getAll(playerStore.index("noteBool"), 1, filter)).filter(
-					p => !pidsDB.has(p.pid),
-				),
+				// undefined for key returns all of the players with values, since the ones with watch/noteBool missing are not included in this index
+				...(
+					await getAll(playerStore.index("noteBool"), undefined, filter)
+				).filter(p => !pidsDB.has(p.pid)),
 			);
 		}
 
@@ -362,7 +371,7 @@ const getCopies = async (
 		return mergeByPk(
 			fromDB,
 			fromCacheAll.filter(
-				p => (watch && p.watch === 1) || (note && p.noteBool === 1),
+				p => (watch && p.watch !== undefined) || (note && p.noteBool === 1),
 			),
 			"players",
 			type,

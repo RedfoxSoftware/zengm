@@ -4,7 +4,6 @@ import { dunkInfos, getValidMoves } from "../../../common/dunkContest";
 import { idb } from "../../db";
 import { g, helpers, random } from "../../util";
 import { saveAwardsByPlayer } from "../season/awards";
-import type { PlayerRatings } from "../../../common/types.basketball";
 import { getNextRoundType } from "./contest";
 
 export const HIGHEST_POSSIBLE_SCORE = 50;
@@ -302,7 +301,7 @@ export const getRoundResults = (round: Dunk["rounds"][number]) => {
 
 // Return undefined means contest is over or another round needs to be added
 export const getNextDunkerIndex = (dunk: Dunk) => {
-	const currentRound = dunk.rounds.at(-1);
+	const currentRound = dunk.rounds.at(-1)!;
 
 	// Another attempt at previous dunk needed, or a prior dunk needs to be scored
 	const lastDunk = currentRound.dunks.at(-1);
@@ -450,7 +449,7 @@ export const getAwaitingUserDunkIndex = (dunk: Dunk) => {
 			dunk.controlling.includes(nextDunkerIndex)
 		) {
 			// Need to tell if there is actually a dunk upcoming, or we're just waiting for a score
-			const lastDunk = dunk.rounds.at(-1).dunks.at(-1);
+			const lastDunk = dunk.rounds.at(-1)!.dunks.at(-1);
 			if (
 				!lastDunk ||
 				lastDunk.index !== nextDunkerIndex ||
@@ -494,7 +493,7 @@ export const simNextDunkEvent = async (
 
 	let stillSamePlayersTurn = true;
 
-	const currentRound = dunk.rounds.at(-1);
+	const currentRound = dunk.rounds.at(-1)!;
 	let lastDunk = currentRound.dunks.at(-1);
 
 	if (
@@ -505,7 +504,7 @@ export const simNextDunkEvent = async (
 		// Score previous dunk
 		if (lastDunk.made) {
 			lastDunk.score = getDunkScore(
-				lastDunk.attempts.at(-1),
+				lastDunk.attempts.at(-1)!,
 				lastDunk.attempts.length,
 			);
 		} else {
@@ -527,10 +526,21 @@ export const simNextDunkEvent = async (
 		}
 
 		const p = await idb.cache.players.get(dunk.players[nextDunkerIndex].pid);
-		if (!p) {
-			throw new Error("Invalid pid");
+
+		let ratings = p?.ratings.at(-1) as
+			| {
+					dnk: number;
+					jmp: number;
+			  }
+			| undefined;
+		if (!ratings) {
+			// Can happen if player was deleted before starting sim
+			ratings = {
+				dnk: 0,
+				jmp: 0,
+			};
 		}
-		const ratings = p.ratings.at(-1) as PlayerRatings;
+
 		const preDunkInfo: PreDunkInfo = {
 			jmp: ratings.jmp,
 			dnk: ratings.dnk,

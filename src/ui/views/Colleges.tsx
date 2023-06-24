@@ -1,8 +1,9 @@
 import useTitleBar from "../hooks/useTitleBar";
-import { getCols, helpers, useLocalShallow } from "../util";
-import { DataTable, PlayerNameLabels } from "../components";
+import { getCols, helpers, useLocalPartial } from "../util";
+import { DataTable } from "../components";
 import type { View } from "../../common/types";
 import { frivolitiesMenu } from "./Frivolities";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 export const genView = (
 	type: "college" | "country" | "draftPosition" | "jerseyNumbers",
@@ -26,9 +27,7 @@ export const genView = (
 			customMenu: frivolitiesMenu,
 		});
 
-		const { teamInfoCache } = useLocalShallow(state2 => ({
-			teamInfoCache: state2.teamInfoCache,
-		}));
+		const { teamInfoCache } = useLocalPartial(["teamInfoCache"]);
 
 		const superCols = [
 			{
@@ -102,11 +101,13 @@ export const genView = (
 					helpers.roundStat(c.displayStat, displayStat),
 					(c.displayStat / c.numPlayers).toFixed(1),
 					{
-						value: (
-							<PlayerNameLabels jerseyNumber={p.jerseyNumber} pid={p.pid}>
-								{p.name}
-							</PlayerNameLabels>
-						),
+						...wrappedPlayerNameLabels({
+							pid: p.pid,
+							jerseyNumber: p.jerseyNumber,
+							firstName: p.firstName,
+							firstNameShort: p.firstNameShort,
+							lastName: p.lastName,
+						}),
 						classNames: {
 							"table-danger": p.hof,
 							"table-success": p.retiredYear === Infinity,
@@ -149,6 +150,7 @@ export const genView = (
 				<DataTable
 					cols={cols}
 					defaultSort={[5, "desc"]}
+					defaultStickyCols={window.mobile ? 0 : 1}
 					name={type === "college" ? "Colleges" : "Countries"}
 					rows={rows}
 					superCols={superCols}

@@ -1,9 +1,9 @@
 import { groupBy } from "../../common/groupBy";
-import PropTypes from "prop-types";
 import { DataTable, MoreLinks } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import type { View } from "../../common/types";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const formatYear = (year: {
 	[key: string]: { team: string; season: number }[];
@@ -19,15 +19,23 @@ const formatYear = (year: {
 	});
 };
 
+const formatYearString = (year: {
+	[key: string]: { team: string; season: number }[];
+}) => {
+	return Object.keys(year)
+		.map((k, i) => {
+			const years = helpers.yearRanges(year[k].map(y => y.season)).join(", ");
+			return `${i > 0 ? ", " : ""}${k} (${years})`;
+		})
+		.join("");
+};
+
 const CheckmarkOrCross = ({ success }: { success: boolean }) => {
 	if (success) {
 		return <span className="glyphicon glyphicon-ok text-success" />;
 	}
 
 	return <span className="glyphicon glyphicon-remove text-danger" />;
-};
-CheckmarkOrCross.propTypes = {
-	success: PropTypes.bool.isRequired,
 };
 
 const AwardsRecords = ({
@@ -43,20 +51,29 @@ const AwardsRecords = ({
 			awardType,
 		},
 	});
-	const cols = getCols(["Name", "Count", "Year", "Last", "Retired", "HOF"]);
+	const cols = getCols(["Name", "Count", "Year", "Last", "Retired", "HOF"], {
+		Year: {
+			searchType: "string",
+		},
+	});
 
 	const rows = awardsRecords.map(a => {
+		const yearsGrouped = groupBy(a.years, "team");
+
 		return {
 			key: a.pid,
 			data: [
-				<a href={helpers.leagueUrl(["player", a.pid])}>{a.name}</a>,
+				wrappedPlayerNameLabels({
+					pid: a.pid,
+					firstName: a.firstName,
+					firstNameShort: a.firstNameShort,
+					lastName: a.lastName,
+				}),
 				a.count,
 				{
-					value: formatYear(groupBy(a.years, "team")),
-					sortValue: a.years
-						.map(year => year.team)
-						.sort()
-						.join(","),
+					value: formatYear(yearsGrouped),
+					searchValue: formatYearString(yearsGrouped),
+					sortValue: a.years.map(year => year.season).sort()[0],
 				},
 				a.lastYear,
 				{
@@ -82,19 +99,13 @@ const AwardsRecords = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[1, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="AwardsRecords"
 				rows={rows}
 				pagination
 			/>
 		</>
 	);
-};
-
-AwardsRecords.propTypes = {
-	awardType: PropTypes.string.isRequired,
-	awardTypeVal: PropTypes.string.isRequired,
-	awardsRecords: PropTypes.arrayOf(PropTypes.object).isRequired,
-	playerCount: PropTypes.number.isRequired,
 };
 
 export default AwardsRecords;

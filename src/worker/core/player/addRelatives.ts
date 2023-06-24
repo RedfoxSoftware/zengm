@@ -1,7 +1,9 @@
 import romanNumerals from "roman-numerals";
 import { idb } from "../../db";
-import { g, helpers, random } from "../../util";
+import { face, g, helpers, random } from "../../util";
 import type { Player, Relative, RelativeType } from "../../../common/types";
+import { isSport } from "../../../common";
+import player from ".";
 
 const parseLastName = (lastName: string): [string, number | undefined] => {
 	const parts = lastName.split(" ");
@@ -10,7 +12,7 @@ const parseLastName = (lastName: string): [string, number | undefined] => {
 		return [lastName, undefined];
 	}
 
-	const suffix = parts.at(-1);
+	const suffix = parts.at(-1)!;
 	const parsedName = parts.slice(0, -1).join(" ");
 
 	if (suffix === "Sr.") {
@@ -57,7 +59,6 @@ const getRelatives = async (
 		"noCopyCache",
 	);
 
-	// @ts-ignore
 	return players.filter(p2 => !!p2);
 };
 
@@ -84,9 +85,31 @@ const makeSimilar = (existingRelative: Player, newRelative: Player) => {
 		newRelative.college = existingRelative.college;
 	}
 
-	if (existingRelative.stats.length > 0 && Math.random() < 0.5) {
+	if (
+		!isSport("football") &&
+		existingRelative.stats.length > 0 &&
+		Math.random() < 0.5
+	) {
 		newRelative.jerseyNumber = existingRelative.stats.at(-1).jerseyNumber;
 	}
+};
+
+const applyNewCountry = async (p: Player, relative: Player) => {
+	const relativeCountry = helpers.getCountry(relative.born.loc);
+	const newCountry = helpers.getCountry(p.born.loc) !== relativeCountry;
+
+	if (newCountry) {
+		const { college, firstName, race } = await player.name(relativeCountry);
+
+		p.college = college;
+		p.firstName = firstName;
+
+		// Generate new name and face
+		p.face = face.generate(race);
+	}
+
+	// Make them the same state/province, if USA/Canada
+	p.born.loc = relative.born.loc;
 };
 
 export const makeSon = async (p: Player) => {
@@ -136,6 +159,9 @@ export const makeSon = async (p: Player) => {
 		typeof fatherSuffixNumber === "number" ? fatherSuffixNumber + 1 : 2;
 	const sonSuffix = getSuffix(sonSuffixNumber);
 
+	// Call this before giving the Jr. the father's first name, so father's name doesn't get overwritten
+	await applyNewCountry(p, father);
+
 	// Only rename to be a Jr if the father has no son yet (first is always Jr)
 	if (!hasRelative(father, "son")) {
 		p.firstName = father.firstName;
@@ -147,8 +173,6 @@ export const makeSon = async (p: Player) => {
 	} else {
 		p.lastName = fatherLastName;
 	}
-
-	p.born.loc = father.born.loc;
 
 	// Handle case where father has other sons
 	if (hasRelative(father, "son")) {
@@ -216,6 +240,11 @@ export const makeBrother = async (p: Player) => {
 		return;
 	}
 
+	// If target player already has a father, can't change its last name as easily, but we might need to in applyNewCountry to make nationalities match
+	if (hasRelative(p, "father")) {
+		return;
+	}
+
 	// Find a player from a draft 0-5 years ago to make the brother
 	const draftYear = p.draft.year - random.randInt(0, 5);
 	const existingRelativePids = p.relatives.map(rel => rel.pid);
@@ -245,24 +274,11 @@ export const makeBrother = async (p: Player) => {
 
 	const brother = random.choice(possibleBrothers);
 
-	// Two brothers can't have different fathers
-	if (hasRelative(p, "father") && hasRelative(brother, "father")) {
-		return;
-	}
-
-	// Don't want to have to rename existing relatives
-	if (hasRelative(p, "father") && hasRelative(brother, "brother")) {
-		return;
-	}
-
-	// Which player keeps their last name? Basically, if one has a father already, don't overwrite their last name
-	const keepLastName = hasRelative(p, "father") ? p : brother;
-	const newLastName = p === keepLastName ? brother : p;
-
 	// In case the brother is a Jr...
-	const [keptLastName] = parseLastName(keepLastName.lastName);
-	newLastName.lastName = keptLastName;
-	newLastName.born.loc = keepLastName.born.loc;
+	const [keptLastName] = parseLastName(brother.lastName);
+	p.lastName = keptLastName;
+
+	await applyNewCountry(p, brother);
 
 	const edgeCases = async (brother1: Player, brother2: Player) => {
 		// Handle case where one brother already has a brother
@@ -330,6 +346,10 @@ export const makeBrother = async (p: Player) => {
 };
 
 const addRelatives = async (p: Player) => {
+	if (p.real) {
+		return;
+	}
+
 	if (Math.random() < g.get("sonRate")) {
 		await makeSon(p);
 	}

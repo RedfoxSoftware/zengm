@@ -1,4 +1,5 @@
-import type { Conf, Div } from "../../../common/types";
+import type { Conf, Div, Player } from "../../../common/types";
+import type { ExhibitionTeam } from "../Exhibition";
 
 // Keep in sync with BASIC_TEAM_KEYS
 export type NewLeagueTeam = {
@@ -17,7 +18,15 @@ export type NewLeagueTeam = {
 	jersey?: string;
 	cid: number;
 	did: number;
+
+	// From UpsertTeamModal
+	players?: Player[];
+	usePlayers?: boolean;
+	seasonInfo?: ExhibitionTeam["seasonInfo"];
+	season?: number;
 };
+
+export type NewLeagueTeamWithoutRank = Omit<NewLeagueTeam, "popRank">;
 
 export type LeagueInfo = {
 	startingSeason: number;
@@ -26,5 +35,5 @@ export type LeagueInfo = {
 		confs: Conf[];
 		divs: Div[];
 	};
-	teams: NewLeagueTeam[];
+	teams: NewLeagueTeamWithoutRank[];
 };

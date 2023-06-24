@@ -1,18 +1,19 @@
-const path = require("path");
-const alias = require("@rollup/plugin-alias");
-const babel = require("@rollup/plugin-babel").default;
-const blacklist = require("rollup-plugin-blacklist");
-const commonjs = require("@rollup/plugin-commonjs");
-const json = require("@rollup/plugin-json");
-const resolve = require("@rollup/plugin-node-resolve").default;
-const replace = require("@rollup/plugin-replace");
-const terser = require("rollup-plugin-terser").terser;
-const visualizer = require("rollup-plugin-visualizer").visualizer;
-const getSport = require("./getSport");
+import path from "node:path";
+import alias from "@rollup/plugin-alias";
+import { babel } from "@rollup/plugin-babel";
+import blacklist from "rollup-plugin-blacklist";
+import commonjs from "@rollup/plugin-commonjs";
+import json from "@rollup/plugin-json";
+import resolve from "@rollup/plugin-node-resolve";
+import replace from "@rollup/plugin-replace";
+import terser from "@rollup/plugin-terser";
+import { visualizer } from "rollup-plugin-visualizer";
+import { getSport } from "./buildFuncs.js";
+import { getDirname } from "./getDirname.js";
 
 const extensions = [".mjs", ".js", ".json", ".node", ".ts", ".tsx"];
 
-module.exports = (nodeEnv, { blacklistOptions, statsFilename, legacy }) => {
+export default (nodeEnv, { blacklistOptions, statsFilename, legacy } = {}) => {
 	const sport = getSport();
 
 	// This gets used in babel.config.js, except we don't want it set to "test" in karma because then it will activate @babel/plugin-transform-modules-commonjs
@@ -20,23 +21,30 @@ module.exports = (nodeEnv, { blacklistOptions, statsFilename, legacy }) => {
 		process.env.NODE_ENV = nodeEnv;
 	}
 
+	const __dirname = getDirname(import.meta.url);
+	const root = path.join(__dirname, "..", "..");
+
 	const plugins = [
 		alias({
 			resolve: [".json"],
 			entries: {
 				// This is assumed to be generated prior to rollup being started
-				"league-schema": "./../../../build/files/league-schema.json",
+				"league-schema": path.resolve(root, "build/files/league-schema.json"),
 
 				"bbgm-polyfills": legacy
-					? "./../common/polyfills.ts"
-					: "./../common/polyfills-modern.ts",
+					? path.resolve(root, "src/common/polyfills.ts")
+					: path.resolve(root, "src/common/polyfills-modern.ts"),
+
+				"bbgm-polyfills-ui": legacy
+					? path.resolve(root, "src/ui/util/polyfills.ts")
+					: path.resolve(root, "src/common/polyfills-noop.ts"),
 
 				"bbgm-debug":
 					nodeEnv === "production"
-						? "./../../common/polyfills-modern.ts"
-						: "./../../worker/core/debug/index.ts",
+						? path.resolve(root, "src/worker/core/debug/prod.ts")
+						: path.resolve(root, "src/worker/core/debug/index.ts"),
 
-				"ajv-hack": "./../../worker/ajvHack/esbuild.js",
+				"ajv-hack": path.resolve(root, "src/worker/ajvHack/esbuild.js"),
 			},
 		}),
 		replace({
@@ -49,7 +57,7 @@ module.exports = (nodeEnv, { blacklistOptions, statsFilename, legacy }) => {
 		babel({
 			babelHelpers: "bundled",
 			exclude: legacy
-				? "node_modules/!(d3|idb|react-bootstrap|streamsaver)**"
+				? /^node_modules\/(?!@tanstack\/react-virtual|d3|idb|nanoevents|react-bootstrap|streamsaver?).*$/
 				: "node_modules/**",
 			extensions: extensions.filter(extension => extension !== ".json"),
 			configFile: path.join(
@@ -71,8 +79,8 @@ module.exports = (nodeEnv, { blacklistOptions, statsFilename, legacy }) => {
 	if (nodeEnv === "production") {
 		plugins.push(
 			terser({
-				output: {
-					comments: /^I DON'T WANT ANY COMMENTS$/,
+				format: {
+					comments: false,
 				},
 			}),
 		);

@@ -1,5 +1,4 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import { memo, useCallback, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { Dropdown, Nav } from "react-bootstrap";
@@ -19,7 +18,7 @@ type TopMenuToggleProps = {
 
 const TopMenuToggle = ({ long, openID, short, toggle }: TopMenuToggleProps) => {
 	const handleMouseEnter = useCallback(
-		event => {
+		(event: MouseEvent<any>) => {
 			if (openID !== undefined && openID !== long && toggle) {
 				toggle(event);
 			}
@@ -40,13 +39,6 @@ const TopMenuToggle = ({ long, openID, short, toggle }: TopMenuToggleProps) => {
 	);
 };
 
-TopMenuToggle.propTypes = {
-	long: PropTypes.string.isRequired,
-	openID: PropTypes.string,
-	short: PropTypes.string.isRequired,
-	toggle: PropTypes.func,
-};
-
 const TopMenuDropdown = ({
 	children,
 	hideTitle,
@@ -62,7 +54,10 @@ const TopMenuDropdown = ({
 	openID?: string;
 	short: string;
 }) => {
-	const toggle = useCallback(event => onToggle(long, event), [long, onToggle]);
+	const toggle = useCallback(
+		(event: any) => onToggle(long, event),
+		[long, onToggle],
+	);
 	return (
 		<Dropdown show={openID === long} onToggle={toggle} as={Nav.Item}>
 			<TopMenuToggle
@@ -83,18 +78,9 @@ const TopMenuDropdown = ({
 	);
 };
 
-TopMenuDropdown.propTypes = {
-	children: PropTypes.any,
-	long: PropTypes.string.isRequired,
-	hideTitle: PropTypes.bool,
-	onToggle: PropTypes.func.isRequired,
-	openID: PropTypes.string,
-	short: PropTypes.string.isRequired,
-};
-
 const getText = (text: MenuItemLink["text"]) => {
-	if (text.hasOwnProperty("top")) {
-		// @ts-ignore
+	if (Object.hasOwn(text as any, "top")) {
+		// @ts-expect-error
 		return text.top;
 	}
 
@@ -159,6 +145,10 @@ const MenuItem = ({
 	}
 
 	if (menuItem.type === "link") {
+		if (menuItem.commandPaletteOnly) {
+			return null;
+		}
+
 		if (menuItem.godMode && !godMode) {
 			return null;
 		}
@@ -291,14 +281,5 @@ const DropdownLinks = memo(
 		);
 	},
 );
-
-// @ts-ignore
-DropdownLinks.propTypes = {
-	className: PropTypes.string,
-	godMode: PropTypes.bool,
-	hideTitle: PropTypes.bool,
-	lid: PropTypes.number,
-	menuItems: PropTypes.array.isRequired,
-};
 
 export default DropdownLinks;

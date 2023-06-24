@@ -1,5 +1,4 @@
-import PropTypes from "prop-types";
-import { CountryFlag, DataTable, PlayerNameLabels } from "../components";
+import { CountryFlag, DataTable } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import type { View } from "../../common/types";
@@ -7,6 +6,11 @@ import { PLAYER } from "../../common";
 import { dataTableWrappedMood } from "../components/Mood";
 import { wrappedHeight } from "../components/Height";
 import { wrappedWeight } from "../components/Weight";
+import {
+	wrappedContractAmount,
+	wrappedContractExp,
+} from "../components/contract";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const PlayerBios = ({
 	abbrev,
@@ -53,15 +57,18 @@ const PlayerBios = ({
 		return {
 			key: p.pid,
 			data: [
-				<PlayerNameLabels
-					pid={p.pid}
-					injury={p.injury}
-					season={season}
-					skills={p.ratings.skills}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					season,
+					skills: p.ratings.skills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+					awards: p.awards,
+					awardsSeason: season,
+				}),
 				p.ratings.pos,
 				<a
 					href={helpers.leagueUrl([
@@ -93,11 +100,9 @@ const PlayerBios = ({
 					maxWidth: true,
 					p,
 				}),
-				p.contract.amount > 0
-					? helpers.formatCurrency(p.contract.amount, "M")
-					: null,
+				p.contract.amount > 0 ? wrappedContractAmount(p) : null,
 				p.contract.amount > 0 && season === currentSeason
-					? p.contract.exp
+					? wrappedContractExp(p)
 					: null,
 				{
 					value: (
@@ -154,21 +159,13 @@ const PlayerBios = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[0, "asc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="PlayerBios"
 				pagination
 				rows={rows}
 			/>
 		</>
 	);
-};
-
-PlayerBios.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	currentSeason: PropTypes.number.isRequired,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	season: PropTypes.number.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default PlayerBios;

@@ -1,8 +1,6 @@
-import PropTypes from "prop-types";
 import useTitleBar from "../hooks/useTitleBar";
 import { helpers, getCols } from "../util";
 import {
-	PlayerNameLabels,
 	DataTable,
 	RatingWithChange,
 	StatWithChange,
@@ -10,6 +8,7 @@ import {
 } from "../components";
 import type { View } from "../../common/types";
 import { PLAYER } from "../../common";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const AwardRaces = ({
 	awardCandidates,
@@ -28,15 +27,7 @@ const AwardRaces = ({
 		},
 	});
 
-	const globalCols = getCols([
-		"#",
-		"Name",
-		"Pos",
-		"Age",
-		"Team",
-		"Record",
-		"Ovr",
-	]);
+	const globalCols = getCols(["#", "Name", "Pos", "Age", "Team"]);
 
 	return (
 		<>
@@ -45,9 +36,11 @@ const AwardRaces = ({
 			<div className="row" style={{ marginTop: -14 }}>
 				{awardCandidates.map(({ name, players, stats }) => {
 					const mip = name === "Most Improved Player";
+					const roy = name === "Rookie of the Year";
 
 					const cols = [
 						...globalCols,
+						...getCols([roy ? "Pick" : "Record", "Ovr"]),
 						...getCols(stats.map(stat => `stat:${stat}`)),
 					];
 
@@ -73,29 +66,30 @@ const AwardRaces = ({
 
 						const t = teams.find(t => t.tid === tid);
 
-						let record = null;
-						if (t) {
-							record = `${t.seasonAttrs.won}-${t.seasonAttrs.lost}`;
-							if (t.seasonAttrs.otl) {
-								record += `-${t.seasonAttrs.otl}`;
+						let recordOrPick = null;
+						if (roy) {
+							if (p.draft.round > 0) {
+								recordOrPick = `${p.draft.round}-${p.draft.pick}`;
 							}
-							if (t.seasonAttrs.tied) {
-								record += `-${t.seasonAttrs.tied}`;
+						} else {
+							if (t) {
+								recordOrPick = helpers.formatRecord(t.seasonAttrs);
 							}
 						}
 
 						const data = [
 							j + 1,
-							<PlayerNameLabels
-								injury={p.injury}
-								jerseyNumber={ps ? ps.jerseyNumber : undefined}
-								pid={p.pid}
-								season={season}
-								skills={pr ? pr.skills : []}
-								watch={p.watch}
-							>
-								{p.name}
-							</PlayerNameLabels>,
+							wrappedPlayerNameLabels({
+								injury: p.injury,
+								jerseyNumber: ps ? ps.jerseyNumber : undefined,
+								pid: p.pid,
+								season: season,
+								skills: pr ? pr.skills : [],
+								watch: p.watch,
+								firstName: p.firstName,
+								firstNameShort: p.firstNameShort,
+								lastName: p.lastName,
+							}),
 							pos,
 							p.age,
 							<>
@@ -109,7 +103,7 @@ const AwardRaces = ({
 									{abbrev}
 								</a>
 							</>,
-							record,
+							recordOrPick,
 						];
 
 						const showRatings = !challengeNoRatings || p.tid === PLAYER.RETIRED;
@@ -174,6 +168,7 @@ const AwardRaces = ({
 								<DataTable
 									cols={cols}
 									defaultSort={[0, "asc"]}
+									defaultStickyCols={window.mobile ? 0 : 2}
 									hideAllControls
 									name={`AwardRaces${name}`}
 									rows={rows}
@@ -187,12 +182,6 @@ const AwardRaces = ({
 			</div>
 		</>
 	);
-};
-
-AwardRaces.propTypes = {
-	awardCandidates: PropTypes.arrayOf(PropTypes.object).isRequired,
-	season: PropTypes.number.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default AwardRaces;

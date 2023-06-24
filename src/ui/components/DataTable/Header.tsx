@@ -1,6 +1,6 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
-import type { SyntheticEvent, MouseEvent } from "react";
+import range from "lodash-es/range";
+import { type SyntheticEvent, type MouseEvent, Fragment } from "react";
 import type { Col, SortBy, SuperCol } from ".";
 
 const FilterHeader = ({
@@ -38,16 +38,6 @@ const FilterHeader = ({
 			})}
 		</tr>
 	);
-};
-
-FilterHeader.propTypes = {
-	cols: PropTypes.arrayOf(
-		PropTypes.shape({
-			title: PropTypes.string.isRequired,
-		}),
-	).isRequired,
-	filters: PropTypes.arrayOf(PropTypes.string).isRequired,
-	handleFilterUpdate: PropTypes.func.isRequired,
 };
 
 const SuperCols = ({
@@ -88,26 +78,77 @@ const SuperCols = ({
 
 	return (
 		<tr>
-			{superCols.map(({ colspan, desc, title }, i) => {
-				const adjustedColspan = colspan + colspanAdjustments[i];
-				if (adjustedColspan <= 0) {
-					return null;
-				}
-				return (
-					<th
-						key={i}
-						colSpan={adjustedColspan}
-						style={{
-							textAlign: "center",
-						}}
-						title={desc}
-					>
-						{title}
-					</th>
-				);
-			})}
+			{superCols
+				.map(({ colspan, desc, title }, i) => {
+					const adjustedColspan = colspan + colspanAdjustments[i];
+					return {
+						adjustedColspan,
+						colspan,
+						desc,
+						title,
+					};
+				})
+				.filter(({ adjustedColspan }) => adjustedColspan > 0)
+				.map(({ adjustedColspan, desc, title }, i) => {
+					// No vertical border for left and right edges of table, but we do need it in between to separate superCols
+					const addBorders = i > 0 && i < superCols.length - 1;
+
+					// Split up column into N individual columns, rather than one with an adjustedColspan. Why? For stickyCols, otherwise it's hard to know how much of a superCol belongs to the sticky col. This hack works as long as the sticky col has an empty superCol. If not, it'll behave a bit strangely still.
+					if (!title && adjustedColspan > 1) {
+						return (
+							<Fragment key={i}>
+								{range(adjustedColspan).map(j => {
+									return (
+										<th
+											key={j}
+											className={
+												addBorders
+													? classNames({
+															"border-start": j === 0,
+															"border-end": j === adjustedColspan - 1,
+													  })
+													: undefined
+											}
+										/>
+									);
+								})}
+							</Fragment>
+						);
+					}
+
+					const className = addBorders ? "border-start border-end" : undefined;
+
+					return (
+						<th
+							key={i}
+							colSpan={adjustedColspan}
+							style={{
+								textAlign: "center",
+							}}
+							title={desc}
+							className={className}
+						>
+							{title}
+						</th>
+					);
+				})}
 		</tr>
 	);
+};
+
+export const getSortClassName = (sortBys: SortBy[], i: number) => {
+	let className = "sorting";
+
+	for (const sortBy of sortBys) {
+		if (sortBy[0] === i) {
+			className = `sorting_highlight ${
+				sortBy[1] === "asc" ? "sorting_asc" : "sorting_desc"
+			}`;
+			break;
+		}
+	}
+
+	return className;
 };
 
 const Header = ({
@@ -143,6 +184,7 @@ const Header = ({
 						desc,
 						sortSequence,
 						title,
+						titleReact,
 						width,
 					} = cols[colIndex];
 
@@ -150,15 +192,7 @@ const Header = ({
 					if (sortSequence && sortSequence.length === 0) {
 						className = null;
 					} else {
-						className = "sorting";
-
-						for (const sortBy of sortBys) {
-							if (sortBy[0] === colIndex) {
-								className =
-									sortBy[1] === "asc" ? "sorting_asc" : "sorting_desc";
-								break;
-							}
-						}
+						className = getSortClassName(sortBys, colIndex);
 					}
 
 					return (
@@ -171,7 +205,7 @@ const Header = ({
 							title={desc}
 							style={{ width }}
 						>
-							{title}
+							{titleReact ?? title}
 						</th>
 					);
 				})}
@@ -186,33 +220,6 @@ const Header = ({
 			) : null}
 		</thead>
 	);
-};
-
-Header.propTypes = {
-	cols: PropTypes.arrayOf(
-		PropTypes.shape({
-			desc: PropTypes.string,
-			sortSequence: PropTypes.arrayOf(PropTypes.string),
-			title: PropTypes.string.isRequired,
-			width: PropTypes.string,
-		}),
-	).isRequired,
-	enableFilters: PropTypes.bool.isRequired,
-	filters: PropTypes.arrayOf(PropTypes.string).isRequired,
-	handleColClick: PropTypes.func.isRequired,
-	handleFilterUpdate: PropTypes.func.isRequired,
-	sortBys: PropTypes.arrayOf(
-		PropTypes.arrayOf(
-			PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-		),
-	).isRequired,
-	superCols: PropTypes.arrayOf(
-		PropTypes.shape({
-			colspan: PropTypes.number.isRequired,
-			desc: PropTypes.string,
-			title: PropTypes.any.isRequired,
-		}),
-	),
 };
 
 export default Header;

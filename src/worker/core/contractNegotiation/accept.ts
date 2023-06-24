@@ -2,6 +2,8 @@ import { player, team } from "..";
 import cancel from "./cancel";
 import { idb } from "../../db";
 import { g, toUI, recomputeLocalUITeamOvrs } from "../../util";
+import type { PlayerContract } from "../../../common/types";
+import { PHASE } from "../../../common";
 
 /**
  * Accept the player's offer.
@@ -23,19 +25,23 @@ const accept = async (
 		return `No negotiation with player ${pid} found.`;
 	}
 
-	const payroll = await team.getPayroll(g.get("userTid"));
-	const birdException = negotiation.resigning && !g.get("hardCap");
+	const salaryCapType = g.get("salaryCapType");
 
-	// If this contract brings team over the salary cap, it's not a minimum contract, and it's not re-signing a current
-	// player with the Bird exception, ERROR!
-	if (
-		!birdException &&
-		payroll + amount - 1 > g.get("salaryCap") &&
-		amount - 1 > g.get("minContract")
-	) {
-		return `This contract would put you over the salary cap. You cannot go over the salary cap to sign ${
-			g.get("hardCap") ? "players" : "free agents"
-		} to contracts higher than the minimum salary.`;
+	if (salaryCapType !== "none") {
+		const payroll = await team.getPayroll(g.get("userTid"));
+		const birdException = negotiation.resigning && salaryCapType === "soft";
+
+		// If this contract brings team over the salary cap, it's not a minimum contract, and it's not re-signing a current
+		// player with the Bird exception, ERROR!
+		if (
+			!birdException &&
+			payroll + amount - 1 > g.get("salaryCap") &&
+			amount - 1 > g.get("minContract")
+		) {
+			return `This contract would put you over the salary cap. You cannot go over the salary cap to sign ${
+				salaryCapType === "hard" ? "players" : "free agents"
+			} to contracts higher than the minimum salary.`;
+		}
 	}
 
 	// This error is for sanity checking in multi team mode. Need to check for existence of negotiation.tid because it
@@ -54,15 +60,23 @@ const accept = async (
 	if (!p) {
 		throw new Error("Invalid pid");
 	}
-	await player.sign(
-		p,
-		g.get("userTid"),
-		{
-			amount,
-			exp,
-		},
-		g.get("phase"),
-	);
+
+	// Make sure the user didn't do something in another tab to change the willingness to negotiate, such as trading away players
+	const mood = await player.moodInfo(p, g.get("userTid"));
+	if (!mood.willing) {
+		return "Player is no longer willing to negotiate.";
+	}
+
+	const contract: PlayerContract = {
+		amount,
+		exp,
+	};
+	if (p.contract.rookie && g.get("phase") === PHASE.RESIGN_PLAYERS) {
+		// Not sure if the phase condition is necessary. The purpose of this is for hard cap rookies with rookie contract scale.
+		contract.rookie = true;
+	}
+
+	await player.sign(p, g.get("userTid"), contract, g.get("phase"));
 	await idb.cache.players.put(p);
 	await cancel(pid);
 

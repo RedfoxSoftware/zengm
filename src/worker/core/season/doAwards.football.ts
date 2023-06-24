@@ -4,7 +4,7 @@ import {
 	getTopPlayers,
 	leagueLeaders,
 	teamAwards,
-	AwardsByPlayer,
+	type AwardsByPlayer,
 	addSimpleAndTeamAwardsToAwardsByPlayer,
 	saveAwardsByPlayer,
 } from "./awards";
@@ -222,7 +222,7 @@ const getRealFinalsMvp = async (
 ): Promise<AwardPlayer | undefined> => {
 	const games = await idb.cache.games.getAll(); // Last game of the season will have the two finals teams
 
-	const finalsTids = games.at(-1).teams.map(t => t.tid); // Get all playoff games between those two teams - that will be all finals games
+	const finalsTids = games.at(-1)!.teams.map(t => t.tid); // Get all playoff games between those two teams - that will be all finals games
 
 	const finalsGames = games.filter(
 		game =>
@@ -295,7 +295,7 @@ export const mvpScore = (p: PlayerFiltered) => {
 	return posMultiplier * p.currentStats.av;
 };
 export const dpoyScore = (p: PlayerFiltered) => {
-	const posBonus = p.pos === "LB" ? 2 : 0;
+	const posBonus = p.pos === "LB" ? 5 : 0;
 	return (
 		posBonus +
 		p.currentStats.av +

@@ -1,4 +1,9 @@
-import { useState, ChangeEvent, FormEvent, MouseEvent } from "react";
+import {
+	useState,
+	type ChangeEvent,
+	type FormEvent,
+	type MouseEvent,
+} from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import { helpers, toWorker, logEvent } from "../util";
 import type { View, ExpansionDraftSetupTeam } from "../../common/types";
@@ -30,7 +35,7 @@ const ExpansionDraft = ({
 		jersey: DEFAULT_JERSEY,
 		pop: "1",
 		stadiumCapacity: "25000",
-		did: String(divs.at(-1).did),
+		did: String(divs.at(-1)!.did),
 		takeControl: false,
 	};
 
@@ -98,10 +103,7 @@ const ExpansionDraft = ({
 
 	const handleInputChange =
 		(i: number) =>
-		async (
-			field: string,
-			event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-		) => {
+		async (field: string, event: { target: { value: string } }) => {
 			const value = event.target.value;
 
 			const t: any = {
@@ -147,7 +149,11 @@ const ExpansionDraft = ({
 
 		setSaving(true);
 
-		const errors = await toWorker("main", "advanceToPlayerProtection");
+		const errors = await toWorker(
+			"main",
+			"advanceToPlayerProtection",
+			undefined,
+		);
 
 		if (errors) {
 			logEvent({
@@ -241,6 +247,7 @@ const ExpansionDraft = ({
 													"col-6",
 													"col-6",
 													"col-6",
+													"d-none",
 												]}
 												confs={confs}
 												disableStadiumCapacity={!godMode}
@@ -361,7 +368,7 @@ const ExpansionDraft = ({
 					</div>
 				</div>
 				{disableNumProtectedPlayersChange ? (
-					<div className="form-text text-muted mt-2 mb-0">
+					<div className="form-text text-body-secondary mt-2 mb-0">
 						If you're taking control of a team, you can't change these settings
 						unless you enable{" "}
 						<a href={helpers.leagueUrl(["god_mode"])}>God Mode</a>.

@@ -3,6 +3,7 @@ import { bySport } from "../../common";
 
 // Client ID aka app key
 const CLIENT_ID = bySport({
+	baseball: "69fvfvar845n8f7",
 	basketball: "fvdi8cdcwscxt5j",
 	football: "lqbn33k6vre8tla",
 	hockey: "h4v41smg906nbpy",
@@ -151,25 +152,48 @@ class Buffer {
 	}
 }*/
 
-const handleAuthError = async (
+const handleStreamError = async (
 	stream: WritableStream,
 	error: any,
 	lid: number,
 ) => {
-	console.log(error.status, error.message, error.error);
 	if (error.status === 401) {
-		// "Response failed with a 401 code" - need user to log in again
+		// "Response failed with a 401 code" - need user to log in again. Would be better to check for a more specific error message though!
 		localStorage.removeItem("dropboxAccessToken");
-		stream.abort(error.message);
+		if (!stream.locked) {
+			stream.abort(error.message);
+		}
 
 		const url = await getAuthenticationUrl(lid);
 
 		window.location.href = url;
 
-		return true;
+		return;
 	}
 
-	return false;
+	let errorMessage;
+	if (
+		error.status === 409 &&
+		error.error?.error_summary?.includes("insufficient_space")
+	) {
+		errorMessage =
+			"Your Dropbox is full. Either delete some files from Dropbox or upgrade your Dropbox account.";
+	} else if (typeof error.error === "string") {
+		// Sometimes it's a string!
+		errorMessage = error.error;
+	} else if (error.error?.error_summary) {
+		errorMessage = `${error.message} - ${error.error?.error_summary}`;
+	}
+
+	if (!stream.locked) {
+		stream.abort(errorMessage ?? error.message);
+	}
+
+	// Maybe would be better to use controller.error rather than throwing, but this seems to work
+	if (errorMessage) {
+		throw new Error(errorMessage);
+	}
+	throw error;
 };
 
 // Based on https://github.com/dropbox/dropbox-sdk-js/blob/b75b1e3bfedcf4b00f613489c5291d3235f052db/examples/javascript/upload/index.html
@@ -197,22 +221,23 @@ export const dropboxStream = async ({
 			try {
 				await buffer.add(chunk);
 			} catch (error) {
-				if (!handleAuthError(stream, error, lid)) {
-					throw error;
-				}
+				await handleStreamError(stream, error, lid);
 			}
 		},
 		async close() {
 			const path = `/${filename}`;
 
 			try {
-				await buffer.finalize(path);
+				const response = await buffer.finalize(path);
+
+				// Path might change because of autorename setting
+				const actualPath = response.result.path_display ?? path;
 
 				let fileURL: string | undefined;
 
 				try {
 					const response2 = await dropbox.sharingCreateSharedLinkWithSettings({
-						path,
+						path: actualPath,
 					});
 					fileURL = response2.result.url;
 				} catch (error) {
@@ -225,12 +250,13 @@ export const dropboxStream = async ({
 					// Other situations could lead to a 409, such as if the user has not verified their email address https://discord.com/channels/@me/913081687586537503/916208729546977310 - for now, don't worry about that, just leave fileURL blank and show a generic message about it.
 				}
 
+				// /scl/fi/ URLs now work with dl!
+				// https://www.dropboxforum.com/t5/Create-upload-and-share/Shared-Link-quot-scl-quot-to-quot-s-quot/td-p/689070/page/9
+				// See also error message in ExportLeague when it finds a URL containing /scl/fi/
 				const downloadURL = fileURL?.replace("https://www.", "https://dl.");
 				onComplete(downloadURL);
 			} catch (error) {
-				if (!handleAuthError(stream, error, lid)) {
-					throw error;
-				}
+				await handleStreamError(stream, error, lid);
 			}
 		},
 		abort() {

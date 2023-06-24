@@ -1,9 +1,10 @@
 import { idb } from "../../db";
-import { PLAYER, PHASE, isSport, bySport } from "../../../common";
+import { PLAYER, PHASE, bySport } from "../../../common";
 import { team, player, draft } from "..";
 import { g, helpers, random } from "../../util";
 import type { Player } from "../../../common/types";
 import orderBy from "lodash-es/orderBy";
+import { TOO_MANY_TEAMS_TOO_SLOW } from "../season/getInitialNumGamesConfDivSettings";
 
 const TEMP = 0.35;
 const LEARNING_RATE = 0.5;
@@ -87,6 +88,7 @@ const normalizeContractDemands = async ({
 }) => {
 	// Higher means more unequal salaries
 	const PARAM = bySport({
+		baseball: 1,
 		basketball: 0.5 * (type === "newLeague" ? 5 : 15),
 		football: 1,
 		hockey: 2.5,
@@ -100,7 +102,16 @@ const normalizeContractDemands = async ({
 	let numRounds = DEFAULT_ROUNDS;
 
 	// 0 for FBGM because we don't actually do bidding there, it had too much variance. Instead, use the old genContract formula. Same if minContract and maxContract are the same, no point in doing auction.
-	if (isSport("football") || minContract === maxContract) {
+	if (
+		bySport({
+			baseball: true,
+			basketball: false,
+			football: true,
+			hockey: false,
+		}) ||
+		minContract === maxContract ||
+		g.get("numActiveTeams") >= TOO_MANY_TEAMS_TOO_SLOW
+	) {
 		numRounds = 0;
 	}
 
@@ -138,7 +149,11 @@ const normalizeContractDemands = async ({
 			pid: p.pid,
 			dummy,
 			value: (p.value < 0 ? -1 : 1) * p.value ** 2,
-			contractAmount: p.contract.amount,
+			contractAmount: helpers.bound(
+				p.contract.amount,
+				minContract,
+				maxContract,
+			),
 			p,
 		};
 	});
@@ -187,7 +202,7 @@ const normalizeContractDemands = async ({
 		for (const t of randTeams) {
 			let capSpace = salaryCap - t.payroll;
 			if (type === "newLeague") {
-				if (!g.get("hardCap")) {
+				if (g.get("salaryCapType") !== "hard") {
 					// Simulating that teams could have gone over the cap to sign players with bird rights
 					capSpace += salaryCap;
 				} else {
@@ -200,7 +215,7 @@ const normalizeContractDemands = async ({
 				playerInfosCurrent.filter(
 					p =>
 						p.contractAmount <= capSpace &&
-						(bids.get(p.pid) || 0) < NUM_BIDS_BEFORE_REMOVED,
+						(bids.get(p.pid) ?? 0) < NUM_BIDS_BEFORE_REMOVED,
 				),
 			);
 			while (capSpace > minContract && availablePlayers.size > 0) {
@@ -212,7 +227,7 @@ const normalizeContractDemands = async ({
 				const p = random.choice(availablePlayersArray, probs);
 				availablePlayers.delete(p);
 
-				bids.set(p.pid, (bids.get(p.pid) || 0) + 1);
+				bids.set(p.pid, (bids.get(p.pid) ?? 0) + 1);
 				capSpace -= p.contractAmount;
 				if (capSpace > minContract) {
 					for (const p of availablePlayers) {
@@ -252,12 +267,19 @@ const normalizeContractDemands = async ({
 	}
 	//console.timeEnd("foo");
 
-	const hockeyRookieOverrides =
-		isSport("hockey") && type === "includeExpiringContracts";
+	// See selectPlayer.ts - for hard cap, players are not auto signed, so special logic here
 	let rookieSalaries;
-	if (isSport("hockey") && hockeyRookieOverrides) {
+	if (g.get("draftPickAutoContract") && g.get("salaryCapType") === "hard") {
 		rookieSalaries = draft.getRookieSalaries();
 	}
+
+	let offset = g.get("phase") <= PHASE.PLAYOFFS ? -1 : 0;
+	if (nextSeason) {
+		// Otherwise the season+phase combo appears off when setting contract expiration in newPhasePreseason
+		offset -= 1;
+	}
+	const minNewContractExp =
+		g.get("season") + g.get("minContractLength") + offset;
 
 	for (const info of playerInfos) {
 		if (
@@ -270,33 +292,37 @@ const normalizeContractDemands = async ({
 			const p = info.p;
 
 			const exp =
-				isSport("hockey") && hockeyRookieOverrides && p.draft.year === season
-					? season + 3
+				rookieSalaries && p.draft.year === season
+					? g.get("season") + draft.getRookieContractLength(p.draft.round)
 					: getExpiration(p, type === "newLeague", nextSeason);
 
 			let amount;
-			if (numRounds === 0) {
+			if (rookieSalaries && p.draft.year === season) {
+				const pickIndex =
+					(p.draft.round - 1) * g.get("numActiveTeams") + p.draft.pick - 1;
+				amount = rookieSalaries[pickIndex] ?? rookieSalaries.at(-1);
+			} else if (numRounds === 0) {
 				amount = player.genContract(p, type === "newLeague").amount;
 			} else {
-				if (
-					isSport("hockey") &&
-					rookieSalaries &&
-					hockeyRookieOverrides &&
-					p.draft.year === season
-				) {
-					const pickIndex =
-						(p.draft.round - 1) * g.get("numActiveTeams") + p.draft.pick - 1;
-					amount = rookieSalaries[pickIndex] ?? rookieSalaries.at(-1);
-				} else {
-					if (type === "newLeague") {
-						info.contractAmount *= random.uniform(0.4, 1.1);
-					}
+				if (type === "newLeague") {
+					info.contractAmount *= random.uniform(0.4, 1.1);
+				}
 
-					amount = helpers.bound(
-						helpers.roundContract(info.contractAmount),
-						minContract,
-						maxContract,
-					);
+				amount = info.contractAmount;
+			}
+
+			// HACK - assume within first 3 years it is a rookie contract. Only need to check players with draftPickAutoContract disabled, because otherwise there is other code handling rookie contracts.
+			let labelAsRookieContract = rookieSalaries && p.draft.year === season;
+			if (
+				type === "newLeague" &&
+				p.draft.round > 0 &&
+				!g.get("draftPickAutoContract")
+			) {
+				if (g.get("season") <= p.draft.year + 3) {
+					labelAsRookieContract = true;
+
+					// Decrease salary by 50%, like in newPhaseResignPlayers
+					amount /= 2;
 				}
 			}
 
@@ -308,11 +334,24 @@ const normalizeContractDemands = async ({
 				}
 			}
 
+			amount = helpers.bound(
+				helpers.roundContract(amount),
+				minContract,
+				maxContract,
+			);
+
 			// Make sure to remove "temp" flag!
 			p.contract = {
 				amount,
 				exp,
 			};
+			if (p.tid === PLAYER.FREE_AGENT && p.contract.exp < minNewContractExp) {
+				p.contract.exp = minNewContractExp;
+			}
+
+			if (labelAsRookieContract) {
+				p.contract.rookie = true;
+			}
 
 			await idb.cache.players.put(p);
 		}

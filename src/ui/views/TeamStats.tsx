@@ -1,13 +1,16 @@
-import PropTypes from "prop-types";
-import type { ReactNode } from "react";
 import { getCols, gradientStyleFactory, helpers, prefixStatOpp } from "../util";
 import useTitleBar from "../hooks/useTitleBar";
 import { DataTable, PlusMinus, MoreLinks } from "../components";
+import { wrappedTeamLogoAndName } from "../components/TeamLogoAndName";
 import type { View } from "../../common/types";
 import { isSport } from "../../common";
+import { formatMaybeInteger } from "./LeagueStats";
+import { expandFieldingStats } from "../util/expandFieldingStats.baseball";
+import type { DataTableRow } from "../components/DataTable";
 
 const TeamStats = ({
 	allStats,
+	averages,
 	playoffs,
 	season,
 	stats,
@@ -73,7 +76,7 @@ const TeamStats = ({
 				if (stat.startsWith("opp")) {
 					return `stat:${stat.charAt(3).toLowerCase()}${stat.slice(4)}`;
 				}
-				return `stat:${stat}`;
+				return stat === "pos" ? "Pos" : `stat:${stat}`;
 			}),
 		],
 		{
@@ -111,60 +114,69 @@ const TeamStats = ({
 		teams.length,
 	);
 
-	const rows = teams.map(t => {
-		const data: { [key: string]: ReactNode } = {
-			"#": null,
-			abbrev: (
-				<a
-					href={helpers.leagueUrl([
-						"roster",
-						`${t.seasonAttrs.abbrev}_${t.tid}`,
-						season,
-					])}
-				>
-					{t.seasonAttrs.abbrev}
-				</a>
-			),
-			gp: t.stats.gp,
-			won: t.seasonAttrs.won,
-			lost: t.seasonAttrs.lost,
+	const makeRowObject = (
+		teamStats: typeof teams[number]["stats"],
+		teamSeasonAttrs: typeof teams[number]["seasonAttrs"],
+	) => {
+		const data: { [key: string]: DataTableRow["data"][number] } = {
+			gp: formatMaybeInteger(teamStats.gp),
+			won: formatMaybeInteger(teamSeasonAttrs.won),
+			lost: formatMaybeInteger(teamSeasonAttrs.lost),
 		};
 
 		if (otl) {
-			data.otl = t.seasonAttrs.otl;
+			data.otl = formatMaybeInteger(teamSeasonAttrs.otl);
 		}
 		if (ties) {
-			data.tied = t.seasonAttrs.tied;
+			data.tied = formatMaybeInteger(teamSeasonAttrs.tied);
 		}
 		if (usePts) {
-			data.ptsPts = Math.round(t.seasonAttrs.pts);
-			data.ptsPct = helpers.roundWinp(t.seasonAttrs.ptsPct);
+			data.ptsPts = Math.round(teamSeasonAttrs.pts);
+			data.ptsPct = helpers.roundWinp(teamSeasonAttrs.ptsPct);
 		} else {
-			data.winp = helpers.roundWinp(t.seasonAttrs.winp);
+			data.winp = helpers.roundWinp(teamSeasonAttrs.winp);
 		}
 
 		data.avgAge =
-			t.seasonAttrs.avgAge !== undefined
-				? t.seasonAttrs.avgAge.toFixed(1)
+			teamSeasonAttrs.avgAge !== undefined
+				? teamSeasonAttrs.avgAge.toFixed(1)
 				: null;
 
 		for (const stat of stats) {
-			const value = t.stats.hasOwnProperty(stat)
-				? (t.stats as any)[stat]
-				: (t.seasonAttrs as any)[stat];
+			const value = Object.hasOwn(teamStats, stat)
+				? (teamStats as any)[stat]
+				: (teamSeasonAttrs as any)[stat];
 			data[stat] = helpers.roundStat(value, stat);
 		}
 
 		if (isSport("basketball") || isSport("hockey")) {
 			const plusMinusCols = [prefixStatOpp(teamOpponent, "mov"), "nrtg"];
 			for (const plusMinusCol of plusMinusCols) {
-				if (data.hasOwnProperty(plusMinusCol)) {
+				if (Object.hasOwn(data, plusMinusCol)) {
 					data[plusMinusCol] = (
-						<PlusMinus>{(t.stats as any)[plusMinusCol]}</PlusMinus>
+						<PlusMinus>{(teamStats as any)[plusMinusCol]}</PlusMinus>
 					);
 				}
 			}
 		}
+
+		return data;
+	};
+
+	if (
+		isSport("baseball") &&
+		(teamOpponent === "fielding" || teamOpponent === "oppFielding")
+	) {
+		teams = expandFieldingStats({
+			rows: teams,
+			stats,
+			allPositions: true,
+			statsProperty: "stats",
+		});
+	}
+
+	const rows = teams.map(t => {
+		const data = makeRowObject(t.stats, t.seasonAttrs);
 
 		// This is our team.
 		if (userTid === t.tid) {
@@ -178,28 +190,52 @@ const TeamStats = ({
 				}
 
 				// Determine our team's percentile for this stat type. Closer to the start is better.
-				const statTypeValue = t.stats.hasOwnProperty(statType)
+				const statTypeValue = Object.hasOwn(t.stats, statType)
 					? (t.stats as any)[statType]
 					: (t.seasonAttrs as any)[statType];
 				const rank = teams.length - allStats[statType].indexOf(statTypeValue);
 
 				data[statType] = {
 					style: gradientStyle(rank),
+					// @ts-expect-error
 					value,
 				};
 			}
-
-			return {
-				key: t.tid,
-				data: Object.values(data),
-			};
 		}
 
 		return {
-			key: t.tid,
-			data: Object.values(data),
+			key:
+				isSport("baseball") &&
+				(teamOpponent === "fielding" || teamOpponent === "oppFielding")
+					? `${t.tid}-${(t.stats as any).pos}`
+					: t.tid,
+			data: [
+				null,
+				wrappedTeamLogoAndName(
+					t,
+					helpers.leagueUrl([
+						"roster",
+						`${t.seasonAttrs.abbrev}_${t.tid}`,
+						season,
+					]),
+				),
+				...Object.values(data),
+			],
 		};
 	});
+
+	const footer =
+		averages &&
+		!(
+			isSport("baseball") &&
+			(teamOpponent === "fielding" || teamOpponent === "oppFielding")
+		)
+			? [
+					null,
+					"Avg",
+					...Object.values(makeRowObject(averages as any, averages as any)),
+			  ]
+			: undefined;
 
 	return (
 		<>
@@ -208,32 +244,15 @@ const TeamStats = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[3, "desc"]}
+				defaultStickyCols={2}
 				name={`TeamStats${teamOpponent}`}
 				rankCol={0}
 				rows={rows}
+				footer={footer}
 				superCols={superCols}
 			/>
 		</>
 	);
-};
-
-TeamStats.propTypes = {
-	allStats: PropTypes.object.isRequired,
-	playoffs: PropTypes.oneOf(["playoffs", "regularSeason"]).isRequired,
-	season: PropTypes.number.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	superCols: PropTypes.array,
-	teamOpponent: PropTypes.oneOf([
-		"advanced",
-		"opponent",
-		"team",
-		"teamShotLocations",
-		"opponentShotLocations",
-	]).isRequired,
-	teams: PropTypes.arrayOf(PropTypes.object).isRequired,
-	otl: PropTypes.bool.isRequired,
-	ties: PropTypes.bool.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default TeamStats;

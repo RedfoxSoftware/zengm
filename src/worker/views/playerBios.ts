@@ -4,6 +4,7 @@ import type { UpdateEvents, ViewInput } from "../../common/types";
 import { getPlayers } from "./playerRatings";
 import { player } from "../core";
 import { idb } from "../db";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updatePlayers = async (
 	inputs: ViewInput<"playerBios">,
@@ -19,18 +20,21 @@ const updatePlayers = async (
 		inputs.abbrev !== state.abbrev
 	) {
 		const stats = bySport({
+			baseball: ["keyStats"],
 			basketball: ["pts", "trb", "ast"],
 			football: ["keyStats"],
 			hockey: ["keyStats"],
 		});
 
-		const players = await getPlayers(
-			inputs.season,
-			inputs.abbrev,
-			["born", "college", "hgt", "weight", "draft", "experience"],
-			["ovr", "pot"],
-			[...stats, "jerseyNumber"],
-			inputs.tid,
+		const players = addFirstNameShort(
+			await getPlayers(
+				inputs.season,
+				inputs.abbrev,
+				["born", "college", "hgt", "weight", "draft", "experience"],
+				["ovr", "pot"],
+				[...stats, "jerseyNumber"],
+				inputs.tid,
+			),
 		);
 
 		const userTid = g.get("userTid");

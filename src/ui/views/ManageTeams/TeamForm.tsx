@@ -1,10 +1,10 @@
-import { display } from "facesjs";
 import type { Face } from "facesjs";
-import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { DEFAULT_JERSEY, helpers, JERSEYS } from "../../../common";
+import { useEffect, useRef, useState } from "react";
+import { helpers, JERSEYS } from "../../../common";
 import type { View, ExpansionDraftSetupTeam } from "../../../common/types";
 import { JerseyNumber } from "../../components";
-import { toWorker } from "../../util";
+import { displayFace, toWorker } from "../../util";
+import MoveModal, { type MoveModalTeamFinal } from "./MoveModal";
 
 const TeamForm = ({
 	classNamesCol,
@@ -16,9 +16,12 @@ const TeamForm = ({
 	divs,
 	handleInputChange,
 	hideStatus,
+	showPlayers,
+	moveButton,
 	t,
 }: {
 	classNamesCol: [
+		string,
 		string,
 		string,
 		string,
@@ -38,15 +41,21 @@ const TeamForm = ({
 	divs: View<"manageTeams">["divs"];
 	handleInputChange: (
 		field: string,
-		event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+		event: { target: { value: string } },
 	) => void;
 	hideStatus?: boolean;
+	showPlayers?: boolean;
+	moveButton?: boolean;
+
 	// Really should just be ExpansionDraftSetupTeam, but need to update Manage Teams
-	t:
+	t: (
 		| Omit<View<"manageTeams">["teams"][number], "tid">
 		| (Omit<ExpansionDraftSetupTeam, "takeControl"> & {
 				disabled?: boolean;
-		  });
+		  })
+	) & {
+		usePlayers?: boolean;
+	};
 }) => {
 	const [faceWrapper, setFaceWrapper] = useState<HTMLDivElement | null>(null);
 	const face = useRef<Face | undefined>();
@@ -80,30 +89,69 @@ const TeamForm = ({
 			}
 
 			if (faceWrapper && face.current) {
-				const overrides = {
-					teamColors: [color1, color2, color3],
-					jersey: {
-						id: t.jersey ?? DEFAULT_JERSEY,
-					},
-				};
-				display(faceWrapper, face.current, overrides);
+				displayFace({
+					colors: [color1, color2, color3],
+					face: face.current,
+					jersey: t.jersey,
+					wrapper: faceWrapper,
+				});
 			}
 		};
 
 		renderFace();
 	}, [faceWrapper, showFace, color1, color2, color3, t.jersey]);
 
+	const [showMoveModal, setShowMoveModal] = useState(false);
+
+	const cancelMoveModal = () => {
+		setShowMoveModal(false);
+	};
+
+	const saveMoveModal = (newTeamInfo: MoveModalTeamFinal, rebrand: boolean) => {
+		const apply = (key: string, value: string) => {
+			handleInputChange(key, { target: { value } });
+		};
+		apply("region", newTeamInfo.region);
+		apply("abbrev", newTeamInfo.abbrev);
+		apply("pop", String(newTeamInfo.pop));
+
+		if (rebrand) {
+			apply("jersey", newTeamInfo.jersey);
+			apply("name", newTeamInfo.name);
+			apply("imgURL", newTeamInfo.imgURL);
+			apply("imgURLSmall", newTeamInfo.imgURLSmall ?? "");
+			apply("colors0", newTeamInfo.colors[0]);
+			apply("colors1", newTeamInfo.colors[1]);
+			apply("colors2", newTeamInfo.colors[2]);
+		}
+
+		setShowMoveModal(false);
+	};
+
 	return (
 		<>
 			<div className={classNamesCol[0]}>
 				<div className="mb-3">
 					<label className={classNameLabel}>Region</label>
-					<input
-						type="text"
-						className="form-control"
-						onChange={e => handleInputChange("region", e)}
-						value={t.region}
-					/>
+					<div className="input-group">
+						<input
+							type="text"
+							className="form-control"
+							onChange={e => handleInputChange("region", e)}
+							value={t.region}
+						/>
+						{moveButton ? (
+							<button
+								className="btn btn-light-bordered"
+								type="button"
+								onClick={() => {
+									setShowMoveModal(true);
+								}}
+							>
+								Move
+							</button>
+						) : null}
+					</div>
 				</div>
 			</div>
 			<div className={classNamesCol[1]}>
@@ -280,6 +328,37 @@ const TeamForm = ({
 						</select>
 					</div>
 				</div>
+			) : null}
+			{showPlayers ? (
+				<div className={classNamesCol[10]}>
+					<div className="mb-3">
+						<label className={classNameLabel}>Include Players</label>
+						<div
+							className="form-check form-switch"
+							title={t.usePlayers ? "Enabled" : "Disabled"}
+						>
+							<input
+								type="checkbox"
+								className="form-check-input"
+								checked={!!t.usePlayers}
+								onChange={e => handleInputChange("usePlayers", e)}
+								id="TeamForm-usePlayers"
+							/>
+							<label
+								className="form-check-label"
+								htmlFor="TeamForm-usePlayers"
+							/>
+						</div>
+					</div>
+				</div>
+			) : null}
+			{moveButton ? (
+				<MoveModal
+					show={showMoveModal}
+					onHide={cancelMoveModal}
+					onSave={saveMoveModal}
+					currentTeam={t}
+				/>
 			) : null}
 		</>
 	);

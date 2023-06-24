@@ -19,6 +19,7 @@ import type {
 	PlayerFiltered,
 	TeamFiltered,
 } from "../../../common/types";
+import { POS_NUMBERS_INVERSE } from "../../../common/constants.baseball";
 
 export type AwardsByPlayer = {
 	pid: number;
@@ -54,6 +55,7 @@ const getPlayers = async (season: number): Promise<PlayerFiltered[]> => {
 			"pid",
 			"name",
 			"firstName",
+			"lastName",
 			"tid",
 			"abbrev",
 			"draft",
@@ -63,6 +65,38 @@ const getPlayers = async (season: number): Promise<PlayerFiltered[]> => {
 		],
 		ratings: ["pos", "season", "ovr", "dovr", "pot", "skills"],
 		stats: bySport({
+			baseball: [
+				"keyStats",
+				"gpPit",
+				"gsPit",
+				"w",
+				"l",
+				"sv",
+				"era",
+				"ip",
+				"war",
+				"rpit",
+				"season",
+				"abbrev",
+				"tid",
+				"jerseyNumber",
+
+				// For all-offense/defense teams
+				"rbat",
+				"rbr",
+				"rfld",
+
+				// For position determination
+				"gpF",
+
+				// For season leaders
+				"hr",
+				"rbi",
+				"r",
+				"sb",
+				"bb",
+				"soPit",
+			],
 			basketball: [
 				"gp",
 				"gs",
@@ -128,7 +162,7 @@ const getPlayers = async (season: number): Promise<PlayerFiltered[]> => {
 			],
 		}),
 		fuzz: true,
-		mergeStats: true,
+		mergeStats: "totOnly",
 	});
 
 	// Only keep players who actually have a stats entry for the latest season
@@ -152,24 +186,39 @@ const getPlayers = async (season: number): Promise<PlayerFiltered[]> => {
 	> = {};
 	for (const teamSeason of teamSeasons) {
 		teamInfos[teamSeason.tid] = {
-			gp:
-				teamSeason.won +
-				teamSeason.lost +
-				(teamSeason.tied ?? 0) +
-				(teamSeason.otl ?? 0),
+			gp: helpers.getTeamSeasonGp(teamSeason),
 			winp: helpers.calcWinp(teamSeason),
 		};
 	}
 
 	// For convenience later
 	for (const p of players) {
-		p.pos = p.ratings.at(-1).pos;
-
 		p.currentStats = p.stats.at(-1);
 		for (let i = p.stats.length - 1; i >= 0; i--) {
 			if (p.stats[i].season === season) {
 				p.currentStats = p.stats[i];
 				break;
+			}
+		}
+
+		p.pos = p.ratings.at(-1).pos;
+		if (isSport("baseball")) {
+			// Overwrite position with actual position played
+			const gpF = (p.currentStats.gpF as (number | undefined)[]).map(gp =>
+				gp === undefined ? 0 : gp,
+			);
+			let maxGP = 0; // Start at 0 rather than -Infinity because we're not interested in positions with 0 games played
+			let maxIndex;
+			for (let i = 0; i < gpF.length; i++) {
+				const gp = gpF[i];
+				if (gp > maxGP) {
+					maxGP = gp;
+					maxIndex = i;
+				}
+			}
+
+			if (maxIndex !== undefined) {
+				p.pos = (POS_NUMBERS_INVERSE as any)[maxIndex + 1];
 			}
 		}
 
@@ -521,15 +570,20 @@ const addSimpleAndTeamAwardsToAwardsByPlayer = (
 		});
 	}
 	const awardsTeams = bySport({
-		basketball: ["allRookie", "allLeague", "allDefensive"] as const,
+		baseball: ["allRookie", "allOffense", "allDefense"] as const,
+		basketball: ["allRookie", "allLeague", "allDefensive", "sfmvp"] as const,
 		football: ["allRookie", "allLeague"] as const,
 		hockey: ["allRookie", "allLeague"] as const,
 	});
 	for (const key of awardsTeams) {
+		if (!awards[key]) {
+			continue;
+		}
+
 		const type = AWARD_NAMES[key] as string;
 
-		if (key === "allRookie") {
-			for (const p of awards.allRookie) {
+		if (key === "allRookie" || key === "sfmvp" || isSport("baseball")) {
+			for (const p of awards[key]) {
 				if (p) {
 					const { pid, tid, name } = p;
 					awardsByPlayer.push({

@@ -1,8 +1,7 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import { useState } from "react";
 import { arrayMoveImmutable } from "array-move";
-import { isSport, PHASE, PLAYER, WEBSITE_ROOT } from "../../../common";
+import { isSport, PLAYER, WEBSITE_ROOT } from "../../../common";
 import {
 	CountryFlag,
 	HelpPopover,
@@ -14,50 +13,64 @@ import {
 	MoreLinks,
 } from "../../components";
 import useTitleBar from "../../hooks/useTitleBar";
-import { confirm, getCols, helpers, logEvent, toWorker } from "../../util";
+import {
+	confirm,
+	getCols,
+	helpers,
+	logEvent,
+	toWorker,
+	useLocalPartial,
+} from "../../util";
 import PlayingTime, { ptStyles } from "./PlayingTime";
 import TopStuff from "./TopStuff";
-import type { Phase, View } from "../../../common/types";
-
-// If a player was just drafted and the regular season hasn't started, then he can be released without paying anything
-const justDrafted = (
-	p: View<"roster">["players"][number],
-	phase: Phase,
-	season: number,
-) => {
-	return (
-		p.contract.rookie &&
-		((p.draft.year === season && phase >= PHASE.DRAFT) ||
-			(p.draft.year === season - 1 &&
-				phase < PHASE.REGULAR_SEASON &&
-				phase >= 0))
-	);
-};
+import type { GameAttributesLeague, Phase, View } from "../../../common/types";
+import { Contract } from "../../components/contract";
 
 const handleRelease = async (
 	p: View<"roster">["players"][number],
 	phase: Phase,
 	season: number,
+	gender: GameAttributesLeague["gender"],
 ) => {
-	const wasPlayerJustDrafted = justDrafted(p, phase, season);
+	const wasPlayerJustDrafted = helpers.justDrafted(p, phase, season);
 
 	let releaseMessage;
 	if (wasPlayerJustDrafted) {
-		releaseMessage = `Are you sure you want to release ${p.name}?  He will become a free agent and no longer take up a roster spot on your team. Because you just drafted him and the regular season has not started yet, you will not have to pay his contract.`;
+		releaseMessage = `Are you sure you want to release ${p.firstName} ${
+			p.lastName
+		}? ${helpers.pronoun(
+			gender,
+			"He",
+		)} will become a free agent and no longer take up a roster spot on your team. Because you just drafted ${helpers.pronoun(
+			gender,
+			"him",
+		)} and the regular season has not started yet, you will not have to pay ${helpers.pronoun(
+			gender,
+			"his",
+		)} contract.`;
 	} else {
-		releaseMessage = `Are you sure you want to release ${p.name}?  He will become a free agent and no longer take up a roster spot on your team, but you will still have to pay his salary (and have it count against the salary cap) until his contract expires in ${p.contract.exp}.`;
+		releaseMessage = `Are you sure you want to release ${p.firstName} ${
+			p.lastName
+		}? ${helpers.pronoun(
+			gender,
+			"He",
+		)} will become a free agent and no longer take up a roster spot on your team, but you will still have to pay ${helpers.pronoun(
+			gender,
+			"his",
+		)} salary (and have it count against the salary cap) until ${helpers.pronoun(
+			gender,
+			"his",
+		)} contract expires in ${p.contract.exp}.`;
 	}
 
 	const proceed = await confirm(releaseMessage, {
 		okText: "Release Player",
 	});
 	if (proceed) {
-		const errorMsg = await toWorker(
-			"main",
-			"releasePlayer",
-			p.pid,
-			wasPlayerJustDrafted,
-		);
+		const errorMsg = await toWorker("main", "releasePlayer", {
+			pid: p.pid,
+			justDrafted: wasPlayerJustDrafted,
+		});
 		if (errorMsg) {
 			logEvent({
 				type: "error",
@@ -75,7 +88,6 @@ const Roster = ({
 	currentSeason,
 	editable,
 	godMode,
-	hardCap,
 	maxRosterSize,
 	numConfs,
 	numPlayersOnCourt,
@@ -85,6 +97,7 @@ const Roster = ({
 	players,
 	playoffs,
 	salaryCap,
+	salaryCapType,
 	season,
 	showSpectatorWarning,
 	showRelease,
@@ -97,6 +110,7 @@ const Roster = ({
 }: View<"roster">) => {
 	const [sortedPids, setSortedPids] = useState<number[] | undefined>(undefined);
 	const [prevPlayers, setPrevPlayers] = useState(players);
+	const { gender } = useLocalPartial(["gender"]);
 
 	useTitleBar({
 		title: "Roster",
@@ -157,6 +171,7 @@ const Roster = ({
 				payroll={payroll}
 				profit={profit}
 				salaryCap={salaryCap}
+				salaryCapType={salaryCapType}
 				showTradeFor={showTradeFor}
 				showTradingBlock={showTradingBlock}
 				t={t}
@@ -178,7 +193,9 @@ const Roster = ({
 				rowClassName={({ index, value: p }) =>
 					classNames({
 						separator:
-							(isSport("basketball") && index === numPlayersOnCourt - 1) ||
+							(isSport("basketball") &&
+								index === numPlayersOnCourt - 1 &&
+								season === currentSeason) ||
 							(!isSport("basketball") &&
 								playersSorted[index + 1] &&
 								p.ratings.pos !== playersSorted[index + 1].ratings.pos),
@@ -223,8 +240,9 @@ const Roster = ({
 								<HelpPopover title="Playing Time Modifier">
 									<p>
 										Your coach will divide up playing time based on ability and
-										stamina. If you want to influence his judgement, your
-										options are:
+										stamina. If you want to influence{" "}
+										{helpers.pronoun(gender, "his")} judgement, your options
+										are:
 									</p>
 									<p>
 										<span style={ptStyles["0"]}>0 No Playing Time</span>
@@ -266,19 +284,23 @@ const Roster = ({
 								<HelpPopover title="Release Player">
 									<p>
 										To free up a roster spot, you can release a player from your
-										team. You will still have to pay his salary (and have it
-										count against the salary cap) until his contract expires
-										(you can view your released players' contracts in your{" "}
+										team. You will still have to pay{" "}
+										{helpers.pronoun(gender, "his")} salary (and have it count
+										against the salary cap) until{" "}
+										{helpers.pronoun(gender, "his")} contract expires (you can
+										view your released players' contracts in your{" "}
 										<a href={helpers.leagueUrl(["team_finances"])}>
 											Team Finances
 										</a>
 										).
 									</p>
-									{!hardCap ? (
+									{salaryCapType === "soft" ? (
 										<p>
 											However, if you just drafted a player and the regular
-											season has not started yet, his contract is not guaranteed
-											and you can release him for free.
+											season has not started yet,{" "}
+											{helpers.pronoun(gender, "his")} contract is not
+											guaranteed and you can release{" "}
+											{helpers.pronoun(gender, "him")} for free.
 										</p>
 									) : null}
 								</HelpPopover>
@@ -300,9 +322,11 @@ const Roster = ({
 									season={season}
 									skills={p.ratings.skills}
 									watch={p.watch}
-								>
-									{p.name}
-								</PlayerNameLabels>
+									firstName={p.firstName}
+									firstNameShort={p.firstNameShort}
+									lastName={p.lastName}
+									awards={p.awards}
+								/>
 							</td>
 							<td>{p.ratings.pos}</td>
 							<td>{p.age}</td>
@@ -321,20 +345,8 @@ const Roster = ({
 								) : null}
 							</td>
 							{season === currentSeason ? (
-								<td
-									style={{
-										fontStyle: justDrafted(p, phase, currentSeason)
-											? "italic"
-											: "normal",
-									}}
-									title={
-										justDrafted(p, phase, currentSeason)
-											? "Contracts for drafted players are not guaranteed until the regular season. If you release a drafted player before then, you pay nothing."
-											: undefined
-									}
-								>
-									{helpers.formatCurrency(p.contract.amount, "M")} thru{" "}
-									{p.contract.exp}
+								<td>
+									<Contract p={p} />
 								</td>
 							) : null}
 							<td>{playoffs === "playoffs" ? null : p.stats.yearsWithTeam}</td>
@@ -368,7 +380,9 @@ const Roster = ({
 									<button
 										className="btn btn-light-bordered btn-xs"
 										disabled={!p.canRelease}
-										onClick={() => handleRelease(p, phase, currentSeason)}
+										onClick={() =>
+											handleRelease(p, phase, currentSeason, gender)
+										}
 									>
 										Release
 									</button>
@@ -383,7 +397,9 @@ const Roster = ({
 											if (showTradeFor) {
 												toWorker("actions", "tradeFor", { pid: p.pid });
 											} else {
-												toWorker("actions", "addToTradingBlock", p.pid);
+												toWorker("actions", "addToTradingBlock", {
+													pid: p.pid,
+												});
 											}
 										}}
 									>
@@ -400,26 +416,6 @@ const Roster = ({
 			/>
 		</>
 	);
-};
-
-Roster.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	budget: PropTypes.bool.isRequired,
-	currentSeason: PropTypes.number.isRequired,
-	editable: PropTypes.bool.isRequired,
-	maxRosterSize: PropTypes.number.isRequired,
-	numConfs: PropTypes.number.isRequired,
-	numPlayoffRounds: PropTypes.number.isRequired,
-	payroll: PropTypes.number,
-	phase: PropTypes.number.isRequired,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	salaryCap: PropTypes.number.isRequired,
-	season: PropTypes.number.isRequired,
-	showRelease: PropTypes.bool.isRequired,
-	showTradeFor: PropTypes.bool.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	t: PropTypes.object.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default Roster;

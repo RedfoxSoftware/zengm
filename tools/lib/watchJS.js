@@ -1,5 +1,8 @@
-const path = require("path");
-const { Worker } = require("worker_threads");
+import path from "node:path";
+import { Worker } from "node:worker_threads";
+import { getDirname } from "./getDirname.js";
+
+const __dirname = getDirname(import.meta.url);
 
 const watchJS = (updateStart, updateEnd, updateError) => {
 	for (const name of ["ui", "worker"]) {
@@ -27,4 +30,4 @@ const watchJS = (updateStart, updateEnd, updateError) => {
 
 // watchJS((filename) => console.log('updateStart', filename), (filename) => console.log('updateEnd', filename), (filename, error) => console.log('updateError', filename, error));
 
-module.exports = watchJS;
+export default watchJS;

@@ -1,4 +1,9 @@
-import { PHASE, NO_LOTTERY_DRAFT_TYPES, isSport, bySport } from "../../common";
+import {
+	PHASE,
+	NO_LOTTERY_DRAFT_TYPES,
+	bySport,
+	ALL_STAR_GAME_ONLY,
+} from "../../common";
 import { draft, season } from "../core";
 import g from "./g";
 import helpers from "./helpers";
@@ -42,7 +47,7 @@ const updatePlayMenu = async () => {
 			key: "m",
 		},
 		untilAllStarGame: {
-			label: "Until All-Star events",
+			label: `Until All-Star ${ALL_STAR_GAME_ONLY ? "game" : "events"}`,
 			key: "a",
 		},
 		untilTradeDeadline: {
@@ -50,8 +55,10 @@ const updatePlayMenu = async () => {
 			key: "r",
 		},
 		viewAllStar: {
-			url: helpers.leagueUrl(["all_star"]),
-			label: "All-Star events",
+			url: helpers.leagueUrl(
+				ALL_STAR_GAME_ONLY ? ["all_star", "teams"] : ["all_star"],
+			),
+			label: `All-Star ${ALL_STAR_GAME_ONLY ? "teams" : "events"}`,
 		},
 		viewSlam: {
 			url: helpers.leagueUrl(["slam"]),
@@ -105,9 +112,10 @@ const updatePlayMenu = async () => {
 			label: "View draft",
 		},
 		untilResignPlayers: {
-			label: g.get("hardCap")
-				? "Re-sign players and sign rookies"
-				: "Re-sign players with expiring contracts",
+			label:
+				g.get("salaryCapType") === "hard" || !g.get("draftPickAutoContract")
+					? "Re-sign players and sign rookies"
+					: "Re-sign players with expiring contracts",
 		},
 		untilFreeAgency: {
 			label: "Until free agency",
@@ -228,7 +236,14 @@ const updatePlayMenu = async () => {
 		}
 	} else if (g.get("phase") === PHASE.PLAYOFFS) {
 		// Playoffs
-		if (isSport("basketball") || isSport("hockey")) {
+		if (
+			bySport({
+				baseball: true,
+				basketball: true,
+				football: false,
+				hockey: true,
+			})
+		) {
 			keys = [
 				"day",
 				"dayLive",
@@ -259,6 +274,14 @@ const updatePlayMenu = async () => {
 			}
 		} else {
 			keys = keys.filter(key => key !== "untilEndOfPlayIn");
+		}
+
+		const schedule = await season.getSchedule();
+		const allStarIndex = schedule.findIndex(
+			game => game.awayTid === -2 && game.homeTid === -1,
+		);
+		if (allStarIndex === 0) {
+			keys.unshift("viewAllStar");
 		}
 	} else if (g.get("phase") === PHASE.DRAFT_LOTTERY) {
 		if (g.get("repeatSeason")) {
@@ -328,7 +351,7 @@ const updatePlayMenu = async () => {
 	const someOptions: Option[] = keys.map(id => {
 		let code;
 		if (allOptions[id].key) {
-			// @ts-ignore
+			// @ts-expect-error
 			code = `Key${allOptions[id].key.toUpperCase()}`;
 		}
 

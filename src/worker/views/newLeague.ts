@@ -67,7 +67,7 @@ export const getDefaultSettings = () => {
 			defaultGameAttributes,
 			"forceRetireAge",
 		),
-		hardCap: unwrapGameAttribute(defaultGameAttributes, "hardCap"),
+		salaryCapType: unwrapGameAttribute(defaultGameAttributes, "salaryCapType"),
 		numGamesPlayoffSeries: unwrapGameAttribute(
 			defaultGameAttributes,
 			"numGamesPlayoffSeries",
@@ -83,6 +83,8 @@ export const getDefaultSettings = () => {
 			"playersRefuseToNegotiate",
 		),
 		allStarGame: unwrapGameAttribute(defaultGameAttributes, "allStarGame"),
+		allStarNum: unwrapGameAttribute(defaultGameAttributes, "allStarNum"),
+		allStarType: unwrapGameAttribute(defaultGameAttributes, "allStarType"),
 		budget: unwrapGameAttribute(defaultGameAttributes, "budget"),
 		numSeasonsFutureDraftPicks: unwrapGameAttribute(
 			defaultGameAttributes,
@@ -149,6 +151,10 @@ export const getDefaultSettings = () => {
 			defaultGameAttributes,
 			"challengeFiredMissPlayoffs",
 		),
+		challengeSisyphusMode: unwrapGameAttribute(
+			defaultGameAttributes,
+			"challengeSisyphusMode",
+		),
 		challengeThanosMode: unwrapGameAttribute(
 			defaultGameAttributes,
 			"challengeThanosMode",
@@ -164,6 +170,7 @@ export const getDefaultSettings = () => {
 		elam: unwrapGameAttribute(defaultGameAttributes, "elam"),
 		elamASG: unwrapGameAttribute(defaultGameAttributes, "elamASG"),
 		elamMinutes: unwrapGameAttribute(defaultGameAttributes, "elamMinutes"),
+		elamOvertime: unwrapGameAttribute(defaultGameAttributes, "elamOvertime"),
 		elamPoints: unwrapGameAttribute(defaultGameAttributes, "elamPoints"),
 		playerMoodTraits: unwrapGameAttribute(
 			defaultGameAttributes,
@@ -237,6 +244,114 @@ export const getDefaultSettings = () => {
 		fantasyPoints: unwrapGameAttribute(defaultGameAttributes, "fantasyPoints"),
 		tragicDeaths: defaultTragicDeaths,
 		goatFormula: goatFormula.DEFAULT_FORMULA,
+		goatSeasonFormula: goatFormula.DEFAULT_FORMULA_SEASON,
+		draftPickAutoContract: unwrapGameAttribute(
+			defaultGameAttributes,
+			"draftPickAutoContract",
+		),
+		draftPickAutoContractPercent: unwrapGameAttribute(
+			defaultGameAttributes,
+			"draftPickAutoContractPercent",
+		),
+		draftPickAutoContractRounds: unwrapGameAttribute(
+			defaultGameAttributes,
+			"draftPickAutoContractRounds",
+		),
+		dh: unwrapGameAttribute(defaultGameAttributes, "dh"),
+		draftLotteryCustomNumPicks: unwrapGameAttribute(
+			defaultGameAttributes,
+			"draftLotteryCustomNumPicks",
+		),
+		draftLotteryCustomChances: unwrapGameAttribute(
+			defaultGameAttributes,
+			"draftLotteryCustomChances",
+		),
+		passFactor: unwrapGameAttribute(defaultGameAttributes, "passFactor"),
+		rushYdsFactor: unwrapGameAttribute(defaultGameAttributes, "rushYdsFactor"),
+		passYdsFactor: unwrapGameAttribute(defaultGameAttributes, "passYdsFactor"),
+		completionFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"completionFactor",
+		),
+		scrambleFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"scrambleFactor",
+		),
+		sackFactor: unwrapGameAttribute(defaultGameAttributes, "sackFactor"),
+		fumbleFactor: unwrapGameAttribute(defaultGameAttributes, "fumbleFactor"),
+		intFactor: unwrapGameAttribute(defaultGameAttributes, "intFactor"),
+		fgAccuracyFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"fgAccuracyFactor",
+		),
+		fourthDownFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"fourthDownFactor",
+		),
+		onsideFactor: unwrapGameAttribute(defaultGameAttributes, "onsideFactor"),
+		onsideRecoveryFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"onsideRecoveryFactor",
+		),
+		hitFactor: unwrapGameAttribute(defaultGameAttributes, "hitFactor"),
+		giveawayFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"giveawayFactor",
+		),
+		takeawayFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"takeawayFactor",
+		),
+		deflectionFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"deflectionFactor",
+		),
+		saveFactor: unwrapGameAttribute(defaultGameAttributes, "saveFactor"),
+		assistFactor: unwrapGameAttribute(defaultGameAttributes, "assistFactor"),
+		foulFactor: unwrapGameAttribute(defaultGameAttributes, "foulFactor"),
+		groundFactor: unwrapGameAttribute(defaultGameAttributes, "groundFactor"),
+		lineFactor: unwrapGameAttribute(defaultGameAttributes, "lineFactor"),
+		flyFactor: unwrapGameAttribute(defaultGameAttributes, "flyFactor"),
+		powerFactor: unwrapGameAttribute(defaultGameAttributes, "powerFactor"),
+		throwOutFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"throwOutFactor",
+		),
+		strikeFactor: unwrapGameAttribute(defaultGameAttributes, "strikeFactor"),
+		balkFactor: unwrapGameAttribute(defaultGameAttributes, "balkFactor"),
+		wildPitchFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"wildPitchFactor",
+		),
+		passedBallFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"passedBallFactor",
+		),
+		hitByPitchFactor: unwrapGameAttribute(
+			defaultGameAttributes,
+			"hitByPitchFactor",
+		),
+		swingFactor: unwrapGameAttribute(defaultGameAttributes, "swingFactor"),
+		contactFactor: unwrapGameAttribute(defaultGameAttributes, "contactFactor"),
+		softCapTradeSalaryMatch: unwrapGameAttribute(
+			defaultGameAttributes,
+			"softCapTradeSalaryMatch",
+		),
+		gender: unwrapGameAttribute(defaultGameAttributes, "gender"),
+		heightFactor: unwrapGameAttribute(defaultGameAttributes, "heightFactor"),
+		weightFactor: unwrapGameAttribute(defaultGameAttributes, "weightFactor"),
+		allStarDunk: unwrapGameAttribute(defaultGameAttributes, "allStarDunk"),
+		allStarThree: unwrapGameAttribute(defaultGameAttributes, "allStarThree"),
+		minRetireAge: unwrapGameAttribute(defaultGameAttributes, "minRetireAge"),
+		numWatchColors: unwrapGameAttribute(
+			defaultGameAttributes,
+			"numWatchColors",
+		),
+		giveMeWorstRoster: false,
+		groupScheduleSeries: unwrapGameAttribute(
+			defaultGameAttributes,
+			"groupScheduleSeries",
+		),
 
 		// This can be undefined, but if the setting is ever displayed to the user, it should default to "rookie"
 		realDraftRatings:
@@ -245,6 +360,14 @@ export const getDefaultSettings = () => {
 	};
 
 	return defaultSettings;
+};
+
+export const getRealTeamInfo = async () => {
+	const realTeamInfo = (await idb.meta.get("attributes", "realTeamInfo")) as
+		| RealTeamInfo
+		| undefined;
+
+	return realTeamInfo;
 };
 
 const updateNewLeague = async ({ lid, type }: ViewInput<"newLeague">) => {
@@ -279,15 +402,11 @@ const updateNewLeague = async ({ lid, type }: ViewInput<"newLeague">) => {
 	// Find most recent league and add one to the LID
 	const newLid = await getNewLeagueLid();
 
-	const realTeamInfo = (await idb.meta.get("attributes", "realTeamInfo")) as
-		| RealTeamInfo
-		| undefined;
-
 	return {
 		lid: undefined,
-		difficulty: undefined,
+		difficulty: defaultSettings.difficulty,
 		name: `League ${newLid}`,
-		realTeamInfo,
+		realTeamInfo: await getRealTeamInfo(),
 		type,
 		godModeLimits,
 		defaultSettings,

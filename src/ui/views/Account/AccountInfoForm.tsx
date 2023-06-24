@@ -1,5 +1,5 @@
 import classNames from "classnames";
-import { ChangeEvent, useState } from "react";
+import { type ChangeEvent, useState } from "react";
 import { ACCOUNT_API_URL, fetchWrapper } from "../../../common";
 import { ActionButton } from "../../components";
 import { helpers, realtimeUpdate } from "../../util";
@@ -212,7 +212,7 @@ const AccountInfoForm = ({
 								{state.editUsername ? "Cancel" : "Edit"}
 							</button>
 						</div>
-						<span className="form-text text-muted">
+						<span className="form-text text-body-secondary">
 							{fields.username.description}
 						</span>
 						<span

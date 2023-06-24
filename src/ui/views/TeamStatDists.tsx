@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import type { ReactNode } from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import { BoxPlot, MoreLinks } from "../components";
@@ -159,8 +158,8 @@ const TeamStatDists = ({ season, statsAll }: View<"teamStatDists">) => {
 				{isSport("basketball")
 					? "Blue plots are for this league and green plots are from the 2010-2011 NBA season, for comparison. "
 					: null}
-				The five vertical lines in each plot represent the minimum of the scale,
-				the minimum, the first{" "}
+				The seven vertical lines in each plot represent the minimum of the
+				scale, the minimum, the first{" "}
 				<a href="http://en.wikipedia.org/wiki/Quartile">quartile</a>, the
 				median, the third quartile, the maximum, and the maximum of the scale.
 			</p>
@@ -183,7 +182,7 @@ const TeamStatDists = ({ season, statsAll }: View<"teamStatDists">) => {
 								</tr>
 							);
 							let proPlot: ReactNode = null;
-							if (proStatsAll.hasOwnProperty(stat)) {
+							if ((proStatsAll as any)[stat]) {
 								proPlot = (
 									<tr key={`${stat}-pro`}>
 										<td />
@@ -206,11 +205,6 @@ const TeamStatDists = ({ season, statsAll }: View<"teamStatDists">) => {
 			</table>
 		</>
 	);
-};
-
-TeamStatDists.propTypes = {
-	season: PropTypes.number.isRequired,
-	statsAll: PropTypes.object.isRequired,
 };
 
 export default TeamStatDists;

@@ -29,6 +29,10 @@ export const getStats = async ({
 	const stats = statsTable.stats;
 	const seasonAttrs: TeamSeasonAttr[] = [
 		"abbrev",
+		"region",
+		"name",
+		"imgURL",
+		"imgURLSmall",
 		"won",
 		"lost",
 		"tied",
@@ -82,15 +86,15 @@ export const getStats = async ({
 						const ha = ah === "away" ? "home" : "away";
 						const t = teams.find(
 							// https://github.com/microsoft/TypeScript/issues/21732
-							// @ts-ignore
+							// @ts-expect-error
 							t2 => series[ah] && t2.tid === series[ah].tid,
 						);
 
 						if (t && series[ah] && series[ha]) {
 							// https://github.com/microsoft/TypeScript/issues/21732
-							// @ts-ignore
+							// @ts-expect-error
 							t.seasonAttrs.won += series[ah].won;
-							// @ts-ignore
+							// @ts-expect-error
 							t.seasonAttrs.lost += series[ha].won;
 						}
 					}
@@ -147,6 +151,104 @@ export const getStats = async ({
 	};
 };
 
+export const ignoreStats = ["mov", "pw", "pl"];
+
+export const averageTeamStats = (
+	{ seasonAttrs, stats, teams }: Awaited<ReturnType<typeof getStats>>,
+	{ otl, ties, tid }: { otl: boolean; ties: boolean; tid?: number | undefined },
+) => {
+	if (!ties || !otl) {
+		for (const t of teams) {
+			if (t.seasonAttrs.tied > 0) {
+				ties = true;
+			}
+			if (t.seasonAttrs.otl > 0) {
+				otl = true;
+			}
+			if (ties && otl) {
+				break;
+			}
+		}
+	}
+
+	const row: Record<string, number | number[]> = {};
+
+	let foundSomething = false;
+
+	// Average together stats
+	for (const stat of [...stats, "gp", "avgAge"]) {
+		if (ignoreStats.includes(stat)) {
+			continue;
+		}
+
+		const byPos =
+			teams.length > 0 && Array.isArray((teams[0].stats as any)[stat]);
+
+		let sum = byPos ? [] : 0;
+		for (const t of teams) {
+			if (tid !== undefined && t.tid !== tid) {
+				continue;
+			}
+
+			if (stat === "avgAge") {
+				// @ts-expect-error
+				sum += t.seasonAttrs.avgAge ?? 0;
+			} else if (byPos) {
+				// @ts-expect-error
+				const byPosStat: (number | undefined)[] = t.stats[stat];
+				for (let i = 0; i < byPosStat.length; i++) {
+					const value = byPosStat[i];
+					if (value !== undefined) {
+						if ((sum as number[])[i] === undefined) {
+							(sum as number[])[i] = 0;
+						}
+						(sum as number[])[i] += value;
+					}
+				}
+			} else {
+				// @ts-expect-error
+				sum += t.stats[stat];
+			}
+			foundSomething = true;
+		}
+
+		if (tid === undefined && teams.length !== 0) {
+			if (byPos) {
+				row[stat] = (sum as number[]).map(value => value / teams.length);
+			} else {
+				row[stat] = (sum as number) / teams.length;
+			}
+		} else {
+			row[stat] = sum;
+		}
+	}
+	for (const attr of seasonAttrs) {
+		if (attr === "abbrev") {
+			continue;
+		}
+		let sum = 0;
+		for (const t of teams) {
+			if (tid !== undefined && t.tid !== tid) {
+				continue;
+			}
+			// @ts-expect-error
+			sum += t.seasonAttrs[attr];
+			foundSomething = true;
+		}
+
+		// Don't overwrite pts
+		const statsKey = attr === "pts" ? "ptsPts" : attr;
+		row[statsKey] =
+			tid === undefined && teams.length !== 0 ? sum / teams.length : sum;
+	}
+
+	return {
+		row: foundSomething ? row : undefined,
+		otl,
+		ties,
+	};
+};
+
 const updateTeams = async (
 	inputs: ViewInput<"teamStats">,
 	updateEvents: UpdateEvents,
@@ -162,7 +264,6 @@ const updateTeams = async (
 	) {
 		const statsTable = TEAM_STATS_TABLES[inputs.teamOpponent];
 
-		// eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
 		if (!statsTable) {
 			throw new Error(`Invalid statType: "${inputs.teamOpponent}"`);
 		}
@@ -177,8 +278,8 @@ const updateTeams = async (
 			usePts,
 		});
 
-		let ties = false;
-		let otl = false;
+		let ties = g.get("ties", inputs.season);
+		let otl = g.get("otl", inputs.season);
 		for (const t of teams) {
 			if (t.seasonAttrs.tied > 0) {
 				ties = true;
@@ -201,6 +302,62 @@ const updateTeams = async (
 		statTypes = Array.from(new Set(statTypes));
 
 		const lowerIsBetter = bySport({
+			baseball: [
+				"lost",
+				"otl",
+				"cs",
+				"so",
+				"gdp",
+				"era",
+				"rPit",
+				"er",
+				"hPit",
+				"2bPit",
+				"3bPit",
+				"hrPit",
+				"bbPit",
+				"pc",
+				"ibbPit",
+				"hbpPit",
+				"shPit",
+				"sfPit",
+				"bk",
+				"wp",
+				"bf",
+				"fip",
+				"whip",
+				"h9",
+				"hr9",
+				"bb9",
+				"pc9",
+				"oppPa",
+				"oppAb",
+				"oppR",
+				"oppH",
+				"opp2b",
+				"opp3b",
+				"oppHr",
+				"oppRbi",
+				"oppSb",
+				"oppBb",
+				"oppBa",
+				"oppObp",
+				"oppSlg",
+				"oppOps",
+				"oppTb",
+				"oppHbp",
+				"oppSh",
+				"oppSf",
+				"oppIbb",
+				"oppMov",
+				"oppCg",
+				"oppSho",
+				"oppSv",
+				"oppIp",
+				"oppSoPit",
+				"oppBf",
+				"oppSow",
+			],
 			basketball: [
 				"lost",
 				"otl",
@@ -238,6 +395,10 @@ const updateTeams = async (
 				"oppFgMidRange",
 				"oppFgaMidRange",
 				"oppFgpMidRange",
+				"oppDd",
+				"oppTd",
+				"oppQd",
+				"oppFxf",
 			],
 			football: [
 				"lost",
@@ -268,6 +429,7 @@ const updateTeams = async (
 				"oppPlaysPerDrive",
 				"oppYdsPerDrive",
 				"oppPtsPerDrive",
+				"oppMov",
 			],
 			hockey: [
 				"lost",
@@ -303,7 +465,7 @@ const updateTeams = async (
 
 		for (const t of teams) {
 			for (const statType of statTypes) {
-				const value = t.stats.hasOwnProperty(statType)
+				const value = Object.hasOwn(t.stats, statType)
 					? (t.stats as any)[statType]
 					: (t.seasonAttrs as any)[statType];
 
@@ -349,16 +511,25 @@ const updateTeams = async (
 			});
 		}
 
+		const { row: averages } = averageTeamStats(
+			{ seasonAttrs, stats, teams },
+			{
+				otl,
+				ties,
+			},
+		);
+
 		return {
 			allStats,
+			averages,
 			playoffs: inputs.playoffs,
 			season: inputs.season,
 			stats,
 			superCols: statsTable.superCols,
 			teamOpponent: inputs.teamOpponent,
 			teams,
-			ties: g.get("ties", inputs.season) || ties,
-			otl: g.get("otl", inputs.season) || otl,
+			ties,
+			otl,
 			usePts,
 			userTid: g.get("userTid"),
 		};

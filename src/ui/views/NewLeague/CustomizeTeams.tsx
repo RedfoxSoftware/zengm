@@ -1,19 +1,19 @@
 import { useReducer, useState } from "react";
 import type { Dispatch } from "react";
-import type { NewLeagueTeam } from "./types";
-import type { Conf, Div, View } from "../../../common/types";
+import type { NewLeagueTeamWithoutRank } from "./types";
+import type { Conf, Div, Player, View } from "../../../common/types";
 import classNames from "classnames";
 import { arrayMoveImmutable } from "array-move";
 import orderBy from "lodash-es/orderBy";
 import UpsertTeamModal from "./UpsertTeamModal";
 import countBy from "lodash-es/countBy";
-import { HelpPopover, StickyBottomButtons } from "../../components";
+import { StickyBottomButtons } from "../../components";
 import { logEvent, toWorker } from "../../util";
-import getUnusedAbbrevs from "../../../common/getUnusedAbbrevs";
-import getTeamInfos from "../../../common/getTeamInfos";
 import confirmDeleteWithChlidren from "./confirmDeleteWithChlidren";
-import { Dropdown } from "react-bootstrap";
-import { processingSpinner } from "../../components/ActionButton";
+import { Dropdown, OverlayTrigger, Popover } from "react-bootstrap";
+import { ProcessingSpinner } from "../../components/ActionButton";
+import { applyRealTeamInfos, MAX_SEASON } from ".";
+import RandomizeTeamsModal from "./RandomizeTeamsModal";
 
 const makeTIDsSequential = <T extends { tid: number }>(teams: T[]): T[] => {
 	return teams.map((t, i) => ({
@@ -25,7 +25,7 @@ const makeTIDsSequential = <T extends { tid: number }>(teams: T[]): T[] => {
 type ConfsDivsTeams = {
 	confs: Conf[];
 	divs: Div[];
-	teams: NewLeagueTeam[];
+	teams: NewLeagueTeamWithoutRank[];
 };
 
 type State = ConfsDivsTeams;
@@ -43,7 +43,7 @@ type Action =
 	  }
 	| {
 			type: "addTeam";
-			t: NewLeagueTeam;
+			t: NewLeagueTeamWithoutRank;
 	  }
 	| {
 			type: "renameConf";
@@ -57,7 +57,7 @@ type Action =
 	  }
 	| {
 			type: "editTeam";
-			t: NewLeagueTeam;
+			t: NewLeagueTeamWithoutRank;
 	  }
 	| {
 			type: "moveConf";
@@ -340,6 +340,54 @@ const reducer = (state: State, action: Action): State => {
 	}
 };
 
+const PlayersButton = ({
+	players,
+	usePlayers,
+}: {
+	players: Player[];
+	usePlayers?: boolean;
+}) => {
+	if (!usePlayers) {
+		return null;
+	}
+
+	return (
+		<OverlayTrigger
+			trigger="click"
+			placement="auto"
+			overlay={
+				<Popover id={String(Math.random())}>
+					<Popover.Header>Top Players</Popover.Header>
+					<Popover.Body>
+						<ul className="list-unstyled mb-0">
+							{orderBy(players, p => p.ratings.at(-1).ovr, "desc")
+								.slice(0, 10)
+								.map(p => {
+									const ratings = p.ratings.at(-1)!;
+									return (
+										<li key={p.pid}>
+											{p.firstName} {p.lastName} - {ratings.ovr} ovr,{" "}
+											{ratings.pot} pot
+										</li>
+									);
+								})}
+						</ul>
+					</Popover.Body>
+				</Popover>
+			}
+			rootClose
+		>
+			<button
+				className="ms-2 btn btn-link p-0 border-0 text-reset"
+				title="Players"
+				type="button"
+			>
+				<span className="glyphicon glyphicon-user" />
+			</button>
+		</OverlayTrigger>
+	);
+};
+
 const EditButton = ({ onClick }: { onClick: () => void }) => {
 	return (
 		<button
@@ -389,10 +437,7 @@ const CardHeader = ({
 	const [controlledName, setControlledName] = useState(name);
 
 	return (
-		<div
-			className={classNames("card-header", renaming ? "p-1" : undefined)}
-			style={{ height: 44 }}
-		>
+		<div className={classNames("card-header", renaming ? "p-1" : "px-2")}>
 			{renaming ? (
 				<form
 					className="d-flex"
@@ -449,43 +494,22 @@ const CardHeader = ({
 };
 
 const AddTeam = ({
-	addTeam,
+	showAddEditTeamModal,
 	did,
-	availableBuiltInTeams,
 }: {
-	addTeam: (did: number, t?: NewLeagueTeam) => void;
+	showAddEditTeamModal: (did: number) => void;
 	did: number;
-	availableBuiltInTeams: NewLeagueTeam[];
 }) => {
-	const [abbrev, setAbbrev] = useState("custom");
-
 	return (
-		<div className="card-body p-0 m-3">
-			<div className="input-group">
-				<select
-					className="form-select"
-					value={abbrev}
-					onChange={event => {
-						setAbbrev(event.target.value);
-					}}
-				>
-					<option value="custom">Custom Team</option>
-					{availableBuiltInTeams.map(t => (
-						<option key={t.abbrev} value={t.abbrev}>
-							{t.region} {t.name} ({t.abbrev})
-						</option>
-					))}
-				</select>
-				<button
-					className="btn btn-light-bordered"
-					onClick={() => {
-						const t = availableBuiltInTeams.find(t => t.abbrev === abbrev);
-						addTeam(did, t);
-					}}
-				>
-					Add Team
-				</button>
-			</div>
+		<div className="d-flex p-0 m-2 justify-content-end">
+			<button
+				className="btn btn-light-bordered"
+				onClick={() => {
+					showAddEditTeamModal(did);
+				}}
+			>
+				Add Team
+			</button>
 		</div>
 	);
 };
@@ -496,24 +520,22 @@ const Division = ({
 	confs,
 	teams,
 	dispatch,
-	addTeam,
+	showAddEditTeamModal,
 	editTeam,
 	disableMoveUp,
 	disableMoveDown,
 	abbrevsUsedMultipleTimes,
-	availableBuiltInTeams,
 }: {
 	div: Div;
 	divs: Div[];
 	confs: Conf[];
-	teams: NewLeagueTeam[];
+	teams: NewLeagueTeamWithoutRank[];
 	dispatch: Dispatch<Action>;
-	addTeam: (did: number, t?: NewLeagueTeam) => void;
-	editTeam: (tid: number) => void;
+	showAddEditTeamModal: (did: number) => void;
+	editTeam: (tid: number, did: number) => void;
 	disableMoveUp: boolean;
 	disableMoveDown: boolean;
 	abbrevsUsedMultipleTimes: string[];
-	availableBuiltInTeams: NewLeagueTeam[];
 }) => {
 	return (
 		<div className="card mt-3">
@@ -562,8 +584,11 @@ const Division = ({
 
 			<ul className="list-group list-group-flush">
 				{teams.map(t => (
-					<li key={t.tid} className="list-group-item d-flex">
+					<li key={t.tid} className="list-group-item d-flex px-2">
 						<div className="me-auto">
+							{t.season !== undefined ? (
+								<span className="text-body-secondary">{t.season} </span>
+							) : null}
 							{t.region} {t.name}{" "}
 							<span
 								className={
@@ -575,9 +600,12 @@ const Division = ({
 								({t.abbrev})
 							</span>
 						</div>
+						{t.players ? (
+							<PlayersButton players={t.players} usePlayers={t.usePlayers} />
+						) : null}
 						<EditButton
 							onClick={() => {
-								editTeam(t.tid);
+								editTeam(t.tid, t.did);
 							}}
 						/>
 						<DeleteButton
@@ -589,11 +617,7 @@ const Division = ({
 				))}
 			</ul>
 
-			<AddTeam
-				addTeam={addTeam}
-				did={div.did}
-				availableBuiltInTeams={availableBuiltInTeams}
-			/>
+			<AddTeam showAddEditTeamModal={showAddEditTeamModal} did={div.did} />
 		</div>
 	);
 };
@@ -604,29 +628,27 @@ const Conference = ({
 	divs,
 	teams,
 	dispatch,
-	addTeam,
+	showAddEditTeamModal,
 	editTeam,
 	disableMoveUp,
 	disableMoveDown,
 	abbrevsUsedMultipleTimes,
-	availableBuiltInTeams,
 }: {
 	conf: Conf;
 	confs: Conf[];
 	divs: Div[];
-	teams: NewLeagueTeam[];
+	teams: NewLeagueTeamWithoutRank[];
 	dispatch: Dispatch<Action>;
-	addTeam: (did: number, t?: NewLeagueTeam) => void;
-	editTeam: (tid: number) => void;
+	showAddEditTeamModal: (did: number) => void;
+	editTeam: (tid: number, did: number) => void;
 	disableMoveUp: boolean;
 	disableMoveDown: boolean;
 	abbrevsUsedMultipleTimes: string[];
-	availableBuiltInTeams: NewLeagueTeam[];
 }) => {
 	const children = divs.filter(div => div.cid === conf.cid);
 
 	return (
-		<div className="card mb-3">
+		<div className="card mb-2">
 			<CardHeader
 				name={conf.name}
 				onDelete={async () => {
@@ -672,23 +694,25 @@ const Conference = ({
 							divs={divs}
 							confs={confs}
 							dispatch={dispatch}
-							addTeam={addTeam}
+							showAddEditTeamModal={showAddEditTeamModal}
 							editTeam={editTeam}
 							teams={teams.filter(t => t.did === div.did)}
 							disableMoveUp={i === 0 && disableMoveUp}
 							disableMoveDown={i === divs.length - 1 && disableMoveDown}
 							abbrevsUsedMultipleTimes={abbrevsUsedMultipleTimes}
-							availableBuiltInTeams={availableBuiltInTeams}
 						/>
 					</div>
 				))}
 			</div>
 
-			<div className="card-body p-0 m-3 d-flex">
+			<div className="card-body p-0 m-2 d-flex">
 				<button
 					className="btn btn-light-bordered ms-auto"
 					onClick={() => {
 						dispatch({ type: "addDiv", cid: conf.cid });
+					}}
+					style={{
+						marginRight: 9,
 					}}
 				>
 					Add Division
@@ -696,6 +720,18 @@ const Conference = ({
 			</div>
 		</div>
 	);
+};
+
+// Store all info in every object so we automatically use previous values when adding a second team
+export type AddEditTeamInfo = {
+	type: "none" | "add" | "edit";
+	addType: "random" | "real" | "league";
+	did: number;
+	lid: number | undefined;
+	seasonLeague: number | undefined;
+	seasonReal: number;
+	tidEdit: number;
+	hideDupeAbbrevs: boolean;
 };
 
 const CustomizeTeams = ({
@@ -706,85 +742,48 @@ const CustomizeTeams = ({
 	initialTeams,
 	getDefaultConfsDivsTeams,
 	godModeLimits,
+	realTeamInfo,
 }: {
 	onCancel: () => void;
 	onSave: (obj: ConfsDivsTeams) => void;
 	initialConfs: Conf[];
 	initialDivs: Div[];
-	initialTeams: NewLeagueTeam[];
+	initialTeams: NewLeagueTeamWithoutRank[];
 	getDefaultConfsDivsTeams: () => ConfsDivsTeams;
-	godModeLimits: View<"newLeague">["godModeLimits"];
-}) => {
+} & Pick<View<"newLeague">, "godModeLimits" | "realTeamInfo">) => {
 	const [{ confs, divs, teams }, dispatch] = useReducer(reducer, {
 		confs: [...initialConfs],
 		divs: [...initialDivs],
 		teams: [...initialTeams],
 	});
 
-	const [editingInfo, setEditingInfo] = useState<
-		| {
-				type: "none";
-		  }
-		| {
-				type: "add";
-				did: number;
-		  }
-		| {
-				type: "edit";
-				tid: number;
-		  }
-	>({
+	const [addEditTeamInfo, setAddEditTeamInfo] = useState<AddEditTeamInfo>({
 		type: "none",
+		addType: "random",
+		did: 0,
+		lid: undefined,
+		seasonLeague: undefined,
+		seasonReal: MAX_SEASON,
+		tidEdit: 0,
+		hideDupeAbbrevs: false,
 	});
 
-	const [randomizing, setRandomizing] = useState(false);
+	const [randomizingState, setRandomizingState] = useState<
+		undefined | "modal" | "randomizing"
+	>();
 
-	const editTeam = (tid: number) => {
-		setEditingInfo({
+	const editTeam = (tidEdit: number, did: number) => {
+		setAddEditTeamInfo({
+			...addEditTeamInfo,
 			type: "edit",
-			tid,
+			tidEdit,
+			did,
 		});
 	};
 
-	const addTeam = (did: number, t?: NewLeagueTeam) => {
-		if (t) {
-			const div = divs.find(div => div.did === did);
-			if (div) {
-				dispatch({
-					type: "addTeam",
-					t: {
-						...t,
-						cid: div.cid,
-						did: div.did,
-					},
-				});
-			}
-		} else {
-			setEditingInfo({
-				type: "add",
-				did,
-			});
-		}
+	const showAddEditTeamModal = (did: number) => {
+		setAddEditTeamInfo({ ...addEditTeamInfo, type: "add", did });
 	};
-
-	let editingTeam: NewLeagueTeam | undefined;
-	if (editingInfo.type === "add") {
-		const div = divs.find(div => div.did === editingInfo.did);
-		if (div) {
-			editingTeam = {
-				tid: -1,
-				region: "",
-				name: "",
-				abbrev: "NEW",
-				pop: 1,
-				popRank: -1,
-				cid: div.cid,
-				did: div.did,
-			};
-		}
-	} else if (editingInfo.type === "edit") {
-		editingTeam = teams.find(t => t.tid === editingInfo.tid);
-	}
 
 	const abbrevCounts = countBy(teams, "abbrev");
 	const abbrevsUsedMultipleTimes: string[] = [];
@@ -794,20 +793,25 @@ const CustomizeTeams = ({
 		}
 	}
 
-	const availableAbbrevs = getUnusedAbbrevs(teams);
-	const param = availableAbbrevs.map(abbrev => ({
-		tid: -1,
-		cid: -1,
-		did: -1,
-		abbrev,
-	}));
-	const availableBuiltInTeams: NewLeagueTeam[] = orderBy(
-		getTeamInfos(param).map(t => ({
-			...t,
-			popRank: -1,
-		})),
-		["region", "name"],
-	);
+	const resetClear = () => {
+		dispatch({
+			type: "setState",
+			confs: [
+				{
+					cid: 0,
+					name: "New Conference",
+				},
+			],
+			divs: [
+				{
+					did: 0,
+					cid: 0,
+					name: "New Division",
+				},
+			],
+			teams: [],
+		});
+	};
 
 	const resetDefault = () => {
 		const info = getDefaultConfsDivsTeams();
@@ -817,8 +821,16 @@ const CustomizeTeams = ({
 		});
 	};
 
-	const randomize = (weightByPopulation: boolean) => async () => {
-		setRandomizing(true);
+	const randomize = async ({
+		real,
+		weightByPopulation,
+		northAmericaOnly,
+	}: {
+		real: boolean;
+		weightByPopulation: boolean;
+		northAmericaOnly: boolean;
+	}) => {
+		setRandomizingState("randomizing");
 
 		try {
 			// If there are no teams, auto reset to default first
@@ -836,13 +848,13 @@ const CustomizeTeams = ({
 				div => myTeams.filter(t => t.did === div.did).length,
 			);
 
-			const response = await toWorker(
-				"main",
-				"getRandomTeams",
-				myDivs,
+			const response = await toWorker("main", "getRandomTeams", {
+				divs: myDivs,
 				numTeamsPerDiv,
+				real,
 				weightByPopulation,
-			);
+				northAmericaOnly,
+			});
 
 			if (typeof response === "string") {
 				logEvent({
@@ -851,16 +863,20 @@ const CustomizeTeams = ({
 					saveToDb: false,
 				});
 			} else {
+				const newTeams = real
+					? applyRealTeamInfos(response, realTeamInfo, "inTeamObject")
+					: response;
+
 				dispatch({
 					type: "setState",
-					teams: response,
+					teams: newTeams,
 					divs: myDivs,
 					confs: myConfs,
 				});
 			}
-			setRandomizing(false);
+			setRandomizingState(undefined);
 		} catch (error) {
-			setRandomizing(false);
+			setRandomizingState(undefined);
 			throw error;
 		}
 	};
@@ -875,12 +891,11 @@ const CustomizeTeams = ({
 					divs={divs}
 					teams={teams}
 					dispatch={dispatch}
-					addTeam={addTeam}
+					showAddEditTeamModal={showAddEditTeamModal}
 					editTeam={editTeam}
 					disableMoveUp={i === 0}
 					disableMoveDown={i === confs.length - 1}
 					abbrevsUsedMultipleTimes={abbrevsUsedMultipleTimes}
-					availableBuiltInTeams={availableBuiltInTeams}
 				/>
 			))}
 			<div className="mb-3 d-flex">
@@ -890,7 +905,7 @@ const CustomizeTeams = ({
 						dispatch({ type: "addConf" });
 					}}
 					style={{
-						marginRight: 15,
+						marginRight: 18,
 					}}
 				>
 					Add Conference
@@ -902,41 +917,26 @@ const CustomizeTeams = ({
 					<Dropdown.Toggle
 						variant="danger"
 						id="customize-teams-reset"
-						disabled={randomizing}
+						disabled={randomizingState === "randomizing"}
 					>
-						{randomizing ? processingSpinner : "Reset"}
+						{randomizingState === "randomizing" ? (
+							<ProcessingSpinner />
+						) : (
+							"Reset"
+						)}
 					</Dropdown.Toggle>
 					<Dropdown.Menu>
+						<Dropdown.Item onClick={resetClear}>Clear</Dropdown.Item>
 						<Dropdown.Item onClick={resetDefault}>Default</Dropdown.Item>
-						<Dropdown.Item onClick={randomize(false)}>
-							Random built-in teams
-						</Dropdown.Item>
-						<Dropdown.Item onClick={randomize(true)}>
-							Random built-in teams (population weighted)
+						<Dropdown.Item
+							onClick={() => {
+								setRandomizingState("modal");
+							}}
+						>
+							Randomize...
 						</Dropdown.Item>
 					</Dropdown.Menu>
 				</Dropdown>
-				<div className="ms-2 pt-2">
-					<HelpPopover title="Reset">
-						<p>
-							<b>Default</b>: Resets conferences, divisions, and teams to their
-							default values.
-						</p>
-						<p>
-							<b>Random built-in teams</b>: This replaces any teams you
-							currently have with random built-in teams. Those teams are grouped
-							into divisions based on their geographic location. Then, if your
-							division names are the same as the default division names and each
-							division has the same number of teams, it tries to assign each
-							group to a division name that makes sense.
-						</p>
-						<p>
-							<b>Random built-in teams (population weighted)</b>: Same as above,
-							except larger cities are more likely to be selected, so the set of
-							teams may feel a bit more realistic.
-						</p>
-					</HelpPopover>
-				</div>
 				<form
 					className="btn-group ms-auto"
 					onSubmit={event => {
@@ -969,37 +969,52 @@ const CustomizeTeams = ({
 						className="btn btn-secondary"
 						type="button"
 						onClick={onCancel}
-						disabled={randomizing}
+						disabled={randomizingState === "randomizing"}
 					>
 						Cancel
 					</button>
 					<button
 						className="btn btn-primary me-2"
 						type="submit"
-						disabled={randomizing}
+						disabled={randomizingState === "randomizing"}
 					>
 						Save Teams
 					</button>
 				</form>
 			</StickyBottomButtons>
 
+			<RandomizeTeamsModal
+				onCancel={() => {
+					setRandomizingState(undefined);
+				}}
+				onRandomize={randomize}
+				show={randomizingState === "modal"}
+			/>
+
 			<UpsertTeamModal
-				key={editingInfo.type === "edit" ? editingInfo.tid : editingInfo.type}
-				t={editingTeam}
+				key={
+					addEditTeamInfo.type === "edit"
+						? addEditTeamInfo.tidEdit
+						: addEditTeamInfo.type
+				}
+				addEditTeamInfo={addEditTeamInfo}
+				setAddEditTeamInfo={setAddEditTeamInfo}
 				confs={confs}
 				divs={divs}
-				onSave={(t: NewLeagueTeam) => {
+				teams={teams}
+				onSave={(t: NewLeagueTeamWithoutRank) => {
 					if (t.tid === -1) {
 						dispatch({ type: "addTeam", t });
 					} else {
 						dispatch({ type: "editTeam", t });
 					}
-					setEditingInfo({ type: "none" });
+					setAddEditTeamInfo({ ...addEditTeamInfo, type: "none" });
 				}}
 				onCancel={() => {
-					setEditingInfo({ type: "none" });
+					setAddEditTeamInfo({ ...addEditTeamInfo, type: "none" });
 				}}
 				godModeLimits={godModeLimits}
+				realTeamInfo={realTeamInfo}
 			/>
 		</>
 	);

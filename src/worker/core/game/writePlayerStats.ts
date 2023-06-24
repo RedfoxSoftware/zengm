@@ -1,22 +1,36 @@
 import { bySport, isSport, PHASE } from "../../../common";
-import { player } from "..";
+import { finances, player } from "..";
 import { idb } from "../../db";
-import { g, helpers, local, lock, logEvent, random } from "../../util";
+import {
+	g,
+	helpers,
+	local,
+	lock,
+	logEvent,
+	processPlayerStats,
+	random,
+} from "../../util";
 import type { Conditions, GameResults, Player } from "../../../common/types";
 import stats from "../player/stats";
 import maxBy from "lodash-es/maxBy";
+import statsRowIsCurrent from "../player/statsRowIsCurrent";
+
+export const P_FATIGUE_DAILY_REDUCTION = 20;
 
 const gameOrWeek = bySport({ default: "game", football: "week" });
 
 const doInjury = async (
 	p: any,
 	p2: Player,
-	healthRank: number,
 	pidsInjuredOneGameOrLess: Set<number>,
 	injuryTexts: string[],
 	conditions: Conditions,
 ) => {
-	p2.injury = player.injury(healthRank);
+	const healthLevel = await finances.getLevelLastThree("health", {
+		tid: p2.tid,
+	});
+
+	p2.injury = player.injury(healthLevel);
 
 	// Is this a reinjury or not?
 	let reaggravateExtraDays;
@@ -141,7 +155,7 @@ const doInjury = async (
 			} ${p2.lastName}</a> ${
 				reaggravateExtraDays === undefined
 					? "was injured"
-					: "reaggravated his injury"
+					: `reaggravated ${helpers.pronoun(g.get("gender"), "his")} injury`
 			}! (${p2.injury.type}, out for ${p2.injury.gamesRemaining} ${
 				p2.injury.gamesRemaining === 1 ? gameOrWeek : `${gameOrWeek}s`
 			})`,
@@ -159,8 +173,10 @@ const doInjury = async (
 
 	let ratingsLoss = false;
 	const gamesRemainingNormalized = bySport({
+		baseball: p2.injury.gamesRemaining / 2,
+		basketball: p2.injury.gamesRemaining,
 		football: p2.injury.gamesRemaining * 3,
-		default: p2.injury.gamesRemaining,
+		hockey: p2.injury.gamesRemaining,
 	});
 
 	if (
@@ -177,21 +193,15 @@ const doInjury = async (
 		}
 
 		player.addRatingsRow(p2, undefined, p2.injuries.length - 1);
-		const r = p2.ratings.length - 1;
+		const r = p2.ratings.length - 1; // New ratings row
 
-		// New ratings row
-		p2.ratings[r].spd = player.limitRating(
-			p2.ratings[r].spd - random.randInt(1, biggestRatingsLoss),
-		);
-		p2.ratings[r].endu = player.limitRating(
-			p2.ratings[r].endu - random.randInt(1, biggestRatingsLoss),
-		);
-		const rating = bySport({
-			basketball: "jmp",
-			football: "thp",
-			hockey: undefined,
+		const ratingsToNerf = bySport({
+			baseball: ["spd", "endu", "hpw", "thr", "ppw"],
+			basketball: ["spd", "endu", "jmp"],
+			football: ["spd", "endu", "thp"],
+			hockey: ["spd", "endu"],
 		});
-		if (rating) {
+		for (const rating of ratingsToNerf) {
 			p2.ratings[r][rating] = player.limitRating(
 				p2.ratings[r][rating] - random.randInt(1, biggestRatingsLoss),
 			);
@@ -206,7 +216,6 @@ const doInjury = async (
 		if (p2.ratings[r].pot > p2.ratings[r2].pot) {
 			p2.ratings[r].pot = p2.ratings[r2].pot;
 		}
-
 		if (p2.ratings[r].pots) {
 			for (const pos of Object.keys(p2.ratings[r].pots)) {
 				if (p2.ratings[r].pots[pos] > p2.ratings[r2].pots[pos]) {
@@ -215,8 +224,8 @@ const doInjury = async (
 			}
 		}
 
-		p2.injuries.at(-1).ovrDrop = p2.ratings[r2].ovr - p2.ratings[r].ovr;
-		p2.injuries.at(-1).potDrop = p2.ratings[r2].pot - p2.ratings[r].pot;
+		p2.injuries.at(-1)!.ovrDrop = p2.ratings[r2].ovr - p2.ratings[r].ovr;
+		p2.injuries.at(-1)!.potDrop = p2.ratings[r2].pot - p2.ratings[r].pot;
 	}
 
 	return {
@@ -284,6 +293,7 @@ const writePlayerStats = async (
 			let goaliePID: number | undefined;
 
 			// This needs to be before checkStatisticalFeat
+			// This might be better in GameSim.run, like it is for basebal...
 			if (isSport("hockey")) {
 				const goalies = t.player.filter((p: any) => p.stat.gpGoalie === 1);
 
@@ -327,10 +337,12 @@ const writePlayerStats = async (
 
 			for (const p of t.player) {
 				// Only need to write stats if player got minutes, except for minAvailable in BBGM
-				const updatePlayer =
-					(isSport("hockey") && p.pos === "G") ||
-					isSport("basketball") ||
-					p.stat.min > 0;
+				const updatePlayer = bySport({
+					baseball: p.stat.gp > 0,
+					basketball: true,
+					football: p.stat.min > 0,
+					hockey: p.pos === "G" || p.stat.min > 0,
+				});
 				if (!updatePlayer) {
 					continue;
 				}
@@ -385,24 +397,39 @@ const writePlayerStats = async (
 					} else if (p2.numConsecutiveGamesG !== undefined) {
 						p2.numConsecutiveGamesG = 0;
 					}
+				} else if (isSport("baseball")) {
+					if (p.stat.pc > 0) {
+						if (p2.pFatigue === undefined) {
+							p2.pFatigue = 0;
+						}
+
+						// Need to add P_FATIGUE_DAILY_REDUCTION for anyone who pitched in this game, cause that will be subtracted later
+						p2.pFatigue += p.stat.pc + P_FATIGUE_DAILY_REDUCTION;
+					}
 				}
 
 				if (!allStarGame) {
 					let ps = p2.stats.at(-1);
 
 					// This should never happen, but sometimes does
-					if (
-						!ps ||
-						ps.tid !== t.id ||
-						ps.playoffs !== playoffs ||
-						ps.season !== g.get("season")
-					) {
+					if (!statsRowIsCurrent(ps, t.id, playoffs)) {
 						await player.addStatsRow(p2, playoffs);
 						ps = p2.stats.at(-1);
 					}
 
 					// Update stats
-					if (p.stat.min > 0) {
+					const playedInGame = bySport({
+						baseball: p.stat.gp > 0,
+						basketball: p.stat.min > 0,
+						football: p.stat.min > 0,
+						hockey: p.stat.min > 0,
+					});
+					if (playedInGame) {
+						// Too many other parts of the codebase use "min", so put a dummy value there
+						if (isSport("baseball")) {
+							p.stat.min = 1;
+						}
+
 						for (const key of Object.keys(p.stat)) {
 							if (ps[key] === undefined) {
 								ps[key] = 0;
@@ -412,12 +439,32 @@ const writePlayerStats = async (
 								if (p.stat[key] > ps[key]) {
 									ps[key] = p.stat[key];
 								}
+							} else if (stats.byPos && stats.byPos.includes(key)) {
+								for (let i = 0; i < p.stat[key].length; i++) {
+									const value = p.stat[key][i];
+									if (value !== undefined) {
+										if (ps[key][i] === undefined) {
+											ps[key][i] = 0;
+										}
+										ps[key][i] += value;
+									}
+								}
 							} else {
 								ps[key] += p.stat[key];
 							}
 						}
 
-						ps.gp += 1;
+						// baseball handles this in GameSim
+						if (
+							bySport({
+								baseball: false,
+								basketball: true,
+								football: true,
+								hockey: true,
+							})
+						) {
+							ps.gp += 1;
+						}
 
 						if (isSport("football") || isSport("hockey")) {
 							const result = qbgResults.get(p.id);
@@ -430,25 +477,21 @@ const writePlayerStats = async (
 							}
 						}
 
+						const derivedMaxStats = bySport({
+							baseball: ["ab", "ip", "tb"],
+							basketball: ["2p", "2pa", "trb", "gmsc"],
+							hockey: ["g", "a"],
+							football: undefined,
+						});
+						const derivedMaxValues: Record<string, number> | undefined =
+							derivedMaxStats
+								? processPlayerStats(p.stat, derivedMaxStats)
+								: undefined;
+
 						for (const key of stats.max) {
 							const stat = key.replace("Max", "");
 
-							let value;
-							if (isSport("basketball") && stat === "2p") {
-								value = p.stat.fg - p.stat.tp;
-							} else if (isSport("basketball") && stat === "2pa") {
-								value = p.stat.fga - p.stat.tpa;
-							} else if (isSport("basketball") && stat === "trb") {
-								value = p.stat.drb + p.stat.orb;
-							} else if (isSport("basketball") && stat === "gmsc") {
-								value = helpers.gameScore(p.stat);
-							} else if (isSport("hockey") && stat === "g") {
-								value = p.stat.evG + p.stat.ppG + p.stat.shG;
-							} else if (isSport("hockey") && stat === "a") {
-								value = p.stat.evA + p.stat.ppA + p.stat.shA;
-							} else {
-								value = p.stat[stat];
-							}
+							const value = p.stat[stat] ?? derivedMaxValues?.[stat];
 
 							if (value !== undefined) {
 								// !ps[key] is for upgraded leagues
@@ -476,7 +519,6 @@ const writePlayerStats = async (
 					const output = await doInjury(
 						p,
 						p2,
-						t.healthRank,
 						pidsInjuredOneGameOrLess,
 						injuryTexts,
 						conditions,

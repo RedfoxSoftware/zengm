@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import testHelpers from "../../test/helpers";
 import { player, team } from "../core";
 import { idb } from "../db";
@@ -6,6 +6,8 @@ import g from "./g";
 import helpers from "./helpers";
 import achievements from "./achievements";
 import type { TeamSeason, Achievement } from "../../common/types";
+import defaultGameAttributes from "../../common/defaultGameAttributes";
+import { DEFAULT_LEVEL } from "../../common/budgetLevels";
 
 const get = (slug: string) => {
 	const achievement = achievements.find(
@@ -31,8 +33,8 @@ describe("worker/util/account/checkAchievement", () => {
 		const teamsDefault = helpers.getTeamsDefault();
 		await testHelpers.resetCache({
 			players: [
-				player.generate(0, 30, 2010, true, 15.5),
-				player.generate(0, 30, 2010, true, 15.5),
+				player.generate(0, 30, 2010, true, DEFAULT_LEVEL),
+				player.generate(0, 30, 2010, true, DEFAULT_LEVEL),
 			],
 			teams: teamsDefault.map(team.generate),
 			teamSeasons: teamsDefault.map(t => team.genSeasonRow(t)),
@@ -41,7 +43,7 @@ describe("worker/util/account/checkAchievement", () => {
 		idb.league = testHelpers.mockIDBLeague();
 	});
 	afterAll(() => {
-		// @ts-ignore
+		// @ts-expect-error
 		idb.league = undefined;
 	});
 
@@ -54,7 +56,7 @@ describe("worker/util/account/checkAchievement", () => {
 			lastSeason += 1;
 			extraSeason.tid = tid;
 			extraSeason.season = lastSeason;
-			// @ts-ignore
+			// @ts-expect-error
 			await idb.cache.teamSeasons.add(extraSeason);
 		}
 	};
@@ -214,13 +216,13 @@ describe("worker/util/account/checkAchievement", () => {
 	});
 
 	describe("moneyball*", () => {
-		test("award moneyball and moneyball_2 for title with payroll <= $45M", async () => {
+		test("award moneyball and moneyball_2 for title with payroll <= half salary cap", async () => {
 			const teamSeason = (await idb.cache.teamSeasons.indexGet(
 				"teamSeasonsByTidSeason",
 				[g.get("userTid"), g.get("season")],
 			)) as TeamSeason;
 			teamSeason.playoffRoundsWon = 4;
-			teamSeason.expenses.salary.amount = 45000;
+			teamSeason.expenses.salary = defaultGameAttributes.salaryCap / 2;
 			await idb.cache.teamSeasons.put(teamSeason);
 
 			let awarded = await get("moneyball").check();
@@ -245,13 +247,13 @@ describe("worker/util/account/checkAchievement", () => {
 			assert.strictEqual(awarded, false);
 		});
 
-		test("award moneyball but not moneyball_2 for title with payroll > $45M and <= $60M", async () => {
+		test("award moneyball but not moneyball_2 for title with payroll > half and <= two thirds of the salary cap", async () => {
 			const teamSeason = (await idb.cache.teamSeasons.indexGet(
 				"teamSeasonsByTidSeason",
 				[g.get("userTid"), g.get("season")],
 			)) as TeamSeason;
 			teamSeason.playoffRoundsWon = 4;
-			teamSeason.expenses.salary.amount = 60000;
+			teamSeason.expenses.salary = 0.66 * defaultGameAttributes.salaryCap;
 			await idb.cache.teamSeasons.put(teamSeason);
 
 			let awarded = await get("moneyball").check();
@@ -261,13 +263,13 @@ describe("worker/util/account/checkAchievement", () => {
 			assert.strictEqual(awarded, false);
 		});
 
-		test("don't award either if payroll > $40M", async () => {
+		test("don't award either if payroll > two thirds of the salary cap", async () => {
 			const teamSeason = (await idb.cache.teamSeasons.indexGet(
 				"teamSeasonsByTidSeason",
 				[g.get("userTid"), g.get("season")],
 			)) as TeamSeason;
 			teamSeason.playoffRoundsWon = 4;
-			teamSeason.expenses.salary.amount = 60001;
+			teamSeason.expenses.salary = 0.67 * defaultGameAttributes.salaryCap;
 			await idb.cache.teamSeasons.put(teamSeason);
 
 			let awarded = await get("moneyball").check();

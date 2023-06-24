@@ -1,24 +1,29 @@
-import PropTypes from "prop-types";
 import { helpers } from "../../util";
 import type { View } from "../../../common/types";
 import { bySport } from "../../../common";
+import { PlayerNameLabels } from "../../components";
 
 const Leader = ({
 	abbrev,
-	name,
+	firstName,
+	firstNameShort,
+	lastName,
 	pid,
 	stat,
 	tid,
 	value,
 }: {
 	abbrev?: string;
-	name: string;
+	firstName: string;
+	firstNameShort: string;
+	lastName: string;
 	pid: number;
 	stat: string;
 	tid?: number;
 	value: number;
 }) => {
 	const numberToDisplay = bySport({
+		baseball: helpers.numberWithCommas(value),
 		basketball: helpers.roundStat(value, stat),
 		football: helpers.numberWithCommas(value),
 		hockey: helpers.numberWithCommas(value),
@@ -26,28 +31,24 @@ const Leader = ({
 
 	return (
 		<>
-			<a href={helpers.leagueUrl(["player", pid])}>{name}</a>
+			<PlayerNameLabels
+				pid={pid}
+				firstName={firstName}
+				firstNameShort={firstNameShort}
+				lastName={lastName}
+			/>
 			{abbrev && tid !== undefined ? (
 				<>
-					,{" "}
+					{" "}
 					<a href={helpers.leagueUrl(["roster", `${abbrev}_${tid}`])}>
 						{abbrev}
 					</a>
 				</>
-			) : null}
-			: {numberToDisplay} {stat}
+			) : null}{" "}
+			{numberToDisplay} {stat}
 			<br />
 		</>
 	);
-};
-
-Leader.propTypes = {
-	abbrev: PropTypes.string,
-	name: PropTypes.string.isRequired,
-	pid: PropTypes.number.isRequired,
-	stat: PropTypes.string.isRequired,
-	tid: PropTypes.number,
-	value: PropTypes.number.isRequired,
 };
 
 const Leaders = ({
@@ -73,10 +74,5 @@ const Leaders = ({
 		</p>
 	</>
 );
-
-Leaders.propTypes = {
-	leagueLeaders: PropTypes.arrayOf(PropTypes.object).isRequired,
-	teamLeaders: PropTypes.arrayOf(PropTypes.object).isRequired,
-};
 
 export default Leaders;

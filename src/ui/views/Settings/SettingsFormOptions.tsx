@@ -1,8 +1,7 @@
 /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
 import classNames from "classnames";
 import { AnimatePresence, m } from "framer-motion";
-import PropTypes from "prop-types";
-import { ChangeEvent, Fragment, ReactNode, useState } from "react";
+import { type ChangeEvent, Fragment, type ReactNode, useState } from "react";
 import { isSport } from "../../../common";
 import { HelpPopover } from "../../components";
 import gameSimPresets from "./gameSimPresets";
@@ -12,8 +11,8 @@ import {
 	getVisibleCategories,
 	settingIsEnabled,
 	settingNeedsGodMode,
-	SpecialStateOthers,
-	State,
+	type SpecialStateOthers,
+	type State,
 } from "./SettingsForm";
 import type { Decoration, FieldType, Key, Values } from "./types";
 
@@ -27,7 +26,7 @@ export const godModeRequiredMessage = (
 };
 
 const inputStyle = {
-	width: 150,
+	maxWidth: 150,
 };
 
 const Input = ({
@@ -132,6 +131,7 @@ const Input = ({
 						disabled={selectValue !== "custom"}
 						onChange={onChange}
 						value={parsed[1]}
+						inputMode="decimal"
 					/>
 				</div>
 			);
@@ -147,7 +147,17 @@ const Input = ({
 			);
 		}
 	} else {
-		inputElement = <input type="text" {...commonProps} />;
+		const inputModes: Partial<Record<typeof type, "decimal" | "numeric">> = {
+			float: "decimal",
+			float1000: "decimal",
+			floatOrNull: "decimal",
+			int: "numeric",
+			intOrNull: "numeric",
+		};
+
+		inputElement = (
+			<input type="text" {...commonProps} inputMode={inputModes[type]} />
+		);
 	}
 
 	if (decoration === "currency") {
@@ -170,15 +180,6 @@ const Input = ({
 	}
 
 	return inputElement;
-};
-
-Input.propTypes = {
-	decoration: PropTypes.oneOf(["currency", "percent"]),
-	disabled: PropTypes.bool,
-	onChange: PropTypes.func.isRequired,
-	type: PropTypes.string.isRequired,
-	value: PropTypes.string.isRequired,
-	values: PropTypes.array,
 };
 
 const Option = ({
@@ -288,11 +289,11 @@ const Option = ({
 						onClick={() => {
 							onCancelDefaultSetting();
 						}}
-					></button>
+					/>
 				) : null}
 			</div>
-			{description ? (
-				<div className="text-muted settings-description mt-1">
+			{description && !showDescriptionLong ? (
+				<div className="text-body-secondary settings-description mt-1">
 					{description}
 				</div>
 			) : null}
@@ -310,7 +311,7 @@ const Option = ({
 							duration: 0.3,
 							type: "tween",
 						}}
-						className="text-muted settings-description mt-1"
+						className="text-body-secondary settings-description mt-1"
 					>
 						{descriptionLong}
 					</m.div>
@@ -452,6 +453,7 @@ const SettingsFormOptions = ({
 															type="text"
 															onChange={handleChange(key, type)}
 															value={state[key]}
+															inputMode="numeric"
 														/>
 														<div className="input-group-text">Games</div>
 													</div>
@@ -474,6 +476,7 @@ const SettingsFormOptions = ({
 													disabled={!enabled || disabled}
 													godModeRequired={godModeRequired}
 													onChange={handleChangeRaw(key)}
+													gender={state.gender as any}
 												/>
 											);
 										}

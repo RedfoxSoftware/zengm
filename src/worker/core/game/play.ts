@@ -1,8 +1,7 @@
-import { isSport, PHASE } from "../../../common";
+import { ALL_STAR_GAME_ONLY, isSport, PHASE } from "../../../common";
 import {
 	GameSim,
 	allStar,
-	finances,
 	freeAgents,
 	phase,
 	player,
@@ -13,7 +12,9 @@ import {
 import loadTeams from "./loadTeams";
 import updatePlayoffSeries from "./updatePlayoffSeries";
 import writeGameStats from "./writeGameStats";
-import writePlayerStats from "./writePlayerStats";
+import writePlayerStats, {
+	P_FATIGUE_DAILY_REDUCTION,
+} from "./writePlayerStats";
 import writeTeamStats from "./writeTeamStats";
 import { idb } from "../../db";
 import {
@@ -61,25 +62,14 @@ const play = async (
 		await lock.set("gameSim", false);
 
 		// Check to see if the season is over
+		const schedule = await season.getSchedule();
 		if (g.get("phase") < PHASE.PLAYOFFS) {
-			const schedule = await season.getSchedule();
-
 			if (schedule.length === 0) {
 				await phase.newPhase(
 					PHASE.PLAYOFFS,
 					conditions,
 					gidOneGame !== undefined,
 				);
-			} else {
-				const allStarNext = await allStar.nextGameIsAllStar(schedule);
-
-				if (allStarNext && gidOneGame === undefined) {
-					toUI(
-						"realtimeUpdate",
-						[[], helpers.leagueUrl(["all_star"])],
-						conditions,
-					);
-				}
 			}
 		} else if (playoffsOver) {
 			await phase.newPhase(
@@ -87,6 +77,23 @@ const play = async (
 				conditions,
 				gidOneGame !== undefined,
 			);
+		}
+
+		if (schedule.length > 0 && !playoffsOver) {
+			const allStarNext = await allStar.nextGameIsAllStar(schedule);
+
+			if (allStarNext && gidOneGame === undefined) {
+				toUI(
+					"realtimeUpdate",
+					[
+						[],
+						helpers.leagueUrl(
+							ALL_STAR_GAME_ONLY ? ["all_star", "teams"] : ["all_star"],
+						),
+					],
+					conditions,
+				);
+			}
 		}
 
 		await updatePlayMenu();
@@ -118,6 +125,9 @@ const play = async (
 			}
 		}
 
+		// Invalidate leaders cache, if it exists
+		local.seasonLeaders = undefined;
+
 		if (g.get("phase") === PHASE.PLAYOFFS) {
 			// Update playoff series W/L
 			await updatePlayoffSeries(results, conditions);
@@ -145,21 +155,6 @@ const play = async (
 		const updateEvents: UpdateEvents = ["gameSim"];
 
 		if (dayOver) {
-			const phase = g.get("phase");
-			if (
-				phase === PHASE.REGULAR_SEASON ||
-				phase === PHASE.AFTER_TRADE_DEADLINE
-			) {
-				await freeAgents.decreaseDemands();
-				await freeAgents.autoSign();
-			}
-			if (phase === PHASE.REGULAR_SEASON) {
-				await trade.betweenAiTeams();
-			}
-
-			// Budget is just for ticket prices
-			await finances.updateRanks(["budget", "expenses", "revenues"]);
-
 			local.minFractionDiffs = undefined;
 
 			const healedTexts: string[] = [];
@@ -178,6 +173,15 @@ const play = async (
 					changed = true;
 				}
 
+				if (isSport("baseball") && p.pFatigue !== undefined && p.pFatigue > 0) {
+					p.pFatigue = helpers.bound(
+						p.pFatigue - P_FATIGUE_DAILY_REDUCTION,
+						0,
+						100,
+					);
+					changed = true;
+				}
+
 				// Is it already over?
 				if (p.injury.type !== "Healthy" && p.injury.gamesRemaining <= 0) {
 					const score = p.injury.score;
@@ -187,7 +191,7 @@ const play = async (
 					};
 					changed = true;
 					const healedText = `${
-						p.ratings.at(-1).pos
+						p.ratings.at(-1)!.pos
 					} <a href="${helpers.leagueUrl(["player", p.pid])}">${p.firstName} ${
 						p.lastName
 					}</a>`;
@@ -202,7 +206,10 @@ const play = async (
 					logEvent(
 						{
 							type: "healed",
-							text: `${healedText} has recovered from his injury.`,
+							text: `${healedText} has recovered from ${helpers.pronoun(
+								g.get("gender"),
+								"his",
+							)} injury.`,
 							showNotification: false,
 							pids: [p.pid],
 							tids: [p.tid],
@@ -213,7 +220,7 @@ const play = async (
 				}
 
 				// Also check for gamesUntilTradable
-				if (!p.hasOwnProperty("gamesUntilTradable")) {
+				if (p.gamesUntilTradable === undefined) {
 					p.gamesUntilTradable = 0; // Initialize for old leagues
 
 					changed = true;
@@ -251,6 +258,19 @@ const play = async (
 				}
 
 				updateEvents.push("playerMovement");
+			}
+
+			// Do this stuff after injuries, so autoSign knows the injury status of players for the next game
+			const phase = g.get("phase");
+			if (
+				phase === PHASE.REGULAR_SEASON ||
+				phase === PHASE.AFTER_TRADE_DEADLINE
+			) {
+				await freeAgents.decreaseDemands();
+				await freeAgents.autoSign();
+			}
+			if (phase === PHASE.REGULAR_SEASON) {
+				await trade.betweenAiTeams();
 			}
 		}
 
@@ -307,11 +327,33 @@ const play = async (
 		homeCourtFactor?: number;
 		disableHomeCourtAdvantage?: boolean;
 	}) => {
+		let dh;
+		if (isSport("baseball")) {
+			const dhSetting = g.get("dh");
+			const cidHome = teams[0].cid;
+			dh =
+				dhSetting === "all" ||
+				(Array.isArray(dhSetting) && dhSetting.includes(cidHome));
+		}
+
 		// In FBGM, need to do depth chart generation here (after deepCopy in forceWin case) to maintain referential integrity of players (same object in depth and team).
 		for (const t of teams) {
 			if (t.depth !== undefined) {
-				t.depth = team.getDepthPlayers(t.depth, t.player);
+				t.depth = team.getDepthPlayers(t.depth, t.player, dh);
 			}
+		}
+
+		let baseInjuryRate;
+		const allStarGame = teams[0].id === -1 && teams[1].id === -2;
+		if (allStarGame) {
+			// Fewer injuries in All-Star Game, and no injuries in playoffs All-Star Game
+			if (g.get("phase") === PHASE.PLAYOFFS) {
+				baseInjuryRate = 0;
+			} else {
+				baseInjuryRate = g.get("injuryRate") / 4;
+			}
+		} else {
+			baseInjuryRate = g.get("injuryRate");
 		}
 
 		return new GameSim({
@@ -320,7 +362,12 @@ const play = async (
 			teams,
 			doPlayByPlay,
 			homeCourtFactor,
-			disableHomeCourtAdvantage,
+			disableHomeCourtAdvantage: disableHomeCourtAdvantage || allStarGame,
+			allStarGame,
+			baseInjuryRate,
+
+			// @ts-expect-error
+			dh,
 		}).run();
 	};
 

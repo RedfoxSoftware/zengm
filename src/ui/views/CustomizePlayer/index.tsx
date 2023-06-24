@@ -1,6 +1,12 @@
 import orderBy from "lodash-es/orderBy";
-import PropTypes from "prop-types";
-import { useState, FormEvent, ChangeEvent, MouseEvent, ReactNode } from "react";
+import {
+	useState,
+	type FormEvent,
+	type ChangeEvent,
+	type MouseEvent,
+	type ReactNode,
+	useEffect,
+} from "react";
 import {
 	PHASE,
 	PLAYER,
@@ -9,6 +15,7 @@ import {
 	MOOD_TRAITS,
 	isSport,
 	WEBSITE_ROOT,
+	bySport,
 } from "../../../common";
 import { PlayerPicture, HelpPopover } from "../../components";
 import useTitleBar from "../../hooks/useTitleBar";
@@ -29,11 +36,11 @@ const copyValidValues = (
 	season: number,
 ) => {
 	// Should be true if a player is becoming "active" (moving to a team from a non-team, such as free agent, retired, draft prospect, or new player)
-	// @ts-ignore
+	// @ts-expect-error
 	const activated = source.tid >= 0 && parseInt(target.tid) < 0;
 
 	for (const attr of ["hgt", "tid", "weight"] as const) {
-		// @ts-ignore
+		// @ts-expect-error
 		const val = parseInt(source[attr]);
 		if (!Number.isNaN(val)) {
 			target[attr] = val;
@@ -77,15 +84,17 @@ const copyValidValues = (
 		}
 	}
 
-	let updatedRatingsOrAge = false;
+	// Always recompute for a new player
+	let recomputePosOvrPot = target.pid === undefined;
+
 	{
-		// @ts-ignore
+		// @ts-expect-error
 		const age = parseInt(source.age);
 		if (!Number.isNaN(age)) {
 			const bornYear = season - age;
 			if (bornYear !== target.born.year) {
 				target.born.year = bornYear;
-				updatedRatingsOrAge = true;
+				recomputePosOvrPot = true;
 			}
 		}
 	}
@@ -94,8 +103,31 @@ const copyValidValues = (
 
 	target.college = source.college;
 
+	const ovrByPos = bySport({
+		baseball: true,
+		basketball: false,
+		football: true,
+		hockey: true,
+	});
+
+	if (source.pos === undefined) {
+		if (target.pos !== undefined) {
+			delete target.pos;
+			if (ovrByPos) {
+				recomputePosOvrPot = true;
+			}
+		}
+	} else {
+		if (target.pos !== source.pos) {
+			target.pos = source.pos;
+			if (ovrByPos) {
+				recomputePosOvrPot = true;
+			}
+		}
+	}
+
 	{
-		// @ts-ignore
+		// @ts-expect-error
 		const diedYear = parseInt(source.diedYear);
 		if (!Number.isNaN(diedYear)) {
 			target.diedYear = diedYear;
@@ -113,7 +145,7 @@ const copyValidValues = (
 
 	{
 		// Allow any value, even above or below normal limits, but round to $10k and convert from M to k
-		// @ts-ignore
+		// @ts-expect-error
 		let amount = Math.round(100 * parseFloat(source.contract.amount)) * 10;
 		if (Number.isNaN(amount)) {
 			amount = minContract;
@@ -126,7 +158,7 @@ const copyValidValues = (
 	}
 
 	{
-		// @ts-ignore
+		// @ts-expect-error
 		let exp = parseInt(source.contract.exp);
 		if (!Number.isNaN(exp)) {
 			// No contracts expiring in the past
@@ -178,11 +210,9 @@ const copyValidValues = (
 	{
 		const prevDraftTid = target.draft.tid;
 
-		// @ts-ignore
 		const draftInts = ["year", "round", "pick", "tid"] as const;
 		for (const key of draftInts) {
 			const int = parseInt(source.draft[key] as any);
-			console.log(key, int);
 			if (!Number.isNaN(int)) {
 				target.draft[key] = int;
 			}
@@ -202,7 +232,7 @@ const copyValidValues = (
 	}
 
 	{
-		// @ts-ignore
+		// @ts-expect-error
 		let gamesRemaining = parseInt(source.injury.gamesRemaining);
 		if (Number.isNaN(gamesRemaining) || gamesRemaining < 0) {
 			gamesRemaining = 0;
@@ -215,17 +245,12 @@ const copyValidValues = (
 	{
 		const r = source.ratings.length - 1;
 		for (const rating of Object.keys(source.ratings[r])) {
-			if (rating === "pos") {
-				if (target.ratings[r].pos !== source.ratings[r].pos) {
-					target.ratings[r].pos = source.ratings[r].pos;
-					target.pos = source.ratings[r].pos; // Keep this way forever because fun
-				}
-			} else if (RATINGS.includes(rating)) {
+			if (RATINGS.includes(rating)) {
 				const val = helpers.bound(parseInt(source.ratings[r][rating]), 0, 100);
 				if (!Number.isNaN(val)) {
 					if (target.ratings[r][rating] !== val) {
 						target.ratings[r][rating] = val;
-						updatedRatingsOrAge = true;
+						recomputePosOvrPot = true;
 					}
 				}
 			} else if (rating === "locked") {
@@ -234,28 +259,28 @@ const copyValidValues = (
 		}
 	}
 
-	// @ts-ignore
+	// @ts-expect-error
 	target.face = JSON.parse(source.face);
 
 	target.relatives = source.relatives
 		.map(rel => {
-			// @ts-ignore
+			// @ts-expect-error
 			rel.pid = parseInt(rel.pid);
 			return rel;
 		})
 		.filter(rel => !Number.isNaN(rel.pid));
 
-	return updatedRatingsOrAge;
+	return recomputePosOvrPot;
 };
 
 const CustomizePlayer = (props: View<"customizePlayer">) => {
 	const [state, setState] = useState(() => {
 		const p = helpers.deepCopy(props.p);
 		if (p) {
-			// @ts-ignore
+			// @ts-expect-error
 			p.age = props.season - p.born.year;
 			p.contract.amount /= 1000;
-			// @ts-ignore
+			// @ts-expect-error
 			p.face = JSON.stringify(p.face, null, 2);
 		}
 
@@ -265,6 +290,24 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 			p,
 		};
 	});
+
+	const [autoPos, setAutoPos] = useState(props.initialAutoPos);
+
+	const lastRatings = state.p.ratings.at(-1);
+	useEffect(() => {
+		let mounted = true;
+		(async () => {
+			const pos = await toWorker("main", "getAutoPos", lastRatings);
+
+			if (mounted) {
+				setAutoPos(pos);
+			}
+		})();
+
+		return () => {
+			mounted = false;
+		};
+	}, [lastRatings]);
 
 	const handleSubmit = async (event: FormEvent) => {
 		event.preventDefault();
@@ -276,7 +319,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 		const p = props.p;
 
 		// Copy over values from state, if they're valid
-		const updatedRatingsOrAge = copyValidValues(
+		const recomputePosOvrPot = copyValidValues(
 			state.p,
 			p,
 			props.minContract,
@@ -290,14 +333,12 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 		}
 
 		try {
-			const pid = await toWorker(
-				"main",
-				"upsertCustomizedPlayer",
+			const pid = await toWorker("main", "upsertCustomizedPlayer", {
 				p,
-				props.originalTid,
-				props.season,
-				updatedRatingsOrAge,
-			);
+				originalTid: props.originalTid,
+				season: props.season,
+				recomputePosOvrPot,
+			});
 
 			realtimeUpdate([], helpers.leagueUrl(["player", pid]));
 		} catch (error) {
@@ -326,7 +367,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 			  },
 	) => {
 		const val = event.target.value;
-		// @ts-ignore
+		// @ts-expect-error
 		const checked = event.target.checked;
 
 		setState(prevState => {
@@ -344,6 +385,12 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 						p.stats.at(-1).jerseyNumber = val;
 					} else {
 						p.jerseyNumber = val;
+					}
+				} else if (field === "pos") {
+					if (val === "auto") {
+						delete p.pos;
+					} else {
+						p.pos = val;
 					}
 				} else {
 					p[field] = val;
@@ -403,7 +450,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 		const face = await toWorker("main", "generateFace", p.born.loc);
 
 		setState(prevState => {
-			// @ts-ignore
+			// @ts-expect-error
 			prevState.p.face = JSON.stringify(face, null, 2);
 			return {
 				...prevState,
@@ -412,8 +459,15 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 		});
 	};
 
-	const { challengeNoRatings, godMode, originalTid, playerMoodTraits, teams } =
-		props;
+	const {
+		challengeNoRatings,
+		gender,
+		godMode,
+		originalTid,
+		playerMoodTraits,
+		playersRelativesList,
+		teams,
+	} = props;
 	const { appearanceOption, p, saving } = state;
 
 	const title = originalTid === undefined ? "Create Player" : "Edit Player";
@@ -424,7 +478,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 
 	let parsedFace;
 	try {
-		// @ts-ignore
+		// @ts-expect-error
 		parsedFace = JSON.parse(p.face);
 	} catch (error) {}
 
@@ -444,7 +498,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 						You can edit this JSON here, but you'll probably find it easier to
 						use{" "}
 						<a
-							href={`http://dumbmatter.com/facesjs/editor.html#${faceHash}`}
+							href={`https://zengm.com/facesjs/editor/#${faceHash}`}
 							rel="noopener noreferrer"
 							target="_blank"
 						>
@@ -479,7 +533,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 					onChange={handleChange.bind(null, "root", "imgURL")}
 					value={p.imgURL}
 				/>
-				<span className="text-muted">
+				<span className="text-body-secondary">
 					Your image must be hosted externally. If you need to upload an image,
 					try using{" "}
 					<a href="http://imgur.com/" rel="noopener noreferrer" target="_blank">
@@ -497,12 +551,15 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 		setState(prevState => {
 			const p = prevState.p;
 			const oldRatings = p.ratings[r];
-			const pos = p.ratings[r].pos;
+			const pos = p.pos ?? autoPos;
 
-			const keys = posRatings(pos);
-			if (isSport("football") || isSport("hockey")) {
-				keys.push("stre", "spd", "endu");
-			}
+			const extraKeys = bySport({
+				baseball: ["spd"],
+				basketball: [],
+				football: ["stre", "spd", "endu"],
+				hockey: ["stre", "spd", "endu"],
+			});
+			const keys = [...posRatings(pos), ...extraKeys];
 
 			const newRatings: any = {};
 			for (const key of keys) {
@@ -674,72 +731,80 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 								/>
 							</div>
 							<div className="col-sm-3 mb-3">
-								<label className="form-label">Position</label>
-								<div className="input-group">
-									<select
-										className="form-select"
-										onChange={handleChange.bind(null, "rating", "pos")}
-										value={p.ratings[r].pos}
-										disabled={!godMode && p.tid !== PLAYER.RETIRED}
-									>
-										{POSITIONS.filter(pos => {
-											if (
-												isSport("football") &&
-												bannedPositions.includes(pos)
-											) {
-												return false;
-											}
-											return true;
-										}).map(pos => {
-											return (
-												<option key={pos} value={pos}>
-													{pos}
-												</option>
-											);
-										})}
-									</select>
-									<button
-										className="btn btn-secondary"
-										type="button"
-										disabled={!godMode}
-										onClick={async event => {
-											event.preventDefault();
-
-											const pos = await toWorker(
-												"main",
-												"getAutoPos",
-												p.ratings[r],
-											);
-
-											setState(prevState => {
-												const p = {
-													...prevState.p,
-												};
-												p.ratings = [...p.ratings];
-												p.ratings[r] = {
-													...p.ratings[r],
-													pos,
-												};
-
-												return {
-													...prevState,
-													p,
-												};
-											});
-										}}
-									>
-										Auto
-									</button>
-								</div>
+								<label className="form-label">
+									Position{" "}
+									<HelpPopover title="Position">
+										<p>
+											Leave this set to Auto and it will automatically determine
+											the player's position based on their ratings. That
+											position can also change in the future as the player's
+											ratings change.
+										</p>
+										<p>
+											If you change this to manually specify a position, then
+											the player's position will never change in the future.
+										</p>
+									</HelpPopover>
+								</label>
+								<select
+									className="form-select"
+									onChange={handleChange.bind(null, "root", "pos")}
+									value={p.pos ?? "auto"}
+									disabled={!godMode && p.tid !== PLAYER.RETIRED}
+								>
+									<option value="auto">
+										Auto{autoPos !== undefined ? ` (${autoPos})` : null}
+									</option>
+									{POSITIONS.filter(pos => {
+										if (isSport("football") && bannedPositions.includes(pos)) {
+											return false;
+										}
+										return true;
+									}).map(pos => {
+										return (
+											<option key={pos} value={pos}>
+												{pos}
+											</option>
+										);
+									})}
+								</select>
 							</div>
 							<div className="col-sm-3 mb-3">
 								<label className="form-label">Jersey Number</label>
-								<input
-									type="text"
-									className="form-control"
-									onChange={handleChange.bind(null, "root", "jerseyNumber")}
-									value={jerseyNumber}
-								/>
+								<div className="input-group">
+									<input
+										type="text"
+										className="form-control"
+										onChange={handleChange.bind(null, "root", "jerseyNumber")}
+										value={jerseyNumber}
+									/>
+									<button
+										className="btn btn-secondary"
+										type="button"
+										onClick={async event => {
+											event.preventDefault();
+
+											const jerseyNumber = await toWorker(
+												"main",
+												"getRandomJerseyNumber",
+												{
+													pid: p.pid,
+													tid: p.tid,
+													pos: p.pos ?? autoPos,
+												},
+											);
+
+											// Ugly, but needed for easy updating in root and stats
+											handleChange("root", "jerseyNumber", {
+												target: { value: jerseyNumber ?? "" },
+											});
+										}}
+										title="Picks a random jersey number, ignoring retired jersey numbers and other numbers already used by teammates"
+									>
+										Rand
+										<span className="d-inline d-md-none d-lg-inline">om</span>
+									</button>
+								</div>
 							</div>
 							<div className="col-sm-6 mb-3">
 								<label className="form-label">Country</label>
@@ -761,6 +826,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 											const country = await toWorker(
 												"main",
 												"getRandomCountry",
+												undefined,
 											);
 
 											setState(prevState => {
@@ -801,6 +867,7 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 											const college = await toWorker(
 												"main",
 												"getRandomCollege",
+												undefined,
 											);
 
 											setState(prevState => {
@@ -987,20 +1054,28 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 							<button
 								type="button"
 								className="btn btn-secondary btn-sm mb-1"
-								title={`Ratings will be taken from a randomly generated player with the same age${
-									isSport("football") || isSport("hockey")
-										? " and position"
-										: ""
-								} as this player`}
+								title={`Ratings will be taken from a randomly generated player with the same age${bySport(
+									{
+										baseball: " and position",
+										basketball: "",
+										football: " and position",
+										hockey: " and position",
+									},
+								)} as this player`}
 								onClick={async event => {
 									event.preventDefault();
 									const { hgt, ratings } = await toWorker(
 										"main",
 										"getRandomRatings",
-										(p as any).age,
-										isSport("football") || isSport("hockey")
-											? p.ratings[r].pos
-											: undefined,
+										{
+											age: (p as any).age,
+											pos: bySport({
+												baseball: p.pos ?? autoPos,
+												basketball: undefined,
+												football: p.pos ?? autoPos,
+												hockey: p.pos ?? autoPos,
+											}),
+										},
 									);
 
 									setState(prevState => {
@@ -1050,14 +1125,17 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 							challengeNoRatings={challengeNoRatings}
 							godMode={godMode}
 							handleChange={handleChange}
+							pos={p.pos ?? autoPos}
 							ratingsRow={p.ratings[r]}
 						/>
 
 						<h2>Relatives</h2>
 
 						<RelativesForm
+							gender={gender}
 							godMode={godMode}
 							handleChange={handleChange}
+							initialPlayers={playersRelativesList}
 							relatives={p.relatives}
 						/>
 					</div>
@@ -1075,21 +1153,6 @@ const CustomizePlayer = (props: View<"customizePlayer">) => {
 			</form>
 		</>
 	);
-};
-
-CustomizePlayer.propTypes = {
-	appearanceOption: PropTypes.oneOf(["Cartoon Face", "Image URL"]),
-	originalTid: PropTypes.number,
-	minContract: PropTypes.number,
-	phase: PropTypes.number,
-	p: PropTypes.object,
-	season: PropTypes.number,
-	teams: PropTypes.arrayOf(
-		PropTypes.shape({
-			text: PropTypes.string.isRequired,
-			tid: PropTypes.number.isRequired,
-		}),
-	),
 };
 
 export default CustomizePlayer;

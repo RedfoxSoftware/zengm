@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import testHelpers from "../../test/helpers";
 import { player, team } from "../core";
 import { idb } from "../db";
@@ -6,6 +6,7 @@ import g from "./g";
 import helpers from "./helpers";
 import achievements from "./achievements";
 import type { TeamSeason } from "../../common/types";
+import { DEFAULT_LEVEL } from "../../common/budgetLevels";
 
 const get = (slug: string): any => {
 	const achievement = achievements.find(
@@ -26,8 +27,8 @@ describe("worker/util/achievements.basketball", () => {
 		const teamsDefault = helpers.getTeamsDefault();
 		await testHelpers.resetCache({
 			players: [
-				player.generate(0, 30, 2010, true, 15.5),
-				player.generate(0, 30, 2010, true, 15.5),
+				player.generate(0, 30, 2010, true, DEFAULT_LEVEL),
+				player.generate(0, 30, 2010, true, DEFAULT_LEVEL),
 			],
 			teams: teamsDefault.map(team.generate),
 			teamSeasons: teamsDefault.map(t => team.genSeasonRow(t)),
@@ -36,7 +37,7 @@ describe("worker/util/achievements.basketball", () => {
 		idb.league = testHelpers.mockIDBLeague();
 	});
 	afterAll(() => {
-		// @ts-ignore
+		// @ts-expect-error
 		idb.league = undefined;
 	});
 

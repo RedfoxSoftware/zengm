@@ -29,9 +29,10 @@ const newPhaseRegularSeason = async (
 	if (g.get("autoDeleteOldBoxScores")) {
 		const tx = idb.league.transaction("games", "readwrite");
 		const gameStore = tx.store;
+		const gameIndex = gameStore.index("season");
 
 		// openKeyCursor is crucial for performance in Firefox
-		let cursor = await gameStore.openKeyCursor(
+		let cursor = await gameIndex.openKeyCursor(
 			IDBKeyRange.upperBound(g.get("season") - 3),
 		);
 
@@ -81,7 +82,7 @@ const newPhaseRegularSeason = async (
 					type: "info",
 				});
 			} else {
-				const nagged = await idb.meta.get("attributes", "nagged");
+				const nagged = (await idb.meta.get("attributes", "nagged")) as number;
 
 				if (
 					g.get("season") === g.get("startingSeason") + 3 &&
@@ -93,7 +94,7 @@ const newPhaseRegularSeason = async (
 						read: false,
 						from: "The Commissioner",
 						year: g.get("season"),
-						text: `<p>Hi. Sorry to bother you, but I noticed that you've been playing this game a bit. Hopefully that means you like it. Either way, I would really appreciate some feedback to help me make it better. <a href="mailto:${EMAIL_ADDRESS}">Send an email</a> (${EMAIL_ADDRESS}) or join the discussion on <a href="http://www.reddit.com/r/${SUBREDDIT_NAME}/">Reddit</a> or <a href="https://discord.gg/caPFuM9">Discord</a>.</p>`,
+						text: `<p>Hi. Sorry to bother you, but I noticed that you've been playing this game a bit. Hopefully that means you like it. Either way, I would really appreciate some feedback to help me make it better. <a href="mailto:${EMAIL_ADDRESS}">Send an email</a> (${EMAIL_ADDRESS}) or join the discussion on <a href="http://www.reddit.com/r/${SUBREDDIT_NAME}/">Reddit</a> or <a href="https://zengm.com/discord/">Discord</a>.</p>`,
 					});
 				} else if (nagged !== undefined) {
 					if (
@@ -105,7 +106,7 @@ const newPhaseRegularSeason = async (
 							read: false,
 							from: "The Commissioner",
 							year: g.get("season"),
-							text: `<p>Hi. Sorry to bother you again, but if you like the game, please share it with your friends! Also:</p><p><a href="https://twitter.com/${TWITTER_HANDLE}">Follow ${GAME_NAME} on Twitter</a></p><p><a href="https://www.facebook.com/${FACEBOOK_USERNAME}">Like ${GAME_NAME} on Facebook</a></p><p><a href="http://www.reddit.com/r/${SUBREDDIT_NAME}/">Discuss ${GAME_NAME} on Reddit</a></p><p><a href="https://discord.gg/caPFuM9">Chat with ${GAME_NAME} players and devs on Discord</a></p><p>The more people that play ${GAME_NAME}, the more motivation I have to continue improving it. So it is in your best interest to help me promote the game! If you have any other ideas, please <a href="mailto:${EMAIL_ADDRESS}">email me</a>.</p>`,
+							text: `<p>Hi. Sorry to bother you again, but if you like the game, please share it with your friends! Also:</p><p><a href="https://twitter.com/${TWITTER_HANDLE}">Follow ${GAME_NAME} on Twitter</a></p><p><a href="https://www.facebook.com/${FACEBOOK_USERNAME}">Like ${GAME_NAME} on Facebook</a></p><p><a href="http://www.reddit.com/r/${SUBREDDIT_NAME}/">Discuss ${GAME_NAME} on Reddit</a></p><p><a href="https://zengm.com/discord/">Chat with ${GAME_NAME} players and devs on Discord</a></p><p>The more people that play ${GAME_NAME}, the more motivation I have to continue improving it. So it is in your best interest to help me promote the game! If you have any other ideas, please <a href="mailto:${EMAIL_ADDRESS}">email me</a>.</p>`,
 						});
 					} else if (
 						isSport("basketball") &&
@@ -127,13 +128,16 @@ const newPhaseRegularSeason = async (
 		}
 	}
 
-	let url;
+	let redirect;
 	if (g.get("season") > g.get("startingSeason")) {
-		url = helpers.leagueUrl(["season_preview"]);
+		redirect = {
+			url: helpers.leagueUrl(["season_preview"]),
+			text: "View season preview",
+		};
 	}
 
 	return {
-		url,
+		redirect,
 		updateEvents: ["playerMovement"],
 	};
 };

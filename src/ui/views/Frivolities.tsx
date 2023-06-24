@@ -10,7 +10,7 @@ import { GAME_NAME, isSport } from "../../common";
 
 const style = { maxWidth: 1000 };
 
-const frivolities = {
+export const frivolities = {
 	Draft: [
 		{
 			urlParts: ["draft_position"],
@@ -102,6 +102,16 @@ const frivolities = {
 			name: "Worst Championship Teams",
 			description: "The worst seasons from teams that won the title.",
 		},
+		{
+			urlParts: ["teams", "old_champ"],
+			name: "Oldest Championship Teams",
+			description: "The oldest teams that won the title.",
+		},
+		{
+			urlParts: ["teams", "young_champ"],
+			name: "Youngest Championship Teams",
+			description: "The youngest teams that won the title.",
+		},
 	],
 	Trades: [
 		{
@@ -125,7 +135,7 @@ const frivolities = {
 		{
 			urlParts: ["most", "no_mvp"],
 			name: "Best Players Without an MVP",
-			description: "The best players who never won an MVP awards.",
+			description: "The best players who never won an MVP award.",
 		},
 		{
 			urlParts: ["most", "progs"],
@@ -133,15 +143,31 @@ const frivolities = {
 			description: "Largest single season ovr increases.",
 		},
 		{
+			urlParts: ["most", "rookies"],
+			name: "Best Rookies",
+			description: "The best rookie seasons.",
+		},
+		{
 			urlParts: ["most", "earnings"],
 			name: "Career Earnings",
 			description: "Players who made the most money.",
+		},
+		{
+			urlParts: ["most", "progs_career"],
+			name: "Career Progs",
+			description: "The biggest improvements from draft prospect to peak.",
 		},
 		{
 			urlParts: ["most", "goat"],
 			name: "GOAT Lab",
 			description:
 				"Define your own formula to rank the greatest players of all time.",
+		},
+		{
+			urlParts: ["most", "goat_season"],
+			name: "GOAT Season",
+			description:
+				"Define your own formula to rank the greatest seasons of all time.",
 		},
 		{
 			urlParts: ["most", "hall_of_good"],

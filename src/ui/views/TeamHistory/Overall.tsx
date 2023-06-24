@@ -13,7 +13,6 @@ const Overall = ({
 	totalWinp,
 	totalWon,
 	worstRecord,
-	title = "Overall",
 }: Pick<
 	View<"teamHistory">,
 	| "bestRecord"
@@ -26,20 +25,16 @@ const Overall = ({
 	| "totalWinp"
 	| "totalWon"
 	| "worstRecord"
-> & {
-	title?: string;
-}) => {
-	let record = `${totalWon}-${totalLost}`;
-	if (totalOtl > 0) {
-		record += `-${totalOtl}`;
-	}
-	if (totalTied > 0) {
-		record += `-${totalTied}`;
-	}
+>) => {
+	const record = helpers.formatRecord({
+		won: totalWon,
+		lost: totalLost,
+		otl: totalOtl,
+		tied: totalTied,
+	});
 
 	return (
 		<>
-			<h2>{title}</h2>
 			<div className="mb-2">
 				Record: {record} ({helpers.roundWinp(totalWinp)})
 				<br />

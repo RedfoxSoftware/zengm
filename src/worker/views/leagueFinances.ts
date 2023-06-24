@@ -9,8 +9,9 @@ const updateLeagueFinances = async (
 ) => {
 	if (
 		updateEvents.includes("firstRun") ||
-		updateEvents.includes("gameSim") ||
-		updateEvents.includes("newPhase") ||
+		(inputs.season === g.get("season") &&
+			(updateEvents.includes("gameSim") ||
+				updateEvents.includes("newPhase"))) ||
 		state.season !== inputs.season
 	) {
 		const players = await idb.cache.players.indexGetAll("playersByTid", [
@@ -34,6 +35,9 @@ const updateLeagueFinances = async (
 						"tid",
 						"region",
 						"name",
+						"imgURL",
+						"imgURLSmall",
+						"expenseLevels",
 					],
 					season: inputs.season,
 				},
@@ -51,7 +55,7 @@ const updateLeagueFinances = async (
 		return {
 			budget: g.get("budget"),
 			currentSeason: g.get("season"),
-			hardCap: g.get("hardCap"),
+			salaryCapType: g.get("salaryCapType"),
 			season: inputs.season,
 			salaryCap: g.get("salaryCap") / 1000,
 			minPayroll: g.get("minPayroll") / 1000,

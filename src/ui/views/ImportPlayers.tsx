@@ -1,15 +1,11 @@
-import { useState, ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import { PLAYER, PHASE, gameAttributesArrayToObject } from "../../common";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers, toWorker, useLocal } from "../util";
-import {
-	DataTable,
-	PlayerNameLabels,
-	LeagueFileUpload,
-	MoreLinks,
-} from "../components";
+import { DataTable, LeagueFileUpload, MoreLinks } from "../components";
 import type { View } from "../../common/types";
 import orderBy from "lodash-es/orderBy";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const ImportPlayers = ({
 	challengeNoRatings,
@@ -83,10 +79,25 @@ const ImportPlayers = ({
 	}
 
 	const cols = getCols(
-		["", "#", "Name", "Pos", "Ovr", "Pot", "Age", "Team", "Contract", "Exp"],
+		[
+			"",
+			"#",
+			"Name",
+			"",
+			"Pos",
+			"Ovr",
+			"Pot",
+			"Age",
+			"Team",
+			"Contract",
+			"Exp",
+		],
 		{
 			Name: {
 				width: "100%",
+			},
+			"": {
+				width: "1%",
 			},
 		},
 	);
@@ -143,7 +154,7 @@ const ImportPlayers = ({
 
 		let ratings = p.ratings.at(-1);
 
-		for (let i = p.ratings.length - 1; i--; i >= 0) {
+		for (let i = p.ratings.length - 1; i >= 0; i--) {
 			if (p.ratings[i].season + seasonOffset === season) {
 				ratings = p.ratings[i];
 				break;
@@ -164,8 +175,6 @@ const ImportPlayers = ({
 			};
 		});
 
-		const name = `${p.firstName} ${p.lastName}`;
-
 		const ageRow = ages.find(row => row.season === season);
 		const age = ageRow ? ageRow.age : 0;
 
@@ -175,6 +184,7 @@ const ImportPlayers = ({
 				{
 					value: (
 						<input
+							className="form-check-input"
 							type="checkbox"
 							title="Import player"
 							checked={checked}
@@ -185,27 +195,23 @@ const ImportPlayers = ({
 					sortValue: checked ? 1 : 0,
 				},
 				i + 1,
-				{
-					value: (
-						<div className="d-flex align-items-center justify-content-between">
-							<PlayerNameLabels injury={p.injury} skills={ratings.skills}>
-								{name}
-							</PlayerNameLabels>
-							<button
-								className="btn btn-secondary btn-sm ms-2"
-								disabled={disableButtons}
-								onClick={() => {
-									const newPlayers = [...players];
-									newPlayers.splice(i, 0, helpers.deepCopy(player));
-									setPlayers(newPlayers);
-								}}
-							>
-								Clone
-							</button>
-						</div>
-					),
-					sortValue: name,
-				},
+				wrappedPlayerNameLabels({
+					injury: p.injury,
+					skills: ratings.skills,
+					firstName: p.firstName,
+					lastName: p.lastName,
+				}),
+				<button
+					className="btn btn-secondary btn-sm"
+					disabled={disableButtons}
+					onClick={() => {
+						const newPlayers = [...players];
+						newPlayers.splice(i, 0, helpers.deepCopy(player));
+						setPlayers(newPlayers);
+					}}
+				>
+					Clone
+				</button>,
 				ratings.pos,
 				showRatings ? ratings.ovr : null,
 				showRatings ? ratings.pot : null,
@@ -260,10 +266,7 @@ const ImportPlayers = ({
 				tid >= PLAYER.FREE_AGENT ? (
 					{
 						value: (
-							<div
-								className="input-group input-group"
-								style={{ minWidth: 180 }}
-							>
+							<div className="input-group" style={{ minWidth: 180 }}>
 								<div className="input-group-text">$</div>
 								<input
 									type="text"
@@ -364,7 +367,7 @@ const ImportPlayers = ({
 							p.stats.length > 0 &&
 							exportedSeason !== undefined
 						) {
-							for (let i = p.stats.length - 1; i--; i >= 0) {
+							for (let i = p.stats.length - 1; i >= 0; i--) {
 								const ps = p.stats[i];
 								if (ps.season === p.exportedSeason) {
 									if (
@@ -454,6 +457,7 @@ const ImportPlayers = ({
 						<DataTable
 							cols={cols}
 							defaultSort={[1, "asc"]}
+							defaultStickyCols={window.mobile ? 1 : 3}
 							name="ImportPlayers"
 							pagination
 							rows={rows}
@@ -468,12 +472,10 @@ const ImportPlayers = ({
 							setErrorMessage(undefined);
 
 							try {
-								await toWorker(
-									"main",
-									"importPlayers",
+								await toWorker("main", "importPlayers", {
 									leagueFile,
-									players.filter(p => p.checked),
-								);
+									players: players.filter(p => p.checked),
+								});
 								setStatus("success");
 							} catch (error) {
 								console.error(error);

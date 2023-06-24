@@ -1,20 +1,21 @@
-import PropTypes from "prop-types";
 import ResponsiveTableWrapper from "./ResponsiveTableWrapper";
 import SafeHtml from "../components/SafeHtml";
 import { getCols, helpers } from "../util";
 import { sortByStats, StatsHeader } from "./BoxScore.football";
-import { MouseEvent, useState } from "react";
+import { type MouseEvent, useState } from "react";
 import type { SortBy } from "./DataTable";
 import updateSortBys from "./DataTable/updateSortBys";
 
 const StatsTable = ({
 	Row,
+	exhibition,
 	forceRowUpdate,
 	liveGameInProgress,
 	numPlayersOnCourt,
 	t,
 }: {
 	Row: any;
+	exhibition?: boolean;
 	forceRowUpdate: boolean;
 	liveGameInProgress: boolean;
 	numPlayersOnCourt: number;
@@ -100,7 +101,7 @@ const StatsTable = ({
 
 	if (sortBys.length > 0) {
 		playersActiveOrPlayed.sort(
-			sortByStats(stats, sortBys, (p, stat) => {
+			sortByStats(stats, undefined, sortBys, (p, stat) => {
 				if (stat === "trb") {
 					return p.orb + p.drb;
 				}
@@ -127,7 +128,7 @@ const StatsTable = ({
 
 	return (
 		<ResponsiveTableWrapper>
-			<table className="table table-striped table-bordered table-sm table-hover">
+			<table className="table table-striped table-borderless table-sm table-hover">
 				<thead>
 					<tr>
 						<th>Name</th>
@@ -145,6 +146,7 @@ const StatsTable = ({
 					{players.map((p, i) => (
 						<Row
 							key={p.pid}
+							exhibition={exhibition}
 							lastStarter={sortBys.length === 0 && i + 1 === numPlayersOnCourt}
 							liveGameInProgress={liveGameInProgress}
 							p={p}
@@ -222,9 +224,16 @@ const BoxScore = ({
 
 	return (
 		<>
-			{boxScore.teams.map((t: any) => {
+			{boxScore.teams.map((t: any, i: number) => {
 				return (
-					<div key={t.abbrev} className="mb-3">
+					<div
+						key={t.abbrev}
+						className="mb-3"
+						id={i === 0 ? "scroll-team-1" : "scroll-team-2"}
+						style={{
+							scrollMarginTop: 136,
+						}}
+					>
 						<h2>
 							{t.tid >= 0 ? (
 								<a
@@ -234,16 +243,19 @@ const BoxScore = ({
 										boxScore.season,
 									])}
 								>
+									{t.season !== undefined ? `${t.season} ` : null}
 									{t.region} {t.name}
 								</a>
 							) : (
 								<>
+									{t.season !== undefined ? `${t.season} ` : null}
 									{t.region} {t.name}
 								</>
 							)}
 						</h2>
 						<StatsTable
 							Row={Row}
+							exhibition={boxScore.exhibition}
 							forceRowUpdate={forceRowUpdate}
 							liveGameInProgress={liveGameInProgress}
 							numPlayersOnCourt={boxScore.numPlayersOnCourt ?? 5}
@@ -263,12 +275,6 @@ const BoxScore = ({
 				: null}
 		</>
 	);
-};
-
-BoxScore.propTypes = {
-	boxScore: PropTypes.object.isRequired,
-	Row: PropTypes.any,
-	forceRowUpdate: PropTypes.bool.isRequired,
 };
 
 export default BoxScore;

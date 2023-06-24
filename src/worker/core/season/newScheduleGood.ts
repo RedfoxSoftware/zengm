@@ -1,9 +1,10 @@
 import range from "lodash-es/range";
 import { g, helpers, random } from "../../../worker/util";
-// import newScheduleCrappy from "./newScheduleCrappy";
 import { groupByUnique } from "../../../common/groupBy";
 import orderBy from "lodash-es/orderBy";
 import type { Div, GameAttributesLeague } from "../../../common/types";
+import { TOO_MANY_TEAMS_TOO_SLOW } from "./getInitialNumGamesConfDivSettings";
+import groupScheduleSeries from "./groupScheduleSeries";
 
 type MyTeam = {
 	seasonAttrs: {
@@ -191,7 +192,7 @@ const initScheduleCounts = (teams: MyTeam[]) => {
 	const scheduleCounts: Record<
 		number,
 		Record<
-			typeof LEVELS[number],
+			(typeof LEVELS)[number],
 			{
 				home: number;
 				away: number;
@@ -274,7 +275,7 @@ const finalize = ({
 			(numTeams * numGamesConf2) % 2 === 1;
 	}
 
-	const getLevel = (t0: MyTeam, t1: MyTeam): typeof LEVELS[number] => {
+	const getLevel = (t0: MyTeam, t1: MyTeam): (typeof LEVELS)[number] => {
 		if (numGamesDiv !== null && t0.seasonAttrs.did === t1.seasonAttrs.did) {
 			return "div";
 		} else if (
@@ -300,7 +301,10 @@ const finalize = ({
 
 		const skippedGameTids: number[] = [];
 
-		const allowOneGameRemaining = (t: MyTeam, level: typeof LEVELS[number]) => {
+		const allowOneGameRemaining = (
+			t: MyTeam,
+			level: (typeof LEVELS)[number],
+		) => {
 			if (level === "div") {
 				return allowOneTeamWithOneGameRemaining.div[t.seasonAttrs.did];
 			}
@@ -310,7 +314,10 @@ const finalize = ({
 			return allowOneTeamWithOneGameRemaining.other;
 		};
 
-		const applyOneGameRemaining = (t: MyTeam, level: typeof LEVELS[number]) => {
+		const applyOneGameRemaining = (
+			t: MyTeam,
+			level: (typeof LEVELS)[number],
+		) => {
 			if (level === "div") {
 				allowOneTeamWithOneGameRemaining.div[t.seasonAttrs.did] = false;
 			} else if (level === "conf") {
@@ -326,7 +333,7 @@ const finalize = ({
 			// Track number of games left for each team in each category
 			const excessGamesRemainingByTid: Record<
 				number,
-				typeof numGamesTargetsByDid[number]["excess"]
+				(typeof numGamesTargetsByDid)[number]["excess"]
 			> = {};
 			for (const t of teams) {
 				excessGamesRemainingByTid[t.tid] = {
@@ -484,7 +491,7 @@ const finalize = ({
 			random.shuffle(tidsEither);
 
 			const tidsDoneIndexesByLevel: Record<
-				typeof LEVELS[number],
+				(typeof LEVELS)[number],
 				Record<number, number[]>
 			> = {
 				div: {},
@@ -493,7 +500,7 @@ const finalize = ({
 			};
 
 			// This can differ even for teams in the same division, because if numGamesLevel*numTeams is odd, somebody gets an extra game at some other level
-			const maxHomeOrAway = (tid: number, level: typeof LEVELS[number]) => {
+			const maxHomeOrAway = (tid: number, level: (typeof LEVELS)[number]) => {
 				// Use scheduleCounts rather than scheduleCounts2 because scheduleCounts2 gets mutated in the tidsEither for loop and is inconsistent when this is called (game removed from either before placed in home/away)
 				const numGamesAtLevel =
 					scheduleCounts[tid][level].away +
@@ -722,53 +729,67 @@ const newSchedule = (
 		numGamesDiv: g.get("numGamesDiv"),
 	};
 
-	let tids = newScheduleGood(teams, settings);
+	let tids;
 	let warning: string | undefined;
 
-	if (typeof tids === "string") {
-		// console.log("FAILED FIRST TRY", tids)
-		warning = tids;
+	if (teams.length >= TOO_MANY_TEAMS_TOO_SLOW) {
 		tids = newScheduleGood(teams, settings, true);
-		// tids = [];
+
+		warning = "Too many teams to generate a good schedule.";
+	} else {
+		tids = newScheduleGood(teams, settings);
+
+		if (typeof tids === "string") {
+			// console.log("FAILED FIRST TRY", tids)
+			warning = tids;
+			tids = newScheduleGood(teams, settings, true);
+			// tids = [];
+		}
 	}
 
 	if (typeof tids === "string") {
 		throw new Error("newScheduleGood double fail");
 	}
 
-	// Order the schedule so that it takes fewer days to play
-	random.shuffle(tids);
-	const days: [number, number][][] = [[]];
-	const tidsInDays: number[][] = [[]];
-	let jMax = 0;
+	// Extra check is for unit tests
+	if (Object.hasOwn(g, "groupScheduleSeries") && g.get("groupScheduleSeries")) {
+		// Group schedule into series
+		tids = groupScheduleSeries(tids);
+	} else {
+		// Order the schedule so that it takes fewer days to play
+		random.shuffle(tids);
+		const days: [number, number][][] = [[]];
+		const tidsInDays: number[][] = [[]];
+		let jMax = 0;
 
-	for (let i = 0; i < tids.length; i++) {
-		let used = false;
+		for (let i = 0; i < tids.length; i++) {
+			let used = false;
 
-		for (let j = 0; j <= jMax; j++) {
-			if (
-				!tidsInDays[j].includes(tids[i][0]) &&
-				!tidsInDays[j].includes(tids[i][1])
-			) {
-				tidsInDays[j].push(tids[i][0]);
-				tidsInDays[j].push(tids[i][1]);
-				days[j].push(tids[i]);
-				used = true;
-				break;
+			for (let j = 0; j <= jMax; j++) {
+				if (
+					!tidsInDays[j].includes(tids[i][0]) &&
+					!tidsInDays[j].includes(tids[i][1])
+				) {
+					tidsInDays[j].push(tids[i][0]);
+					tidsInDays[j].push(tids[i][1]);
+					days[j].push(tids[i]);
+					used = true;
+					break;
+				}
+			}
+
+			if (!used) {
+				days.push([tids[i]]);
+				tidsInDays.push([tids[i][0], tids[i][1]]);
+				jMax += 1;
 			}
 		}
 
-		if (!used) {
-			days.push([tids[i]]);
-			tidsInDays.push([tids[i][0], tids[i][1]]);
-			jMax += 1;
-		}
+		// Otherwise the most dense days will be at the beginning and the least dense days will be at the end
+		random.shuffle(days);
+
+		tids = days.flat();
 	}
-
-	random.shuffle(days);
-
-	// Otherwise the most dense days will be at the beginning and the least dense days will be at the end
-	tids = days.flat();
 
 	return {
 		tids,

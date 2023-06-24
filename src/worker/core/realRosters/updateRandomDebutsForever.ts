@@ -4,7 +4,7 @@ import { g, random } from "../../util";
 import getDraftProspects from "./getDraftProspects";
 import loadDataBasketball from "./loadData.basketball";
 import addRelatives from "./addRelatives";
-import { MAX_SUPPORTED_LEAGUE_VERSION, PHASE } from "../../../common";
+import { LEAGUE_DATABASE_VERSION, PHASE } from "../../../common";
 
 const updateRandomDebutsForever = async (
 	draftYear: number,
@@ -55,24 +55,15 @@ const updateRandomDebutsForever = async (
 		p.born.year += diff;
 	}
 
-	const teamSeasons = await idb.cache.teamSeasons.indexGetAll(
-		"teamSeasonsByTidSeason",
-		[
-			[g.get("userTid"), g.get("season") - 2],
-			[g.get("userTid"), g.get("season")],
-		],
-	);
-	const scoutingRank = finances.getRankLastThree(
-		teamSeasons,
-		"expenses",
-		"scouting",
-	);
+	const scoutingLevel = await finances.getLevelLastThree("scouting", {
+		tid: g.get("userTid"),
+	});
 
 	for (const p of draftProspects) {
 		const p2 = await player.augmentPartialPlayer(
 			p,
-			scoutingRank,
-			MAX_SUPPORTED_LEAGUE_VERSION,
+			scoutingLevel,
+			LEAGUE_DATABASE_VERSION,
 			true,
 		);
 		await player.updateValues(p2);

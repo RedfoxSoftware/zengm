@@ -81,7 +81,7 @@ const updatePowerRankings = async (
 				}
 
 				teamPlayers = await idb.getCopies.playersPlus(teamPlayers, {
-					attrs: ["tid", "injury", "value", "age"],
+					attrs: ["tid", "injury", "value", "age", "pid"],
 					ratings,
 					stats: ["season", "tid", "gp", "min"],
 					season,
@@ -133,7 +133,7 @@ const updatePowerRankings = async (
 					}
 				} else {
 					for (const pos of POSITIONS) {
-						if (pos === "KR" || pos === "PR") {
+						if (pos === "KR" || pos === "PR" || pos === "DH") {
 							continue;
 						}
 						other[pos] = team.ovr(teamPlayers, {

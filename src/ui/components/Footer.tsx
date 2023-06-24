@@ -21,14 +21,13 @@ const footerLinks = [
 	{
 		url: "https://github.com/zengm-games/zengm",
 		title: "GitHub",
-		hideMobile: true,
 	},
 	{
 		url: `https://www.reddit.com/r/${SUBREDDIT_NAME}/`,
 		title: "Reddit",
 	},
 	{
-		url: "https://discord.gg/caPFuM9",
+		url: "https://zengm.com/discord/",
 		title: "Discord",
 	},
 ];
@@ -55,7 +54,6 @@ const Footer = memo(() => {
 						top: "5px",
 						left: 0,
 					}}
-					data-refresh-time="-1"
 				/>
 				<div
 					id="bbgm-ads-logo"
@@ -69,7 +67,7 @@ const Footer = memo(() => {
 				>
 					<img
 						alt=""
-						src={`https://zengm.com/files/logo-${process.env.SPORT}.png`}
+						src={`https://zengm.com/files/logo-${process.env.SPORT}.svg`}
 						style={{
 							maxHeight: "100%",
 							maxWidth: "100%",
@@ -86,31 +84,33 @@ const Footer = memo(() => {
 						top: "5px",
 						right: 0,
 					}}
-					data-refresh-time="-1"
 				/>
 			</div>
 
 			<div className="clearfix" />
 			<hr />
 
-			<div className="float-sm-start">
-				{footerLinks.map(({ hideMobile, url, title }, i) => {
-					return (
-						<span
-							key={url}
-							className={hideMobile ? "d-none d-sm-inline-block" : undefined}
-						>
-							{i > 0 ? " · " : null}
-							<a href={url} rel="noopener noreferrer" target="_blank">
-								{title}
-							</a>
-						</span>
-					);
-				})}
-				<br />
-			</div>
-			<div className="float-sm-end text-muted">
-				{GAME_ACRONYM} v{window.bbgmVersion}
+			<div
+				className="d-flex flex-wrap justify-content-between"
+				style={{
+					columnGap: "1rem",
+				}}
+			>
+				<div>
+					{footerLinks.map(({ url, title }, i) => {
+						return (
+							<span key={url}>
+								{i > 0 ? " · " : null}
+								<a href={url} rel="noopener noreferrer" target="_blank">
+									{title}
+								</a>
+							</span>
+						);
+					})}
+				</div>
+				<div className="text-body-secondary">
+					{GAME_ACRONYM} v{window.bbgmVersion}
+				</div>
 			</div>
 		</footer>
 	);

@@ -1,9 +1,9 @@
-import PropTypes from "prop-types";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import { DataTable, SafeHtml } from "../components";
 import type { View } from "../../common/types";
 import { frivolitiesMenu } from "./Frivolities";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const TragicDeaths = ({ players, stats, userTid }: View<"tragicDeaths">) => {
 	useTitleBar({ title: "Tragic Deaths", customMenu: frivolitiesMenu });
@@ -53,7 +53,12 @@ const TragicDeaths = ({ players, stats, userTid }: View<"tragicDeaths">) => {
 		return {
 			key: i,
 			data: [
-				<a href={helpers.leagueUrl(["player", p.pid])}>{p.name}</a>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				lastRatings.pos,
 				p.draft.year,
 				p.draft.round > 0 ? `${p.draft.round}-${p.draft.pick}` : "",
@@ -99,6 +104,7 @@ const TragicDeaths = ({ players, stats, userTid }: View<"tragicDeaths">) => {
 			<DataTable
 				cols={cols}
 				defaultSort={[4, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="TragicDeaths"
 				pagination
 				rows={rows}
@@ -106,12 +112,6 @@ const TragicDeaths = ({ players, stats, userTid }: View<"tragicDeaths">) => {
 			/>
 		</>
 	);
-};
-
-TragicDeaths.propTypes = {
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default TragicDeaths;

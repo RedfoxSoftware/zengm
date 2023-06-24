@@ -3,13 +3,15 @@ import { season, team } from "../core";
 import { idb } from "../db";
 import { g } from "../util";
 import type {
+	Player,
 	UpdateEvents,
 	ViewInput,
 	TeamSeasonAttr,
 } from "../../common/types";
 import { addMood } from "./freeAgents";
+import addFirstNameShort from "../util/addFirstNameShort";
 
-const footballScore = (p: {
+export const sortByPos = (p: {
 	ratings: {
 		pos: string;
 		ovr: number;
@@ -38,6 +40,7 @@ const updateRoster = async (
 		inputs.season !== state.season
 	) {
 		const stats = bySport({
+			baseball: ["gp", "keyStats", "war"],
 			basketball: ["gp", "min", "pts", "trb", "ast", "per"],
 			football: ["gp", "keyStats", "av"],
 			hockey: ["gp", "amin", "keyStats", "ops", "dps", "ps"],
@@ -96,7 +99,8 @@ const updateRoster = async (
 			"pid",
 			"tid",
 			"draft",
-			"name",
+			"firstName",
+			"lastName",
 			"age",
 			"born",
 			"contract",
@@ -110,6 +114,7 @@ const updateRoster = async (
 			"latestTransaction",
 			"mood",
 			"value",
+			"awards",
 		]; // tid and draft are used for checking if a player can be released without paying his salary
 
 		const ratings = ["ovr", "pot", "dovr", "dpot", "skills", "pos", "ovrs"];
@@ -156,7 +161,7 @@ const updateRoster = async (
 			if (isSport("basketball")) {
 				players.sort((a, b) => a.rosterOrder - b.rosterOrder);
 			} else {
-				players.sort((a, b) => footballScore(b) - footballScore(a));
+				players.sort((a, b) => sortByPos(b) - sortByPos(a));
 			}
 
 			for (const p of players) {
@@ -203,7 +208,7 @@ const updateRoster = async (
 					(a, b) => b.stats.gp * b.stats.min - a.stats.gp * a.stats.min,
 				);
 			} else {
-				players.sort((a, b) => footballScore(b) - footballScore(a));
+				players.sort((a, b) => sortByPos(b) - sortByPos(a));
 			}
 
 			for (const p of players) {
@@ -211,19 +216,30 @@ const updateRoster = async (
 			}
 		}
 
+		const playoffsOvr =
+			(g.get("phase") === PHASE.PLAYOFFS &&
+				g.get("season") === inputs.season) ||
+			inputs.playoffs === "playoffs";
+
 		const playersCurrent = players.filter(
 			(p: any) => p.injury.gamesRemaining === 0,
 		);
 		const t2 = {
 			...t,
 			ovr: team.ovr(players, {
-				playoffs: g.get("phase") === PHASE.PLAYOFFS,
+				playoffs: playoffsOvr,
 			}),
 			ovrCurrent: team.ovr(playersCurrent, {
-				playoffs: g.get("phase") === PHASE.PLAYOFFS,
+				playoffs: playoffsOvr,
 			}),
 		};
 		t2.seasonAttrs.avgAge = t2.seasonAttrs.avgAge ?? team.avgAge(players);
+
+		for (const p of players) {
+			p.awards = p.awards.filter(
+				(award: Player["awards"][number]) => award.season === inputs.season,
+			);
+		}
 
 		return {
 			abbrev: inputs.abbrev,
@@ -232,7 +248,7 @@ const updateRoster = async (
 			currentSeason: g.get("season"),
 			editable,
 			godMode: g.get("godMode"),
-			hardCap: g.get("hardCap"),
+			salaryCapType: g.get("salaryCapType"),
 			maxRosterSize: g.get("maxRosterSize"),
 			numConfs: g.get("confs", "current").length,
 			numPlayersOnCourt: g.get("numPlayersOnCourt"),
@@ -240,7 +256,7 @@ const updateRoster = async (
 			payroll,
 			phase: g.get("phase"),
 			playoffs: inputs.playoffs,
-			players,
+			players: addFirstNameShort(players),
 			salaryCap: g.get("salaryCap") / 1000,
 			season: inputs.season,
 			showSpectatorWarning:

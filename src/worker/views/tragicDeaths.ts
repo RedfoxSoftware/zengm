@@ -2,6 +2,7 @@ import { idb } from "../db";
 import { g, processPlayersHallOfFame } from "../util";
 import type { UpdateEvents } from "../../common/types";
 import { bySport } from "../../common";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const tragicDeaths = async (inputs: unknown, updateEvents: UpdateEvents) => {
 	// In theory should update more frequently, but the list is potentially expensive to update and rarely changes
@@ -22,6 +23,7 @@ const tragicDeaths = async (inputs: unknown, updateEvents: UpdateEvents) => {
 		}
 
 		const stats = bySport({
+			baseball: ["gp", "keyStats", "war"],
 			basketball: [
 				"gp",
 				"min",
@@ -45,11 +47,11 @@ const tragicDeaths = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			)
 		).filter(p => p !== undefined);
 
-		// @ts-ignore
 		const players = await idb.getCopies.playersPlus(playersAll, {
 			attrs: [
 				"pid",
-				"name",
+				"firstName",
+				"lastName",
 				"draft",
 				"diedYear",
 				"ageAtDeath",
@@ -61,16 +63,18 @@ const tragicDeaths = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			fuzz: true,
 		});
 
-		const players2 = processPlayersHallOfFame(players).map((p: any) => {
-			const event = events.find(
-				event2 => event2.pids && event2.pids.includes(p.pid),
-			);
-			const details = event?.text ?? "";
-			return {
-				...p,
-				details,
-			};
-		});
+		const players2 = addFirstNameShort(processPlayersHallOfFame(players)).map(
+			(p: any) => {
+				const event = events.find(
+					event2 => event2.pids && event2.pids.includes(p.pid),
+				);
+				const details = event?.text ?? "";
+				return {
+					...p,
+					details,
+				};
+			},
+		);
 
 		return {
 			players: players2,

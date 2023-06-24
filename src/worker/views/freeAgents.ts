@@ -3,9 +3,10 @@ import type { Player } from "../../common/types";
 import { player, team } from "../core";
 import { idb } from "../db";
 import { g } from "../util";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 export const addMood = async (players: Player[]) => {
-	const moods: Awaited<ReturnType<typeof player["moodInfos"]>>[] = [];
+	const moods: Awaited<ReturnType<(typeof player)["moodInfos"]>>[] = [];
 	for (const p of players) {
 		moods.push(await player.moodInfos(p));
 	}
@@ -15,6 +16,13 @@ export const addMood = async (players: Player[]) => {
 		mood: moods[i],
 	}));
 };
+
+export const freeAgentStats = bySport({
+	baseball: ["gp", "keyStats", "war"],
+	basketball: ["min", "pts", "trb", "ast", "per"],
+	football: ["gp", "keyStats", "av"],
+	hockey: ["gp", "keyStats", "ops", "dps", "ps"],
+});
 
 const updateFreeAgents = async () => {
 	const userTid = g.get("userTid");
@@ -27,31 +35,30 @@ const updateFreeAgents = async () => {
 		await idb.cache.players.indexGetAll("playersByTid", PLAYER.FREE_AGENT),
 	);
 	const capSpace = (g.get("salaryCap") - payroll) / 1000;
-	const stats = bySport({
-		basketball: ["min", "pts", "trb", "ast", "per"],
-		football: ["gp", "keyStats", "av"],
-		hockey: ["gp", "keyStats", "ops", "dps", "ps"],
-	});
 
-	const players = await idb.getCopies.playersPlus(playersAll, {
-		attrs: [
-			"pid",
-			"name",
-			"age",
-			"contract",
-			"injury",
-			"watch",
-			"jerseyNumber",
-			"mood",
-		],
-		ratings: ["ovr", "pot", "skills", "pos"],
-		stats,
-		season: g.get("season"),
-		showNoStats: true,
-		showRookies: true,
-		fuzz: true,
-		oldStats: true,
-	});
+	const players = addFirstNameShort(
+		await idb.getCopies.playersPlus(playersAll, {
+			attrs: [
+				"pid",
+				"firstName",
+				"lastName",
+				"age",
+				"contract",
+				"injury",
+				"watch",
+				"jerseyNumber",
+				"mood",
+				"draft",
+			],
+			ratings: ["ovr", "pot", "skills", "pos"],
+			stats: freeAgentStats,
+			season: g.get("season"),
+			showNoStats: true,
+			showRookies: true,
+			fuzz: true,
+			oldStats: true,
+		}),
+	);
 
 	const userPlayers = await idb.getCopies.playersPlus(userPlayersAll, {
 		attrs: [],
@@ -67,14 +74,16 @@ const updateFreeAgents = async () => {
 		challengeNoFreeAgents: g.get("challengeNoFreeAgents"),
 		challengeNoRatings: g.get("challengeNoRatings"),
 		godMode: g.get("godMode"),
-		hardCap: g.get("hardCap"),
+		luxuryPayroll: g.get("luxuryPayroll") / 1000,
+		salaryCapType: g.get("salaryCapType"),
 		maxContract: g.get("maxContract"),
 		minContract: g.get("minContract"),
 		numRosterSpots: g.get("maxRosterSize") - userPlayers.length,
 		spectator: g.get("spectator"),
+		payroll: payroll / 1000,
 		phase: g.get("phase"),
 		players,
-		stats,
+		stats: freeAgentStats,
 		userPlayers,
 	};
 };

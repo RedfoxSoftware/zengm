@@ -1,4 +1,5 @@
 import { bySport } from "../../../common";
+import ovrBaseball from "./ovr.baseball";
 import ovrBasketball from "./ovr.basketball";
 import ovrFootball from "./ovr.football";
 import ovrHockey from "./ovr.hockey";
@@ -7,6 +8,7 @@ import ovrHockey from "./ovr.hockey";
 // wholeRoster=true is used for computing team value of the whole roster, like for determining who to draft or sign
 const ovr = (
 	players: {
+		pid: number | undefined;
 		value: number;
 		ratings: {
 			ovr: number;
@@ -22,11 +24,15 @@ const ovr = (
 	} = {},
 ) => {
 	return bySport({
+		baseball: ovrBaseball(players as any, {
+			onlyPos: options.pos,
+			wholeRoster: options.wholeRoster,
+		}),
 		basketball: ovrBasketball(players, {
 			playoffs: options.playoffs,
 			rating: options.rating,
 		}),
-		football: ovrFootball(players, {
+		football: ovrFootball(players as any, {
 			onlyPos: options.pos,
 			wholeRoster: options.wholeRoster,
 		}),

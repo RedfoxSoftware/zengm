@@ -1,6 +1,11 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
-import { forwardRef, RefObject, useCallback, useEffect, useState } from "react";
+import {
+	forwardRef,
+	type RefObject,
+	useCallback,
+	useEffect,
+	useState,
+} from "react";
 import RatingsStats from "./RatingsStats";
 import WatchBlock from "../WatchBlock";
 import { helpers, toWorker } from "../../util";
@@ -11,15 +16,16 @@ const Icon = forwardRef<
 	HTMLElement,
 	{
 		onClick?: () => void;
-		watch?: boolean;
+		watch: number;
 	}
 >(({ onClick, watch }, ref) => {
 	return (
 		<span
 			ref={ref}
-			className={classNames("glyphicon glyphicon-stats watch", {
-				"watch-active": watch,
-			})}
+			className={classNames(
+				"glyphicon glyphicon-stats watch",
+				watch === 0 ? undefined : `watch-active-${watch}`,
+			)}
 			data-no-row-highlight="true"
 			title="View ratings and stats"
 			onClick={onClick}
@@ -28,12 +34,18 @@ const Icon = forwardRef<
 });
 
 type Props = {
+	disableNameLink?: boolean;
 	pid: number;
 	season?: number;
-	watch?: boolean;
+	watch?: number;
 };
 
-const RatingsStatsPopover = ({ season, pid, watch }: Props) => {
+const RatingsStatsPopover = ({
+	disableNameLink,
+	pid,
+	season,
+	watch,
+}: Props) => {
 	const [loadingData, setLoadingData] = useState<boolean>(false);
 	const [player, setPlayer] = useState<{
 		abbrev?: string;
@@ -62,7 +74,7 @@ const RatingsStatsPopover = ({ season, pid, watch }: Props) => {
 
 	// If watch is undefined, fetch it from worker
 	const LOCAL_WATCH = watch === undefined;
-	const [localWatch, setLocalWatch] = useState(false);
+	const [localWatch, setLocalWatch] = useState(0);
 	useEffect(() => {
 		const run = async () => {
 			if (LOCAL_WATCH) {
@@ -85,7 +97,10 @@ const RatingsStatsPopover = ({ season, pid, watch }: Props) => {
 	}
 
 	const loadData = useCallback(async () => {
-		const p = await toWorker("main", "ratingsStatsPopoverInfo", pid, season);
+		const p = await toWorker("main", "ratingsStatsPopoverInfo", {
+			pid,
+			season,
+		});
 		setPlayer({
 			abbrev: p.abbrev,
 			tid: p.tid,
@@ -114,16 +129,20 @@ const RatingsStatsPopover = ({ season, pid, watch }: Props) => {
 		nameBlock = (
 			<div className="d-flex">
 				{jerseyNumber ? (
-					<div className="text-muted jersey-number-popover align-self-end me-1">
+					<div className="text-body-secondary jersey-number-popover align-self-end me-1">
 						{jerseyNumber}
 					</div>
 				) : null}
-				<a
-					href={helpers.leagueUrl(["player", pid])}
-					className="fw-bold text-truncate"
-				>
-					{name}
-				</a>
+				{disableNameLink ? (
+					<b>{name}</b>
+				) : (
+					<a
+						href={helpers.leagueUrl(["player", pid])}
+						className="fw-bold text-truncate"
+					>
+						{name}
+					</a>
+				)}
 				{ratings !== undefined ? (
 					<div className="ms-1">{ratings.pos}</div>
 				) : null}
@@ -194,11 +213,6 @@ const RatingsStatsPopover = ({ season, pid, watch }: Props) => {
 			toggle={toggle}
 		/>
 	);
-};
-
-RatingsStatsPopover.propTypes = {
-	pid: PropTypes.number.isRequired,
-	watch: PropTypes.bool,
 };
 
 export default RatingsStatsPopover;

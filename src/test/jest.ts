@@ -1,5 +1,5 @@
 import { IDBKeyRange } from "fake-indexeddb";
-import fs from "fs";
+import fs from "node:fs";
 
 // When mockIDBLeague is used, sometimes IDBKeyRange still gets called even though there is no actual database
 global.IDBKeyRange = IDBKeyRange;
@@ -8,15 +8,10 @@ global.IDBKeyRange = IDBKeyRange;
 // self.postMessage causes an error because it requires a different number of arguments inside and outside of a worker.
 const originalPostMessage = global.postMessage;
 global.postMessage = (...args) => {
-	if (
-		// @ts-ignore
-		args.length === 1 &&
-		Array.isArray(args[0]) &&
-		JSON.stringify(args[0]) === "[2,-1,0]"
-	) {
+	if (Array.isArray(args[0]) && JSON.stringify(args[0]) === "[2,-1,0]") {
 		// Skip hostID message
 	} else {
-		// @ts-ignore
+		// @ts-expect-error
 		originalPostMessage(...args);
 	}
 };
@@ -27,7 +22,7 @@ if (!process.env.SPORT) {
 
 const fetchCache: Record<string, any> = {};
 (global as any).fetch = async (url: string) => {
-	if (!fetchCache.hasOwnProperty(url)) {
+	if (!Object.hasOwn(fetchCache, url)) {
 		let filePath = url.replace("/gen/", "data/");
 
 		if (filePath.endsWith("real-player-data.json")) {

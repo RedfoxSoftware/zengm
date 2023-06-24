@@ -1,5 +1,4 @@
-import PropTypes from "prop-types";
-import { Fragment, ChangeEvent, useState, useEffect } from "react";
+import { Fragment, type ChangeEvent, useState, useEffect } from "react";
 import { bySport, RATINGS } from "../../../common";
 import { getCols, helpers, toWorker } from "../../util";
 
@@ -8,6 +7,13 @@ const rows = bySport<
 		[key: string]: string[];
 	}[][]
 >({
+	baseball: [
+		[
+			{ "Physical/Hitting": ["hgt", "spd", "hpw", "con", "eye"] },
+			{ Defense: ["gnd", "fly", "thr", "cat"] },
+			{ Pitching: ["ppw", "ctl", "mov", "endu"] },
+		],
+	],
 	basketball: [
 		[
 			{ Physical: ["hgt", "stre", "spd", "jmp", "endu"] },
@@ -40,6 +46,7 @@ const RatingsForm = ({
 	challengeNoRatings,
 	godMode,
 	handleChange,
+	pos,
 	ratingsRow,
 }: {
 	challengeNoRatings: boolean;
@@ -49,6 +56,7 @@ const RatingsForm = ({
 		field: string,
 		event: ChangeEvent<HTMLInputElement>,
 	) => void;
+	pos: string;
 	ratingsRow: any;
 }) => {
 	const [ovr, setOvr] = useState(ratingsRow.ovr);
@@ -63,12 +71,10 @@ const RatingsForm = ({
 				boundedRatings[key] = helpers.bound(boundedRatings[key], 0, 100);
 			}
 
-			const newOvr = await toWorker(
-				"main",
-				"ovr",
-				boundedRatings,
-				boundedRatings.pos,
-			);
+			const newOvr = await toWorker("main", "ovr", {
+				ratings: boundedRatings,
+				pos,
+			});
 			if (mounted) {
 				setOvr(newOvr);
 			}
@@ -77,7 +83,7 @@ const RatingsForm = ({
 		return () => {
 			mounted = false;
 		};
-	}, [ratingsRow]);
+	}, [pos, ratingsRow]);
 
 	const hideRatings = !godMode && challengeNoRatings;
 
@@ -164,11 +170,6 @@ const RatingsForm = ({
 			</div>
 		</>
 	);
-};
-
-RatingsForm.propTypes = {
-	handleChange: PropTypes.func,
-	ratingsRow: PropTypes.object,
 };
 
 export default RatingsForm;

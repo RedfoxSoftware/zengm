@@ -1,10 +1,11 @@
-import { useState, ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import { JerseyNumber } from "../../components";
 import { helpers, confirm, toWorker, logEvent } from "../../util";
 import type { View } from "../../../common/types";
 import orderBy from "lodash-es/orderBy";
 import { PLAYER } from "../../../common";
 import classNames from "classnames";
+import useLocalStorageState from "use-local-storage-state";
 
 const PAGE_SIZE = 12;
 
@@ -20,6 +21,23 @@ const RetiredJerseyNumbers = ({
 	"godMode" | "players" | "retiredJerseyNumbers" | "season" | "tid" | "userTid"
 >) => {
 	const [page, setPage] = useState(0);
+
+	type JeresySortKey =
+		| "jerseyRetirementYear"
+		| "lastSeasonWithTeam"
+		| "jerseyNumber"
+		| "name";
+	const [jerseySortKey, setJerseySortKey] = useLocalStorageState<JeresySortKey>(
+		"jerseySortKey",
+		{
+			defaultValue: "jerseyRetirementYear",
+		},
+	);
+	const [jerseySortDirection, setJerseySortDirection] = useLocalStorageState<
+		"asc" | "desc"
+	>("jerseySortDirection", {
+		defaultValue: "asc",
+	});
 
 	const [editing, setEditing] = useState<
 		| {
@@ -71,12 +89,10 @@ const RetiredJerseyNumbers = ({
 					event.preventDefault();
 
 					try {
-						await toWorker(
-							"main",
-							"retiredJerseyNumberUpsert",
+						await toWorker("main", "retiredJerseyNumberUpsert", {
 							tid,
-							editing.type === "edit" ? editing.index : undefined,
-							{
+							i: editing.type === "edit" ? editing.index : undefined,
+							info: {
 								number: editing.number,
 								seasonRetired: parseInt(editing.seasonRetired),
 								seasonTeamInfo: parseInt(editing.seasonTeamInfo),
@@ -86,7 +102,7 @@ const RetiredJerseyNumbers = ({
 										: undefined,
 								text: editing.text,
 							},
-						);
+						});
 
 						setEditing(undefined);
 					} catch (error) {
@@ -99,11 +115,11 @@ const RetiredJerseyNumbers = ({
 					}
 				}}
 			>
-				<h3>
+				<h2>
 					{editing.type === "add"
 						? "Add Retired Jersey Number"
 						: "Edit Retired Jersey Number"}
-				</h3>
+				</h2>
 				<div className="row">
 					<div className="col-lg-6">
 						<div className="mb-3">
@@ -141,7 +157,7 @@ const RetiredJerseyNumbers = ({
 								value={editing.seasonTeamInfo}
 								onChange={handleChange("seasonTeamInfo")}
 							/>
-							<span className="form-text text-muted">
+							<span className="form-text text-body-secondary">
 								This is used to determine the team region, name, and colors used
 								to show the retired jersey.
 							</span>
@@ -199,7 +215,7 @@ const RetiredJerseyNumbers = ({
 									>
 										{sortedPlayers.map(p => (
 											<option key={p.pid} value={p.pid}>
-												{p.name}
+												{p.firstName} {p.lastName}
 											</option>
 										))}
 										<option value="other">Other</option>
@@ -251,7 +267,7 @@ const RetiredJerseyNumbers = ({
 		);
 
 		if (proceed) {
-			await toWorker("main", "retiredJerseyNumberDelete", tid, i);
+			await toWorker("main", "retiredJerseyNumberDelete", { tid, i });
 		}
 	};
 
@@ -295,21 +311,129 @@ const RetiredJerseyNumbers = ({
 	const enablePrevious = pagination && page > 0;
 	const enableNext = pagination && page < maxPage;
 
+	const jerseySortOptions: {
+		key: JeresySortKey;
+		title: string;
+	}[] = [
+		{
+			key: "lastSeasonWithTeam",
+			title: "Last Season With Team",
+		},
+		{
+			key: "jerseyRetirementYear",
+			title: "Jersey Retirement Year",
+		},
+		{
+			key: "jerseyNumber",
+			title: "Jersey Number",
+		},
+		{
+			key: "name",
+			title: "Name",
+		},
+	];
+
+	let sortedJerseyNumbers: typeof retiredJerseyNumbers;
+	if (jerseySortKey === "name") {
+		sortedJerseyNumbers = orderBy(
+			retiredJerseyNumbers,
+			["lastName", "firstName"],
+			jerseySortDirection,
+		);
+	} else if (jerseySortKey === "jerseyNumber") {
+		sortedJerseyNumbers = orderBy(
+			retiredJerseyNumbers,
+			row => parseInt(row.number),
+			jerseySortDirection,
+		);
+	} else if (jerseySortKey === "jerseyRetirementYear") {
+		sortedJerseyNumbers = orderBy(
+			retiredJerseyNumbers,
+			row => row.seasonRetired,
+			jerseySortDirection,
+		);
+	} else {
+		sortedJerseyNumbers = orderBy(
+			retiredJerseyNumbers,
+			row => row.lastSeasonWithTeam,
+			jerseySortDirection,
+		);
+	}
+
 	let retiredJerseyNumbersToDisplay;
+	const indexStart = page * PAGE_SIZE;
 	if (pagination) {
-		const indexStart = page * PAGE_SIZE;
 		const indexEnd = indexStart + PAGE_SIZE;
-		retiredJerseyNumbersToDisplay = retiredJerseyNumbers.slice(
+		retiredJerseyNumbersToDisplay = sortedJerseyNumbers.slice(
 			indexStart,
 			indexEnd,
 		);
 	} else {
-		retiredJerseyNumbersToDisplay = retiredJerseyNumbers;
+		retiredJerseyNumbersToDisplay = sortedJerseyNumbers;
 	}
+
+	const showSortOptions = sortedJerseyNumbers.length > 1;
+
+	const findUnsortedIndex = (sortedIndex: number) => {
+		const target = sortedJerseyNumbers[indexStart + sortedIndex];
+		const unsortedIndex = retiredJerseyNumbers.indexOf(target) - indexStart;
+		if (unsortedIndex < 0) {
+			throw new Error("Should never happen");
+		}
+		return unsortedIndex;
+	};
 
 	return (
 		<>
-			{retiredJerseyNumbers.length === 0 ? (
+			<div className="d-flex justify-content-between mb-2">
+				<h2 className="mb-0 text-nowrap">
+					Retired <span className="d-sm-none">Jerseys</span>
+					<span className="d-none d-sm-inline">Jersey Numbers</span>
+				</h2>
+				{showSortOptions ? (
+					<div
+						className="input-group input-group-sm ms-3"
+						style={{ maxWidth: 250 }}
+					>
+						<span className="input-group-text" id="basic-addon1">
+							Sort by
+						</span>
+						<select
+							className="form-select"
+							value={jerseySortKey}
+							onChange={event => {
+								setJerseySortKey(event.target.value as JeresySortKey);
+								setPage(0);
+							}}
+						>
+							{jerseySortOptions.map(({ key, title }) => (
+								<option key={key} value={key}>
+									{title}
+								</option>
+							))}
+						</select>
+						<button
+							className="btn btn-sm btn-light-bordered"
+							onClick={() => {
+								setJerseySortDirection(
+									jerseySortDirection === "asc" ? "desc" : "asc",
+								);
+								setPage(0);
+							}}
+							title={`Sort ${
+								jerseySortDirection === "asc" ? "descending" : "ascending"
+							}`}
+						>
+							<span
+								className={`glyphicon glyphicon-arrow-${
+									jerseySortDirection === "asc" ? "down" : "up"
+								}`}
+							/>
+						</button>
+					</div>
+				) : null}
+			</div>
+			{sortedJerseyNumbers.length === 0 ? (
 				<p>None yet!</p>
 			) : (
 				<div className="row">
@@ -331,7 +455,7 @@ const RetiredJerseyNumbers = ({
 										<>
 											{row.pos ? `${row.pos} ` : null}
 											<a href={helpers.leagueUrl(["player", row.pid])}>
-												{row.name}
+												{row.firstName} {row.lastName}
 											</a>
 											{row.numRings > 0 ? (
 												<span
@@ -357,7 +481,7 @@ const RetiredJerseyNumbers = ({
 										<button
 											className="btn btn-sm btn-link p-0 border-0"
 											onClick={() => {
-												editRetiredJersey(i);
+												editRetiredJersey(findUnsortedIndex(i));
 											}}
 										>
 											Edit
@@ -366,7 +490,7 @@ const RetiredJerseyNumbers = ({
 										<button
 											className="btn btn-sm btn-link p-0 border-0"
 											onClick={() => {
-												deleteRetiredJersey(i);
+												deleteRetiredJersey(findUnsortedIndex(i));
 											}}
 										>
 											Delete

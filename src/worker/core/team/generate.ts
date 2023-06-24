@@ -4,8 +4,8 @@ import {
 	DEFAULT_JERSEY,
 	DEFAULT_PLAY_THROUGH_INJURIES,
 	isSport,
-	POSITIONS,
 } from "../../../common";
+import finances from "../finances";
 
 /**
  * Create a new team object.
@@ -16,7 +16,15 @@ import {
  */
 // If I ever type this, ensure that at least one of budget and popRank is set
 const generate = (tm: any): Team => {
-	const strategy = tm.hasOwnProperty("strategy") ? tm.strategy : "rebuilding";
+	const strategy = Object.hasOwn(tm, "strategy") ? tm.strategy : "rebuilding";
+
+	const budget = tm.budget ?? {
+		coaching: finances.defaultBudgetLevel(tm.popRank),
+		facilities: finances.defaultBudgetLevel(tm.popRank),
+		health: finances.defaultBudgetLevel(tm.popRank),
+		scouting: finances.defaultBudgetLevel(tm.popRank),
+		ticketPrice: helpers.defaultTicketPrice(tm.popRank),
+	};
 
 	const t: Team = {
 		tid: tm.tid,
@@ -30,45 +38,12 @@ const generate = (tm: any): Team => {
 		imgURL: tm.imgURL ?? "",
 		imgURLSmall: tm.imgURLSmall === "" ? undefined : tm.imgURLSmall,
 
-		budget: {
-			ticketPrice: {
-				amount: tm.hasOwnProperty("budget")
-					? tm.budget.ticketPrice.amount
-					: helpers.defaultTicketPrice(tm.popRank),
-				rank: tm.hasOwnProperty("budget")
-					? tm.budget.ticketPrice.rank
-					: tm.popRank,
-			},
-			scouting: {
-				amount: tm.hasOwnProperty("budget")
-					? tm.budget.scouting.amount
-					: helpers.defaultBudgetAmount(tm.popRank),
-				rank: tm.hasOwnProperty("budget")
-					? tm.budget.scouting.rank
-					: tm.popRank,
-			},
-			coaching: {
-				amount: tm.hasOwnProperty("budget")
-					? tm.budget.coaching.amount
-					: helpers.defaultBudgetAmount(tm.popRank),
-				rank: tm.hasOwnProperty("budget")
-					? tm.budget.coaching.rank
-					: tm.popRank,
-			},
-			health: {
-				amount: tm.hasOwnProperty("budget")
-					? tm.budget.health.amount
-					: helpers.defaultBudgetAmount(tm.popRank),
-				rank: tm.hasOwnProperty("budget") ? tm.budget.health.rank : tm.popRank,
-			},
-			facilities: {
-				amount: tm.hasOwnProperty("budget")
-					? tm.budget.facilities.amount
-					: helpers.defaultBudgetAmount(tm.popRank),
-				rank: tm.hasOwnProperty("budget")
-					? tm.budget.facilities.rank
-					: tm.popRank,
-			},
+		budget,
+		initialBudget: tm.initialBudget ?? {
+			coaching: budget.coaching,
+			facilities: budget.facilities,
+			health: budget.health,
+			scouting: budget.scouting,
 		},
 		strategy,
 		depth: tm.depth,
@@ -94,15 +69,34 @@ const generate = (tm: any): Team => {
 	}
 
 	if (isSport("football") && tm.depth === undefined) {
-		t.depth = POSITIONS.reduce((depth, pos) => {
-			depth[pos] = [];
-			return depth;
-		}, {});
+		t.depth = {
+			QB: [],
+			RB: [],
+			WR: [],
+			TE: [],
+			OL: [],
+			DL: [],
+			LB: [],
+			CB: [],
+			S: [],
+			K: [],
+			P: [],
+			KR: [],
+			PR: [],
+		};
 	} else if (isSport("hockey") && tm.depth === undefined) {
 		t.depth = {
 			F: [],
 			D: [],
 			G: [],
+		};
+	} else if (isSport("baseball") && tm.depth === undefined) {
+		t.depth = {
+			L: [],
+			LP: [],
+			D: [],
+			DP: [],
+			P: [],
 		};
 	}
 

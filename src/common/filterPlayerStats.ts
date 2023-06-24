@@ -3,6 +3,12 @@ import bySport from "./bySport";
 // Filter based on if player has any stats, for use in box score and player game log
 const filterPlayerStats = (p: any, stats: string[], type: string) => {
 	return bySport({
+		baseball: () => {
+			return (
+				(type === "batting" && p.gp > 0 && p.battingOrder !== undefined) ||
+				(type === "pitching" && p.gpPit > 0)
+			);
+		},
 		basketball: () => {
 			return p.min > 0;
 		},

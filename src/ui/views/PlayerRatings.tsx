@@ -1,9 +1,13 @@
-import PropTypes from "prop-types";
-import { DataTable, MoreLinks, PlayerNameLabels } from "../components";
+import { DataTable, MoreLinks } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
-import { POSITIONS, PLAYER, isSport } from "../../common";
+import { POSITIONS, PLAYER, bySport } from "../../common";
 import type { View } from "../../common/types";
+import {
+	wrappedContractAmount,
+	wrappedContractExp,
+} from "../components/contract";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const PlayerRatings = ({
 	abbrev,
@@ -23,7 +27,14 @@ const PlayerRatings = ({
 	});
 
 	const ovrsPotsColNames: string[] = [];
-	if (isSport("football") || isSport("hockey")) {
+	if (
+		bySport({
+			baseball: true,
+			basketball: false,
+			football: true,
+			hockey: true,
+		})
+	) {
 		for (const pos of POSITIONS) {
 			for (const type of ["ovr", "pot"]) {
 				ovrsPotsColNames.push(`rating:${type}${pos}`);
@@ -48,7 +59,14 @@ const PlayerRatings = ({
 		const showRatings = !challengeNoRatings || p.tid === PLAYER.RETIRED;
 
 		const ovrsPotsRatings: string[] = [];
-		if (isSport("football") || isSport("hockey")) {
+		if (
+			bySport({
+				baseball: true,
+				basketball: false,
+				football: true,
+				hockey: true,
+			})
+		) {
 			for (const pos of POSITIONS) {
 				for (const type of ["ovrs", "pots"]) {
 					ovrsPotsRatings.push(showRatings ? p.ratings[type][pos] : null);
@@ -59,16 +77,19 @@ const PlayerRatings = ({
 		return {
 			key: p.pid,
 			data: [
-				<PlayerNameLabels
-					pid={p.pid}
-					injury={p.injury}
-					season={season}
-					skills={p.ratings.skills}
-					jerseyNumber={p.stats.jerseyNumber}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					season,
+					skills: p.ratings.skills,
+					jerseyNumber: p.stats.jerseyNumber,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+					awards: p.awards,
+					awardsSeason: season,
+				}),
 				p.ratings.pos,
 				<a
 					href={helpers.leagueUrl([
@@ -80,11 +101,9 @@ const PlayerRatings = ({
 					{p.stats.abbrev}
 				</a>,
 				p.age,
-				p.contract.amount > 0
-					? helpers.formatCurrency(p.contract.amount, "M")
-					: null,
+				p.contract.amount > 0 ? wrappedContractAmount(p) : null,
 				p.contract.amount > 0 && season === currentSeason
-					? p.contract.exp
+					? wrappedContractExp(p)
 					: null,
 				showRatings ? p.ratings.ovr : null,
 				showRatings ? p.ratings.pot : null,
@@ -119,21 +138,13 @@ const PlayerRatings = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[6, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="PlayerRatings"
 				pagination
 				rows={rows}
 			/>
 		</>
 	);
-};
-
-PlayerRatings.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	currentSeason: PropTypes.number.isRequired,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	ratings: PropTypes.arrayOf(PropTypes.string).isRequired,
-	season: PropTypes.number.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default PlayerRatings;

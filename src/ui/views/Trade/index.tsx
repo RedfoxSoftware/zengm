@@ -1,14 +1,20 @@
-import PropTypes from "prop-types";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { PHASE } from "../../../common";
 import useTitleBar from "../../hooks/useTitleBar";
-import { helpers, toWorker } from "../../util";
+import { helpers, toWorker, useLocal, useLocalPartial } from "../../util";
 import AssetList from "./AssetList";
 import Buttons from "./Buttons";
 import type { TradeClearType } from "./Buttons";
 import Summary from "./Summary";
 import type { TradeTeams, View } from "../../../common/types";
 import classNames from "classnames";
+
+export type HandleToggle = (
+	userOrOther: "other" | "user",
+	playerOrPick: "pick" | "player",
+	includeOrExclude: "include" | "exclude",
+	id: number,
+) => Promise<void>;
 
 const Trade = (props: View<"trade">) => {
 	const [state, setState] = useState({
@@ -19,7 +25,7 @@ const Trade = (props: View<"trade">) => {
 		prevTeams: undefined as TradeTeams | undefined,
 	});
 
-	const handleChangeAsset = async (
+	const handleChangeAsset: HandleToggle = async (
 		userOrOther: "other" | "user",
 		playerOrPick: "pick" | "player",
 		includeOrExclude: "include" | "exclude",
@@ -27,6 +33,7 @@ const Trade = (props: View<"trade">) => {
 	) => {
 		setState(prevState => ({
 			...prevState,
+			accepted: false,
 			message: null,
 			prevTeams: undefined,
 		}));
@@ -103,7 +110,7 @@ const Trade = (props: View<"trade">) => {
 			);
 		}
 
-		const teams = [
+		const teams: TradeTeams = [
 			{
 				tid: props.userTid,
 				pids: ids["user-pids"],
@@ -125,11 +132,12 @@ const Trade = (props: View<"trade">) => {
 	const handleChangeTeam = async (tid: number) => {
 		setState(prevState => ({
 			...prevState,
+			accepted: false,
 			message: null,
 			prevTeams: undefined,
 		}));
 
-		const teams = [
+		const teams: TradeTeams = [
 			{
 				tid: props.userTid,
 				pids: props.userPids,
@@ -169,12 +177,17 @@ const Trade = (props: View<"trade">) => {
 
 		setState(prevState => ({
 			...prevState,
+			accepted: false,
 			asking: true,
 			message: null,
 			prevTeams: undefined,
 		}));
 
-		const { changed, message } = await toWorker("main", "tradeCounterOffer");
+		const { changed, message } = await toWorker(
+			"main",
+			"tradeCounterOffer",
+			undefined,
+		);
 
 		if (!changed) {
 			newPrevTeams = undefined;
@@ -191,6 +204,7 @@ const Trade = (props: View<"trade">) => {
 	const handleClickClear = async (type: TradeClearType) => {
 		setState(prevState => ({
 			...prevState,
+			accepted: false,
 			message: null,
 			prevTeams: undefined,
 		}));
@@ -205,17 +219,17 @@ const Trade = (props: View<"trade">) => {
 	};
 
 	const handleClickPropose = async () => {
-		const [accepted, message] = await toWorker(
-			"main",
-			"proposeTrade",
-			state.forceTrade,
-		);
-		setState(prevState => ({
-			...prevState,
-			accepted,
-			message,
-			prevTeams: undefined,
-		}));
+		const output = await toWorker("main", "proposeTrade", state.forceTrade);
+
+		if (output) {
+			const [accepted, message] = output;
+			setState(prevState => ({
+				...prevState,
+				accepted,
+				message,
+				prevTeams: undefined,
+			}));
+		}
 	};
 
 	const {
@@ -225,6 +239,7 @@ const Trade = (props: View<"trade">) => {
 		otherTeamsWantToHire,
 		godMode,
 		lost,
+		luxuryPayroll,
 		multiTeamMode,
 		numDraftRounds,
 		spectator,
@@ -234,6 +249,7 @@ const Trade = (props: View<"trade">) => {
 		otl,
 		phase,
 		salaryCap,
+		salaryCapType,
 		summary,
 		showResigningMsg,
 		stats,
@@ -253,19 +269,26 @@ const Trade = (props: View<"trade">) => {
 	const summaryText = useRef<HTMLDivElement>(null);
 	const summaryControls = useRef<HTMLDivElement>(null);
 
+	const userTids = useLocal(state => state.userTids);
+
 	const updateSummaryHeight = useCallback(() => {
 		if (summaryControls.current && summaryText.current) {
 			// Keep in sync with .trade-affix
 			if (window.matchMedia("(min-width:768px)").matches) {
 				// 60 for top navbar, 24 for spacing between asset list and trade controls
-				const newHeight =
+				let newHeight =
 					window.innerHeight - 60 - 24 - summaryControls.current.clientHeight;
+
+				// Multi team menu
+				if (userTids.length > 1) {
+					newHeight -= 40;
+				}
 				summaryText.current.style.maxHeight = `${newHeight}px`;
 			} else if (summaryText.current.style.maxHeight !== "") {
 				summaryText.current.style.removeProperty("height");
 			}
 		}
-	}, []);
+	}, [userTids]);
 
 	// Run every render, in case it changes
 	useEffect(() => {
@@ -278,6 +301,8 @@ const Trade = (props: View<"trade">) => {
 			window.removeEventListener("optimizedResize", updateSummaryHeight);
 		};
 	}, [updateSummaryHeight]);
+
+	const { gender } = useLocalPartial(["gender"]);
 
 	const noTradingAllowed =
 		(phase >= PHASE.AFTER_TRADE_DEADLINE && phase <= PHASE.PLAYOFFS) ||
@@ -315,8 +340,8 @@ const Trade = (props: View<"trade">) => {
 					) : null}
 
 					<p>
-						If a player has been signed within the past 14 days, he is not
-						allowed to be traded.
+						If a player has been signed within the past 14 days,{" "}
+						{helpers.pronoun(gender, "he")} is not allowed to be traded.
 					</p>
 
 					<div className="d-flex mb-2">
@@ -391,8 +416,12 @@ const Trade = (props: View<"trade">) => {
 				<div className="col-md-3">
 					<div className="trade-affix">
 						<Summary
+							challengeNoRatings={challengeNoRatings}
+							handleToggle={handleChangeAsset}
+							luxuryPayroll={luxuryPayroll}
 							ref={summaryText}
 							salaryCap={salaryCap}
+							salaryCapType={salaryCapType}
 							summary={summary}
 						/>
 
@@ -492,42 +521,6 @@ const Trade = (props: View<"trade">) => {
 			</div>
 		</>
 	);
-};
-
-Trade.propTypes = {
-	gameOver: PropTypes.bool.isRequired,
-	godMode: PropTypes.bool.isRequired,
-	lost: PropTypes.number.isRequired,
-	otherDpids: PropTypes.arrayOf(PropTypes.number).isRequired,
-	otherDpidsExcluded: PropTypes.arrayOf(PropTypes.number).isRequired,
-	otherPicks: PropTypes.array.isRequired,
-	otherPids: PropTypes.arrayOf(PropTypes.number).isRequired,
-	otherPidsExcluded: PropTypes.arrayOf(PropTypes.number).isRequired,
-	otherRoster: PropTypes.array.isRequired,
-	otherTid: PropTypes.number.isRequired,
-	phase: PropTypes.number.isRequired,
-	salaryCap: PropTypes.number.isRequired,
-	summary: PropTypes.object.isRequired,
-	showResigningMsg: PropTypes.bool.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	strategy: PropTypes.string.isRequired,
-	teams: PropTypes.arrayOf(
-		PropTypes.shape({
-			name: PropTypes.string.isRequired,
-			region: PropTypes.string.isRequired,
-			tid: PropTypes.number.isRequired,
-		}),
-	).isRequired,
-	tied: PropTypes.number,
-	userDpids: PropTypes.arrayOf(PropTypes.number).isRequired,
-	userDpidsExcluded: PropTypes.arrayOf(PropTypes.number).isRequired,
-	userPicks: PropTypes.array.isRequired,
-	userPids: PropTypes.arrayOf(PropTypes.number).isRequired,
-	userPidsExcluded: PropTypes.arrayOf(PropTypes.number).isRequired,
-	userRoster: PropTypes.array.isRequired,
-	userTid: PropTypes.number.isRequired,
-	userTeamName: PropTypes.string.isRequired,
-	won: PropTypes.number.isRequired,
 };
 
 export default Trade;

@@ -10,6 +10,8 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+import { isSport } from "../../common";
+
 const BINARY_MINUS = "-";
 const UNARY_MINUS = "#";
 
@@ -118,11 +120,11 @@ const shuntingYard = (string: string) => {
 			} else if (operators[token]) {
 				const operator = operators[token];
 				while (
-					typeof operators[stack.at(-1)] !== "undefined" &&
+					typeof operators[stack.at(-1)!] !== "undefined" &&
 					((operator.associativity === "l" &&
-						operator.precedence <= operators[stack.at(-1)].precedence) ||
+						operator.precedence <= operators[stack.at(-1)!].precedence) ||
 						(operator.associativity === "r" &&
-							operator.precedence < operators[stack.at(-1)].precedence))
+							operator.precedence < operators[stack.at(-1)!].precedence))
 				) {
 					output.push(stack.pop() as string);
 				}
@@ -147,6 +149,23 @@ const shuntingYard = (string: string) => {
 			}
 			output.push(aux);
 		}
+	}
+
+	// Hack for 2b and 3b in baseball
+	if (isSport("baseball")) {
+		const output2 = [];
+		for (let i = 0; i < output.length; i++) {
+			if (
+				(output[i] === "2" || output[i] === "3") &&
+				output[i + 1]?.startsWith("b")
+			) {
+				output2.push(`${output[i]}${output[i + 1]}`);
+				i += 1;
+			} else {
+				output2.push(output[i]);
+			}
+		}
+		return output2;
 	}
 
 	return output;

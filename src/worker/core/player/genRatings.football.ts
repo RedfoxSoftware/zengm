@@ -251,17 +251,9 @@ const defaultOvrsOrPots = {
 	PR: 0,
 };
 
-/**
- * Generate initial ratings for a newly-created
- *
- * @param {number} season [description]
- * @param {number} scoutingRank Between 1 and g.get("numActiveTeams") (default 30), the rank of scouting spending, probably over the past 3 years via core.finances.getRankLastThree.
- * @param {number} tid [description]
- * @return {Object} Ratings object
- */
 const genRatings = (
 	season: number,
-	scoutingRank: number,
+	scoutingLevel: number,
 ): {
 	heightInInches: number;
 	ratings: PlayerRatings;
@@ -382,7 +374,7 @@ const genRatings = (
 		kac: rawRatings.kac,
 		ppw: rawRatings.ppw,
 		pac: rawRatings.pac,
-		fuzz: genFuzz(scoutingRank),
+		fuzz: genFuzz(scoutingLevel),
 		ovr: 0,
 		pos,
 		pot: 0,
@@ -401,7 +393,7 @@ const genRatings = (
 	timeoutID = setTimeout(() => {
 		console.log(info);
 		for (const pos2 of Object.keys(POSITION_COUNTS)) {
-			if (infoIn.hasOwnProperty(pos2)) {
+			if (Object.hasOwn(infoIn, pos2)) {
 				console.log(pos2, infoIn[pos2], infoOut[pos2]);
 			}
 		}

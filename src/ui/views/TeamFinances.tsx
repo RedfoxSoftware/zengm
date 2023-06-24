@@ -1,16 +1,37 @@
-import PropTypes from "prop-types";
-import { ChangeEvent, FormEvent, ReactNode, useEffect, useState } from "react";
 import {
-	BarGraph,
-	DataTable,
-	HelpPopover,
-	MoreLinks,
-	PlayerNameLabels,
-} from "../components";
+	type ChangeEvent,
+	type FormEvent,
+	Fragment,
+	useEffect,
+	useState,
+	type ReactNode,
+} from "react";
+import { BarGraph, DataTable, HelpPopover, MoreLinks } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
-import { getCols, helpers, logEvent, toWorker, useLocalShallow } from "../util";
-import type { View, Phase } from "../../common/types";
+import {
+	getCols,
+	gradientStyleFactory,
+	helpers,
+	logEvent,
+	toWorker,
+	useLocalPartial,
+} from "../util";
+import type { View } from "../../common/types";
 import { getAdjustedTicketPrice, PHASE } from "../../common";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
+import type { DataTableRow } from "../components/DataTable";
+import {
+	DEFAULT_LEVEL,
+	MAX_LEVEL,
+	coachingEffect,
+	facilitiesEffectAttendance,
+	facilitiesEffectMood,
+	healthEffect,
+	levelToAmount,
+	levelToEffect,
+	scoutingEffectCutoff,
+	scoutingEffectStddev,
+} from "../../common/budgetLevels";
 
 const paddingLeft85 = { paddingLeft: 85 };
 
@@ -22,35 +43,136 @@ const formatTicketPrice = (ticketPrice: number) => {
 	return String(ticketPrice);
 };
 
+type BudgetKey = "scouting" | "coaching" | "health" | "facilities";
+
+const roundEffect = (effect: number, includePlusSign: boolean) => {
+	return `${includePlusSign && effect >= 0 ? "+" : ""}${effect.toLocaleString(
+		"en-US",
+		{
+			maximumFractionDigits: 2,
+			minimumFractionDigits: 0,
+		},
+	)}`;
+};
+
+const GradientStyle = ({
+	children,
+	level,
+}: {
+	children: ReactNode;
+	level: number;
+}) => {
+	const gradientStyle = gradientStyleFactory(-0.9, -0.05, 0.05, 0.9);
+
+	return <span style={gradientStyle(levelToEffect(level))}>{children}</span>;
+};
+
+const BudgetEffect = ({ type, level }: { type: BudgetKey; level: number }) => {
+	if (type === "scouting") {
+		const effectCutoff = scoutingEffectCutoff(level);
+		const effectStddev = scoutingEffectStddev(level);
+		return (
+			<>
+				Ratings error stddev:{" "}
+				<GradientStyle level={level}>
+					{roundEffect(effectStddev, false)}
+				</GradientStyle>
+				<br />
+				Maximum ratings error:{" "}
+				<GradientStyle level={level}>{effectCutoff}</GradientStyle>
+			</>
+		);
+	}
+
+	if (type === "coaching") {
+		const effect = coachingEffect(level);
+		if (effect === 0) {
+			return "Normal progs";
+		}
+
+		return (
+			<>
+				<GradientStyle level={level}>
+					{roundEffect(100 * effect, true)}%
+				</GradientStyle>{" "}
+				positive progs
+				<br />
+				<GradientStyle level={level}>
+					{roundEffect(-100 * effect, true)}%
+				</GradientStyle>{" "}
+				negative progs
+			</>
+		);
+	}
+
+	if (type === "health") {
+		const effect = healthEffect(level);
+		if (effect === 0) {
+			return "Normal injury duration";
+		}
+
+		return (
+			<>
+				<GradientStyle level={level}>
+					{roundEffect(100 * effect, true)}%
+				</GradientStyle>{" "}
+				injury duration
+			</>
+		);
+	}
+
+	const effectMood = facilitiesEffectMood(level);
+	const effectAttendance = facilitiesEffectAttendance(level);
+	return (
+		<>
+			<GradientStyle level={level}>
+				{roundEffect(effectMood, true)}
+			</GradientStyle>{" "}
+			player mood
+			<br />
+			<GradientStyle level={level}>
+				{roundEffect(100 * effectAttendance, true)}%
+			</GradientStyle>{" "}
+			ticket demand
+		</>
+	);
+};
+
 const FinancesForm = ({
 	autoTicketPrice,
 	challengeNoRatings,
 	gameSimInProgress,
-	noSeasonData,
+	godMode,
+	otherTeamTicketPrices,
 	phase,
+	salaryCap,
 	spectator,
 	t,
 	tid,
 	userTid,
-}: {
-	autoTicketPrice: number;
-	challengeNoRatings: boolean;
+}: Pick<
+	View<"teamFinances">,
+	| "autoTicketPrice"
+	| "challengeNoRatings"
+	| "godMode"
+	| "otherTeamTicketPrices"
+	| "phase"
+	| "salaryCap"
+	| "spectator"
+	| "t"
+	| "tid"
+	| "userTid"
+> & {
 	gameSimInProgress: boolean;
-	noSeasonData: boolean;
-	spectator: boolean;
-	phase: Phase;
-	t: any;
-	tid: number;
-	userTid: number;
 }) => {
 	const [state, setState] = useState({
 		dirty: false,
 		saving: false,
-		coaching: String(t.budget.coaching.amount),
-		facilities: String(t.budget.facilities.amount),
-		health: String(t.budget.health.amount),
-		scouting: String(t.budget.scouting.amount),
-		ticketPrice: formatTicketPrice(t.budget.ticketPrice.amount),
+		coaching: String(t.budget.coaching),
+		facilities: String(t.budget.facilities),
+		health: String(t.budget.health),
+		scouting: String(t.budget.scouting),
+		ticketPrice: formatTicketPrice(t.budget.ticketPrice),
 		adjustForInflation: t.adjustForInflation,
 		autoTicketPrice: t.autoTicketPrice,
 	});
@@ -59,36 +181,35 @@ const FinancesForm = ({
 		if (!state.dirty) {
 			setState(state2 => ({
 				...state2,
-				coaching: String(t.budget.coaching.amount),
-				facilities: String(t.budget.facilities.amount),
-				health: String(t.budget.health.amount),
-				scouting: String(t.budget.scouting.amount),
-				ticketPrice: formatTicketPrice(t.budget.ticketPrice.amount),
+				coaching: String(t.budget.coaching),
+				facilities: String(t.budget.facilities),
+				health: String(t.budget.health),
+				scouting: String(t.budget.scouting),
+				ticketPrice: formatTicketPrice(t.budget.ticketPrice),
 				adjustForInflation: t.adjustForInflation,
 				autoTicketPrice: t.autoTicketPrice,
 			}));
 		}
 	}, [state.dirty, t]);
 
+	const setStateValue = (
+		name: Exclude<keyof typeof state, "dirty" | "saving">,
+		value: any,
+	) => {
+		setState(state2 => ({
+			...state2,
+			dirty: true,
+			[name]: value,
+		}));
+	};
+
 	const handleChange =
 		(name: Exclude<keyof typeof state, "dirty" | "saving">) =>
 		(event: ChangeEvent<HTMLInputElement>) => {
 			if (name === "adjustForInflation" || name === "autoTicketPrice") {
-				setState(
-					state2 =>
-						({
-							...state2,
-							dirty: true,
-							[name]: event.target.checked,
-						} as any),
-				);
-				return;
+				setStateValue(name, event.target.checked);
 			} else {
-				setState(state2 => ({
-					...state2,
-					dirty: true,
-					[name]: event.target.value,
-				}));
+				setStateValue(name, event.target.value);
 			}
 		};
 
@@ -100,24 +221,20 @@ const FinancesForm = ({
 		const budgetAmounts = {
 			// Convert from [millions of dollars] to [thousands of dollars] rounded to the nearest $10k
 			coaching: helpers.bound(
-				Math.round(parseFloat(state.coaching) * 100) * 10,
-				0,
-				Infinity,
+				Math.round(parseFloat(state.coaching)),
+				1,
+				MAX_LEVEL,
 			),
 			facilities: helpers.bound(
-				Math.round(parseFloat(state.facilities) * 100) * 10,
-				0,
-				Infinity,
+				Math.round(parseFloat(state.facilities)),
+				1,
+				MAX_LEVEL,
 			),
-			health: helpers.bound(
-				Math.round(parseFloat(state.health) * 100) * 10,
-				0,
-				Infinity,
-			),
+			health: helpers.bound(Math.round(parseFloat(state.health)), 1, MAX_LEVEL),
 			scouting: helpers.bound(
-				Math.round(parseFloat(state.scouting) * 100) * 10,
-				0,
-				Infinity,
+				Math.round(parseFloat(state.scouting)),
+				1,
+				MAX_LEVEL,
 			),
 
 			// Already in [dollars]
@@ -128,17 +245,15 @@ const FinancesForm = ({
 			),
 		};
 
-		await toWorker(
-			"main",
-			"updateBudget",
-			budgetAmounts,
-			state.adjustForInflation,
-			state.autoTicketPrice,
-		);
+		await toWorker("main", "updateBudget", {
+			budgetLevels: budgetAmounts,
+			adjustForInflation: state.adjustForInflation || state.autoTicketPrice,
+			autoTicketPrice: state.autoTicketPrice,
+		});
 
 		logEvent({
 			type: "success",
-			text: "Team finances updated.",
+			text: "Saved team finance settings.",
 			saveToDb: false,
 		});
 
@@ -151,25 +266,202 @@ const FinancesForm = ({
 
 	const warningMessage =
 		gameSimInProgress && tid === userTid && !spectator ? (
-			<p className="text-danger">Stop game simulation to edit.</p>
+			<div className="text-danger mb-2">Stop game simulation to edit.</div>
 		) : null;
 
 	const formDisabled = gameSimInProgress || tid !== userTid || spectator;
 
+	const expenseCategories: {
+		key: BudgetKey;
+		title: string;
+	}[] = [
+		{
+			key: "scouting",
+			title: "Scouting",
+		},
+		{
+			key: "coaching",
+			title: "Coaching",
+		},
+		{
+			key: "health",
+			title: "Health",
+		},
+		{
+			key: "facilities",
+			title: "Facilities",
+		},
+	];
+
+	const ticketPriceForRank = state.autoTicketPrice
+		? autoTicketPrice
+		: parseFloat(state.ticketPrice);
+	const ticketPriceRankIndex = otherTeamTicketPrices.findIndex(
+		price => price < ticketPriceForRank,
+	);
+	const ticketPriceRank =
+		ticketPriceRankIndex < 0
+			? otherTeamTicketPrices.length + 1
+			: ticketPriceRankIndex + 1;
+
+	const [projectedAttendance, setProjectedAttendance] = useState<
+		number | undefined
+	>();
+	useEffect(() => {
+		let mounted = true;
+		(async () => {
+			const attendance = await toWorker("main", "getProjectedAttendance", {
+				tid,
+				ticketPrice: ticketPriceForRank,
+			});
+
+			if (mounted) {
+				setProjectedAttendance(attendance);
+			}
+		})();
+
+		return () => {
+			mounted = false;
+		};
+	}, [ticketPriceForRank, tid]);
+
 	return (
 		<form onSubmit={handleSubmit} className="mb-3">
-			<h3>
-				Revenue Settings{" "}
+			{warningMessage}
+			<h2>
+				Expense levels{" "}
+				<HelpPopover title="Expense levels">
+					<p>
+						Expense levels can be set between 1 and {MAX_LEVEL}. {DEFAULT_LEVEL}{" "}
+						is neutral, and at the high end there are diminishing returns to
+						increasing the level.
+					</p>
+					<p>Effects are based on your spending over the past 3 seasons.</p>
+				</HelpPopover>
+			</h2>
+			<div className="d-flex flex-column gap-3">
+				{expenseCategories.map(expenseCategory => {
+					const level = state[expenseCategory.key];
+					const levelInt = helpers.bound(
+						Math.round(parseFloat(state[expenseCategory.key])),
+						1,
+						MAX_LEVEL,
+					);
+					const levelThree = t.expenseLevelsLastThree[expenseCategory.key];
+
+					const formDisabledKey =
+						formDisabled ||
+						(expenseCategory.key === "scouting" && challengeNoRatings);
+
+					return (
+						<div key={expenseCategory.key}>
+							<h3>{expenseCategory.title} expense level</h3>
+							<div className="d-flex">
+								<div>
+									<div
+										className="input-group mb-1"
+										style={{
+											width: 120,
+										}}
+									>
+										<button
+											className="btn btn-secondary"
+											type="button"
+											disabled={
+												formDisabledKey ||
+												Number.isNaN(levelInt) ||
+												levelInt <= 1
+											}
+											onClick={() => {
+												setStateValue(expenseCategory.key, levelInt - 1);
+											}}
+										>
+											−
+										</button>
+										<input
+											type="text"
+											className="form-control text-center"
+											disabled={formDisabledKey}
+											onChange={handleChange(expenseCategory.key)}
+											value={level}
+											inputMode="numeric"
+										/>
+										<button
+											className="btn btn-secondary"
+											type="button"
+											disabled={
+												formDisabledKey ||
+												Number.isNaN(levelInt) ||
+												levelInt >= MAX_LEVEL
+											}
+											onClick={() => {
+												setStateValue(expenseCategory.key, levelInt + 1);
+											}}
+										>
+											+
+										</button>
+									</div>
+									<div>Average of last 3 seasons: {levelThree}</div>
+									<div>
+										Current annual cost:{" "}
+										{Number.isNaN(levelInt)
+											? "???"
+											: helpers.formatCurrency(
+													levelToAmount(levelInt, salaryCap * 1000) / 1000,
+													"M",
+											  )}
+									</div>
+								</div>
+								<div className="row ms-3" style={{ width: 350 }}>
+									{expenseCategory.key === "scouting" && godMode ? (
+										<div className="col-12">
+											Scouting does nothing in God Mode because you always see
+											accurate ratings.
+										</div>
+									) : (
+										<>
+											<div className="col-6">
+												<h4>Current effect</h4>
+												<BudgetEffect
+													type={expenseCategory.key}
+													level={levelThree}
+												/>
+											</div>
+											{levelInt !== levelThree ? (
+												<div className="col-6">
+													<h4>
+														After 3 years at level{" "}
+														{Number.isNaN(levelInt) ? "???" : levelInt}
+													</h4>
+													<BudgetEffect
+														type={expenseCategory.key}
+														level={levelInt}
+													/>
+												</div>
+											) : null}
+										</>
+									)}
+								</div>
+							</div>
+						</div>
+					);
+				})}
+			</div>
+			<h2 className="mt-4">
+				Ticket price{" "}
 				<HelpPopover title="Revenue Settings">
 					Set your ticket price too high, and attendance will decrease and some
 					fans will resent you for it. Set it too low, and you're not maximizing
 					your profit.
 				</HelpPopover>
-			</h3>
-			{warningMessage}
-			<div className="d-flex">
-				<div className="finances-settings-label">Ticket Price</div>
-				<div className="input-group input-group-xs finances-settings-field">
+			</h2>
+			<div className="d-flex align-items-center">
+				<div
+					className="input-group"
+					style={{
+						width: 115,
+					}}
+				>
 					<div className="input-group-text">$</div>
 					{state.autoTicketPrice ? (
 						<input
@@ -185,15 +477,22 @@ const FinancesForm = ({
 							disabled={formDisabled || state.autoTicketPrice}
 							onChange={handleChange("ticketPrice")}
 							value={state.ticketPrice}
+							inputMode="decimal"
 						/>
 					)}
 				</div>
-				<div className="finances-settings-text">
-					Leaguewide rank: #{t.budget.ticketPrice.rank}
+				<div className="ms-3">
+					<div>Ticket price rank: #{ticketPriceRank}</div>
+					<div>
+						Projected attendance:{" "}
+						{projectedAttendance !== undefined
+							? helpers.numberWithCommas(projectedAttendance)
+							: ""}
+					</div>
 				</div>
 			</div>
 			{phase === PHASE.PLAYOFFS ? (
-				<div className="mb-1 text-warning" style={paddingLeft85}>
+				<div className="mt-1 text-warning">
 					Playoffs price:{" "}
 					{helpers.formatCurrency(
 						getAdjustedTicketPrice(
@@ -205,7 +504,7 @@ const FinancesForm = ({
 					)}
 				</div>
 			) : null}
-			<div className="mt-1 mb-3" style={paddingLeft85}>
+			<div className="mt-1 d-flex">
 				<div className="form-check">
 					<label className="form-check-label">
 						<input
@@ -229,145 +528,33 @@ const FinancesForm = ({
 						</p>
 					</HelpPopover>
 				</div>
-			</div>
-			<h3>
-				Expense Settings{" "}
-				<HelpPopover title="Expense Settings">
-					<p>Scouting: Controls the accuracy of displayed player ratings.</p>
-					<p>Coaching: Better coaches mean better player development.</p>
-					<p>Health: A good team of doctors speeds recovery from injuries.</p>
-					<p>
-						Facilities: Better training facilities make your players happier and
-						other players envious; stadium renovations increase attendance.
-					</p>
-				</HelpPopover>
-			</h3>
-			<p>
-				Click the ? above to see what exactly each category does. Effects are
-				based on your spending rank over the past three seasons.
-			</p>
-			{warningMessage}
-			<div className="d-flex">
-				<div className="finances-settings-label">Scouting</div>
-				<div className="input-group input-group-xs finances-settings-field">
-					<div className="input-group-text">$</div>
-					<input
-						type="text"
-						className="form-control"
-						disabled={formDisabled || challengeNoRatings}
-						onChange={handleChange("scouting")}
-						value={state.scouting}
-					/>
-					<div className="input-group-text">M</div>
-				</div>
-				<div className="finances-settings-text-small">
-					Current spending rate: #{t.budget.scouting.rank}
-					<br />
-					{noSeasonData || phase === PHASE.PRESEASON ? (
-						<br />
-					) : (
-						`Spent this season: #${t.seasonAttrs.expenses.scouting.rank}`
-					)}
-				</div>
-			</div>
-			<div className="d-flex">
-				<div className="finances-settings-label">Coaching</div>
-				<div className="input-group input-group-xs finances-settings-field">
-					<div className="input-group-text">$</div>
-					<input
-						type="text"
-						className="form-control"
-						disabled={formDisabled}
-						onChange={handleChange("coaching")}
-						value={state.coaching}
-					/>
-					<div className="input-group-text">M</div>
-				</div>
-				<div className="finances-settings-text-small">
-					Current spending rate: #{t.budget.coaching.rank}
-					<br />
-					{noSeasonData || phase === PHASE.PRESEASON ? (
-						<br />
-					) : (
-						`Spent this season: #${t.seasonAttrs.expenses.coaching.rank}`
-					)}
-				</div>
-			</div>
-			<div className="d-flex">
-				<div className="finances-settings-label">Health</div>
-				<div className="input-group input-group-xs finances-settings-field">
-					<div className="input-group-text">$</div>
-					<input
-						type="text"
-						className="form-control"
-						disabled={formDisabled}
-						onChange={handleChange("health")}
-						value={state.health}
-					/>
-					<div className="input-group-text">M</div>
-				</div>
-				<div className="finances-settings-text-small">
-					Current spending rate: #{t.budget.health.rank}
-					<br />
-					{noSeasonData || phase === PHASE.PRESEASON ? (
-						<br />
-					) : (
-						`Spent this season: #${t.seasonAttrs.expenses.health.rank}`
-					)}
-				</div>
-			</div>
-			<div className="d-flex">
-				<div className="finances-settings-label">Facilities</div>
-				<div className="input-group input-group-xs finances-settings-field">
-					<div className="input-group-text">$</div>
-					<input
-						type="text"
-						className="form-control"
-						disabled={formDisabled}
-						onChange={handleChange("facilities")}
-						value={state.facilities}
-					/>
-					<div className="input-group-text">M</div>
-				</div>
-				<div className="finances-settings-text-small">
-					Current spending rate: #{t.budget.facilities.rank}
-					<br />
-					{noSeasonData || phase === PHASE.PRESEASON ? (
-						<br />
-					) : (
-						`Spent this season: #${t.seasonAttrs.expenses.facilities.rank}`
-					)}
-				</div>
-			</div>
-			<div className="mt-1" style={paddingLeft85}>
-				<div className="form-check">
+				<div className="form-check ms-4">
 					<label className="form-check-label">
 						<input
 							className="form-check-input"
 							onChange={handleChange("adjustForInflation")}
 							type="checkbox"
-							checked={state.adjustForInflation}
-							disabled={formDisabled}
+							checked={state.adjustForInflation || state.autoTicketPrice}
+							disabled={formDisabled || state.autoTicketPrice}
 						/>
 						Auto adjust for inflation
 					</label>
 					<HelpPopover title="Inflation adjustment" className="ms-1">
-						When enabled, all your revenue and expense settings will
-						automatically change whenever the salary cap changes. This will
-						generally maintain your ranks, although expansion teams and changes
-						made by AI teams can still result in your ranks changing.
+						When enabled, your ticket price will automatically change whenever
+						the salary cap changes.
 					</HelpPopover>
 				</div>
 			</div>
 			{tid === userTid && !spectator ? (
-				<div className="mt-5" style={paddingLeft85}>
+				<div className="mt-4" style={paddingLeft85}>
 					<button
 						className="btn btn-large btn-primary"
 						disabled={formDisabled || state.saving}
+						type="submit"
 					>
-						Save Revenue and
+						Save expense levels
 						<br />
-						Expense Settings
+						and ticket price
 					</button>
 				</div>
 			) : null}
@@ -375,69 +562,100 @@ const FinancesForm = ({
 	);
 };
 
-FinancesForm.propTypes = {
-	gameSimInProgress: PropTypes.bool.isRequired,
-	t: PropTypes.object.isRequired,
-	tid: PropTypes.number.isRequired,
-	userTid: PropTypes.number.isRequired,
-};
-
 const PayrollInfo = ({
-	hardCap,
 	luxuryPayroll,
 	luxuryTax,
 	minContract,
 	minPayroll,
 	payroll,
 	salaryCap,
+	salaryCapType,
 }: Pick<
 	View<"teamFinances">,
-	| "hardCap"
 	| "luxuryPayroll"
 	| "luxuryTax"
 	| "minContract"
 	| "minPayroll"
 	| "payroll"
 	| "salaryCap"
+	| "salaryCapType"
 >) => {
+	const parts = [
+		<>
+			{payroll > minPayroll ? "above" : "below"} the minimum payroll limit (
+			<b>{helpers.formatCurrency(minPayroll, "M")}</b>)
+		</>,
+	];
+
+	if (salaryCapType !== "none") {
+		parts.push(
+			<>
+				{payroll > salaryCap ? "above" : "below"} the salary cap (
+				<b>{helpers.formatCurrency(salaryCap, "M")}</b>)
+			</>,
+		);
+	}
+
+	if (salaryCapType !== "hard") {
+		parts.push(
+			<>
+				{payroll > luxuryPayroll ? "above" : "below"} the luxury tax limit (
+				<b>{helpers.formatCurrency(luxuryPayroll, "M")}</b>)
+			</>,
+		);
+	}
+
 	return (
 		<p>
 			The current payroll (<b>{helpers.formatCurrency(payroll, "M")}</b>) is{" "}
-			{payroll > minPayroll ? "above" : "below"} the minimum payroll limit (
-			<b>{helpers.formatCurrency(minPayroll, "M")}</b>){hardCap ? " and" : ","}{" "}
-			{payroll > salaryCap ? "above" : "below"} the salary cap (
-			<b>{helpers.formatCurrency(salaryCap, "M")}</b>)
-			{hardCap ? null : (
+			{parts.length <= 2 ? (
 				<>
-					, and {payroll > luxuryPayroll ? "above" : "below"} the luxury tax
-					limit (<b>{helpers.formatCurrency(luxuryPayroll, "M")}</b>)
+					{parts[0]} and {parts[1]}
+				</>
+			) : (
+				<>
+					{parts.slice(0, -1).map((part, i) => (
+						<Fragment key={i}>{part}, </Fragment>
+					))}
+					and {parts.at(-1)}
 				</>
 			)}
 			.{" "}
-			{hardCap ? (
+			{salaryCapType === "hard" ? (
 				<HelpPopover title="Payroll Limits">
 					<p>
 						The salary cap is a hard cap, meaning that you cannot exceed it,
 						even when re-signing your own players or making trades. The only
-						exception is that you can always sign players to minimum contracts
-						($
-						{minContract}
-						k/year), so you are never stuck with a team too small to play.
+						exception is that you can always sign players to minimum contracts (
+						{helpers.formatCurrency(minContract, "M")}/year), so you are never
+						stuck with a team too small to play.
 					</p>
 					<p>
 						Teams with payrolls below the minimum payroll limit will be assessed
 						a fine equal to the difference at the end of the season.
 					</p>
 				</HelpPopover>
-			) : (
+			) : salaryCapType === "soft" ? (
 				<HelpPopover title="Payroll Limits">
 					<p>
 						The salary cap is a soft cap, meaning that you can exceed it to
-						re-sign your own players, to sign free agents to minimum contracts
-						($
-						{minContract}
-						k/year), and when making certain trades; however, you cannot exceed
-						the salary cap to sign a free agent for more than the minimum.
+						re-sign your own players, to sign free agents to minimum contracts (
+						{helpers.formatCurrency(minContract, "M")}/year), and when making
+						certain trades; however, you cannot exceed the salary cap to sign a
+						free agent for more than the minimum.
+					</p>
+					<p>
+						Teams with payrolls below the minimum payroll limit will be assessed
+						a fine equal to the difference at the end of the season. Teams with
+						payrolls above the luxury tax limit will be assessed a fine equal to{" "}
+						{luxuryTax} times the difference at the end of the season.
+					</p>
+				</HelpPopover>
+			) : (
+				<HelpPopover title="Payroll Limits">
+					<p>
+						There is no salary cap, but the minimum payroll and luxury tax
+						limits still apply.
 					</p>
 					<p>
 						Teams with payrolls below the minimum payroll limit will be assessed
@@ -450,21 +668,12 @@ const PayrollInfo = ({
 		</p>
 	);
 };
-PayrollInfo.propTypes = {
-	hardCap: PropTypes.bool.isRequired,
-	luxuryPayroll: PropTypes.number.isRequired,
-	luxuryTax: PropTypes.number.isRequired,
-	minContract: PropTypes.number.isRequired,
-	minPayroll: PropTypes.number.isRequired,
-	payroll: PropTypes.number.isRequired,
-	salaryCap: PropTypes.number.isRequired,
-};
 
 const highlightZeroNegative = (amount: number) => {
 	const formattedValue = helpers.formatCurrency(amount, "M");
 
 	if (amount === 0) {
-		return { classNames: "text-muted", value: formattedValue };
+		return { classNames: "text-body-secondary", value: formattedValue };
 	}
 	if (amount < 0) {
 		return { classNames: "text-danger", value: formattedValue };
@@ -477,23 +686,24 @@ const TeamFinances = ({
 	abbrev,
 	autoTicketPrice,
 	barData,
-	barSeasons,
 	budget,
 	challengeNoRatings,
 	contractTotals,
 	contracts,
-	hardCap,
+	godMode,
 	luxuryPayroll,
 	luxuryTax,
 	maxStadiumCapacity,
 	minContract,
 	minPayroll,
 	numGames,
+	otherTeamTicketPrices,
 	spectator,
 	payroll,
 	phase,
 	salariesSeasons,
 	salaryCap,
+	salaryCapType,
 	show,
 	t,
 	tid,
@@ -505,9 +715,7 @@ const TeamFinances = ({
 		dropdownFields: { teams: abbrev, shows: show },
 	});
 
-	const { gameSimInProgress } = useLocalShallow(state => ({
-		gameSimInProgress: state.gameSimInProgress,
-	}));
+	const { gameSimInProgress } = useLocalPartial(["gameSimInProgress"]);
 
 	const cols = getCols(["Pos", "Name"]).concat(
 		salariesSeasons.map(season => {
@@ -520,18 +728,19 @@ const TeamFinances = ({
 	);
 
 	const rows = contracts.map((p, i) => {
-		const data: ReactNode[] = [
+		const data: DataTableRow["data"] = [
 			p.pos,
-			<PlayerNameLabels
-				injury={p.injury}
-				jerseyNumber={p.jerseyNumber}
-				pid={p.pid}
-				skills={p.skills}
-				style={{ fontStyle: p.released ? "italic" : "normal" }}
-				watch={p.watch}
-			>
-				{p.firstName} {p.lastName}
-			</PlayerNameLabels>,
+			wrappedPlayerNameLabels({
+				injury: p.injury,
+				jerseyNumber: p.jerseyNumber,
+				pid: p.pid,
+				skills: p.skills,
+				style: { fontStyle: p.released ? "italic" : "normal" },
+				watch: p.watch,
+				firstName: p.firstName,
+				firstNameShort: p.firstNameShort,
+				lastName: p.lastName,
+			}),
 		];
 
 		// Loop through the salaries for the next five years for this player.
@@ -557,30 +766,44 @@ const TeamFinances = ({
 
 	const footer = [
 		["", "Totals"].concat(
-			// @ts-ignore
+			// @ts-expect-error
 			contractTotals.map(amount => highlightZeroNegative(amount)),
 		),
-		["", "Free Cap Space"].concat(
-			// @ts-ignore
-			contractTotals.map(amount => highlightZeroNegative(salaryCap - amount)),
-		),
+		salaryCapType === "none"
+			? ["", "Under Luxury Tax"].concat(
+					// @ts-expect-error
+					contractTotals.map(amount =>
+						highlightZeroNegative(luxuryPayroll - amount),
+					),
+			  )
+			: ["", "Free Cap Space"].concat(
+					// @ts-expect-error
+					contractTotals.map(amount =>
+						highlightZeroNegative(salaryCap - amount),
+					),
+			  ),
 	];
 
 	// This happens for expansion teams before they have a TeamSeason
-	const noSeasonData = Object.keys(barData).length === 0;
+	const noSeasonData = barData.length === 0;
+
+	type Row = (typeof barData)[number];
+	const classNameOverride = (row: Row) =>
+		row.champ ? "bar-graph-3" : undefined;
+	const champSuffix = (row: Row) => (row.champ ? ", won championship" : "");
 
 	return (
 		<>
 			<MoreLinks type="team" page="team_finances" abbrev={abbrev} tid={tid} />
 
 			<PayrollInfo
-				hardCap={hardCap}
 				luxuryPayroll={luxuryPayroll}
 				luxuryTax={luxuryTax}
 				minContract={minContract}
 				minPayroll={minPayroll}
 				payroll={payroll}
 				salaryCap={salaryCap}
+				salaryCapType={salaryCapType}
 			/>
 
 			{budget ? null : (
@@ -596,9 +819,11 @@ const TeamFinances = ({
 					<h3>Wins</h3>
 					<div className="bar-graph-small">
 						<BarGraph
-							data={barData.won}
-							labels={barSeasons}
+							data={barData}
+							y={["won"]}
+							tooltip={row => `${row.season}: ${row.won}${champSuffix(row)}`}
 							ylim={[0, numGames]}
+							classNameOverride={classNameOverride}
 						/>
 					</div>
 					<br />
@@ -615,12 +840,13 @@ const TeamFinances = ({
 					</h3>
 					<div id="bar-graph-hype" className="bar-graph-small">
 						<BarGraph
-							data={barData.hype}
-							labels={barSeasons}
-							tooltipCb={val =>
-								typeof val === "number" ? val.toFixed(2) : val
+							data={barData}
+							y={["hype"]}
+							tooltip={row =>
+								`${row.season}: ${row.hype.toFixed(2)}${champSuffix(row)}`
 							}
 							ylim={[0, 1]}
+							classNameOverride={classNameOverride}
 						/>
 					</div>
 					<br />
@@ -628,12 +854,13 @@ const TeamFinances = ({
 					<h3>Region Population</h3>
 					<div id="bar-graph-pop" className="bar-graph-small">
 						<BarGraph
-							data={barData.pop}
-							labels={barSeasons}
-							tooltipCb={val =>
-								typeof val === "number" ? `${val.toFixed(1)}M` : val
+							data={barData}
+							y={["pop"]}
+							tooltip={row =>
+								`${row.season}: ${row.pop.toFixed(1)}M${champSuffix(row)}`
 							}
 							ylim={[0, 20]}
+							classNameOverride={classNameOverride}
 						/>
 					</div>
 					<br />
@@ -641,14 +868,15 @@ const TeamFinances = ({
 					<h3>Average Attendance</h3>
 					<div id="bar-graph-att" className="bar-graph-small">
 						<BarGraph
-							data={barData.att}
-							labels={barSeasons}
-							tooltipCb={val =>
-								typeof val === "number"
-									? helpers.numberWithCommas(Math.round(val))
-									: val
+							data={barData}
+							y={["att"]}
+							tooltip={row =>
+								`${row.season}: ${helpers.numberWithCommas(
+									Math.round(row.att),
+								)}${champSuffix(row)}`
 							}
 							ylim={[0, maxStadiumCapacity]}
+							classNameOverride={classNameOverride}
 						/>
 					</div>
 				</div>
@@ -657,30 +885,31 @@ const TeamFinances = ({
 						<h3>Revenue</h3>
 						<div id="bar-graph-revenue" className="bar-graph-large">
 							<BarGraph
-								data={[
-									barData.revenues.nationalTv,
-									barData.revenues.localTv,
-									barData.revenues.ticket,
-									barData.revenues.sponsor,
-									barData.revenues.merch,
-									barData.revenues.luxuryTaxShare,
+								data={barData}
+								y={[
+									"revenuesNationalTv",
+									"revenuesLocalTv",
+									"revenuesTicket",
+									"revenuesSponsor",
+									"revenuesMerch",
+									"revenuesLuxuryTaxShare",
 								]}
-								labels={[
-									barSeasons,
-									[
-										"national TV revenue",
-										"local TV revenue",
-										"ticket revenue",
-										"corporate sponsorship revenue",
-										"merchandising revenue",
-										"luxury tax share revenue",
-									],
-								]}
-								tooltipCb={val =>
-									typeof val === "number"
-										? helpers.formatCurrency(val / 1000, "M", 1)
-										: val
-								}
+								tooltip={(row, y) => {
+									const text = {
+										revenuesNationalTv: "national TV revenue",
+										revenuesLocalTv: "local TV revenue",
+										revenuesTicket: "ticket revenue",
+										revenuesSponsor: "corporate sponsorship revenue",
+										revenuesMerch: "merchandising revenue",
+										revenuesLuxuryTaxShare: "luxury tax share revenue",
+									};
+
+									return `${row.season} ${text[y]}: ${helpers.formatCurrency(
+										row[y] / 1000,
+										"M",
+										1,
+									)}`;
+								}}
 							/>
 						</div>
 						<br />
@@ -688,32 +917,33 @@ const TeamFinances = ({
 						<h3>Expenses</h3>
 						<div id="bar-graph-expenses" className="bar-graph-large">
 							<BarGraph
-								data={[
-									barData.expenses.salary,
-									barData.expenses.minTax,
-									barData.expenses.luxuryTax,
-									barData.expenses.scouting,
-									barData.expenses.coaching,
-									barData.expenses.health,
-									barData.expenses.facilities,
+								data={barData}
+								y={[
+									"expensesSalary",
+									"expensesMinTax",
+									"expensesLuxuryTax",
+									"expensesScouting",
+									"expensesCoaching",
+									"expensesHealth",
+									"expensesFacilities",
 								]}
-								labels={[
-									barSeasons,
-									[
-										"player salaries",
-										"minimum payroll tax",
-										"luxury tax",
-										"scouting",
-										"coaching",
-										"health",
-										"facilities",
-									],
-								]}
-								tooltipCb={val =>
-									typeof val === "number"
-										? helpers.formatCurrency(val / 1000, "M", 1)
-										: val
-								}
+								tooltip={(row, y) => {
+									const text = {
+										expensesSalary: "player salaries",
+										expensesMinTax: "minimum payroll tax",
+										expensesLuxuryTax: "luxury tax",
+										expensesScouting: "scouting",
+										expensesCoaching: "coaching",
+										expensesHealth: "health",
+										expensesFacilities: "facilities",
+									};
+
+									return `${row.season} ${text[y]}: ${helpers.formatCurrency(
+										row[y] / 1000,
+										"M",
+										1,
+									)}`;
+								}}
 							/>
 						</div>
 						<br />
@@ -721,13 +951,16 @@ const TeamFinances = ({
 						<h3>Cash (cumulative)</h3>
 						<div id="bar-graph-cash" className="bar-graph-medium">
 							<BarGraph
-								data={barData.cash}
-								labels={barSeasons}
-								tooltipCb={val =>
-									typeof val === "number"
-										? helpers.formatCurrency(val, "M", 1)
-										: val
+								data={barData}
+								y={["cash"]}
+								tooltip={row =>
+									`${row.season}: ${helpers.formatCurrency(
+										row.cash,
+										"M",
+										1,
+									)}${champSuffix(row)}`
 								}
+								classNameOverride={classNameOverride}
 							/>
 						</div>
 					</div>
@@ -735,12 +968,15 @@ const TeamFinances = ({
 				{budget ? (
 					<div className="col-lg-5 col-md-6 col-sm-7">
 						<FinancesForm
+							key={tid}
 							autoTicketPrice={autoTicketPrice}
 							challengeNoRatings={challengeNoRatings}
 							gameSimInProgress={gameSimInProgress}
-							noSeasonData={noSeasonData}
-							spectator={spectator}
+							godMode={godMode}
+							otherTeamTicketPrices={otherTeamTicketPrices}
 							phase={phase}
+							salaryCap={salaryCap}
+							spectator={spectator}
 							t={t}
 							tid={tid}
 							userTid={userTid}
@@ -767,31 +1003,6 @@ const TeamFinances = ({
 			/>
 		</>
 	);
-};
-
-TeamFinances.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	barData: PropTypes.object.isRequired,
-	barSeasons: PropTypes.arrayOf(PropTypes.number).isRequired,
-	budget: PropTypes.bool.isRequired,
-	contractTotals: PropTypes.arrayOf(PropTypes.number).isRequired,
-	contracts: PropTypes.arrayOf(PropTypes.object).isRequired,
-	hardCap: PropTypes.bool.isRequired,
-	luxuryPayroll: PropTypes.number.isRequired,
-	luxuryTax: PropTypes.number.isRequired,
-	maxStadiumCapacity: PropTypes.number.isRequired,
-	minContract: PropTypes.number.isRequired,
-	minPayroll: PropTypes.number.isRequired,
-	numGames: PropTypes.number.isRequired,
-	spectator: PropTypes.bool.isRequired,
-	payroll: PropTypes.number.isRequired,
-	phase: PropTypes.number.isRequired,
-	salariesSeasons: PropTypes.arrayOf(PropTypes.number).isRequired,
-	salaryCap: PropTypes.number.isRequired,
-	show: PropTypes.oneOf(["10", "all"]).isRequired,
-	t: PropTypes.object.isRequired,
-	tid: PropTypes.number.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default TeamFinances;

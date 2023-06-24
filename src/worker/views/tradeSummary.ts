@@ -15,6 +15,7 @@ import { player, team } from "../core";
 import { idb } from "../db";
 import { g, getTeamInfoBySeason, helpers } from "../util";
 import { assetIsPlayer, getPlayerFromPick } from "../util/formatEventText";
+import { getRoundsWonText } from "./frivolitiesTeamSeasons";
 
 const findRatingsRow = (
 	allRatings: MinimalPlayerRatings[],
@@ -35,7 +36,7 @@ const findRatingsRow = (
 			return ratings;
 		}
 
-		return allRatings.at(-1);
+		return allRatings.at(-1)!;
 	} else {
 		for (let i = allRatings.length - 1; i >= 0; i--) {
 			const ratings = allRatings[i];
@@ -48,12 +49,22 @@ const findRatingsRow = (
 	}
 };
 
+type StatSumsBySeason = Record<
+	number,
+	{
+		stat: number;
+		statTeam: number;
+	}
+>;
+type StatSumsBySeasons = [StatSumsBySeason, StatSumsBySeason];
+
 const findStatSum = (
 	allStats: PlayerStats[],
 	statsIndex: number | undefined, // undefined means it was a traded draft pick, so include all stats
 	season: number,
 	phase: Phase,
-	statSumsBySeason?: Record<number, number>,
+	tid: number,
+	statSumsBySeason?: StatSumsBySeason,
 ) => {
 	// >= 0 check is for rookies traded after the draft, where they have no stats entry so it is -1
 	let index = statsIndex !== undefined && statsIndex >= 0 ? statsIndex : 0;
@@ -72,10 +83,12 @@ const findStatSum = (
 	}
 
 	let statSum = 0;
+	let statSumTeam = 0;
 	for (let i = 0; i < allStats.length; i++) {
 		const row = allStats[i];
 
 		const stat = bySport({
+			baseball: row.war,
 			basketball: row.ows + row.dws,
 			football: row.av,
 			hockey: row.ops + row.dps + row.gps,
@@ -89,6 +102,10 @@ const findStatSum = (
 			statsIndex === -1
 		) {
 			statSum += stat;
+
+			if (row.tid === tid) {
+				statSumTeam += stat;
+			}
 		}
 
 		// Including before trade
@@ -98,14 +115,23 @@ const findStatSum = (
 				(row.season === g.get("season") &&
 					g.get("phase") >= PHASE.REGULAR_SEASON)
 			) {
-				if (!statSumsBySeason[row.season]) {
-					statSumsBySeason[row.season] = 0;
+				if (statSumsBySeason[row.season] === undefined) {
+					statSumsBySeason[row.season] = {
+						stat: 0,
+						statTeam: 0,
+					};
 				}
-				statSumsBySeason[row.season] += stat;
+				statSumsBySeason[row.season].stat += stat;
+				if (row.tid === tid) {
+					statSumsBySeason[row.season].statTeam += stat;
+				}
 			}
 		}
 	}
-	return statSum;
+	return {
+		stat: statSum,
+		statTeam: statSumTeam,
+	};
 };
 
 const getActualPlayerInfo = (
@@ -114,16 +140,18 @@ const getActualPlayerInfo = (
 	statsIndex: number | undefined,
 	season: number,
 	phase: Phase,
-	statSumsBySeason?: Record<number, number>,
+	tid: number,
+	statSumsBySeason?: StatSumsBySeason,
 	draftPick: boolean = false,
 ) => {
 	const ratings = findRatingsRow(p.ratings, ratingsIndex, season, phase);
 
-	const stat = findStatSum(
+	const { stat, statTeam } = findStatSum(
 		p.stats,
 		statsIndex,
 		season,
 		phase,
+		tid,
 		statSumsBySeason,
 	);
 
@@ -136,7 +164,8 @@ const getActualPlayerInfo = (
 		retiredYear: p.retiredYear,
 		skills: ratings.skills,
 		stat,
-		watch: !!p.watch,
+		statTeam,
+		watch: p.watch ?? 0,
 	};
 };
 
@@ -144,7 +173,7 @@ const getSeasonsToPlot = async (
 	season: number,
 	phase: Phase,
 	tids: [number, number],
-	statSumsBySeason: [Record<number, number>, Record<number, number>],
+	statSumsBySeason: StatSumsBySeasons,
 ) => {
 	// Default range of the plot, relative to the season of the trade
 	const start = season - (phase <= PHASE.PLAYOFFS ? 2 : 1);
@@ -174,9 +203,23 @@ const getSeasonsToPlot = async (
 			lost?: number;
 			tied?: number;
 			otl?: number;
+			champ?: boolean;
+			region?: string;
+			name?: string;
+			abbrev?: string;
+			roundsWonText?: string;
+			season: number;
 			stat?: number;
+			statTeam?: number;
 		};
-		const teams: [Team, Team] = [{}, {}];
+		const teams: [Team, Team] = [
+			{
+				season: i,
+			},
+			{
+				season: i,
+			},
+		];
 		for (let j = 0; j < tids.length; j++) {
 			const tid = tids[j];
 			let teamSeason;
@@ -197,15 +240,30 @@ const getSeasonsToPlot = async (
 					teamSeason.tied > 0 ||
 					teamSeason.otl > 0)
 			) {
-				teams[j].won = teamSeason.won;
-				teams[j].lost = teamSeason.lost;
-				teams[j].tied = teamSeason.tied;
-				teams[j].otl = teamSeason.otl;
-				teams[j].winp = helpers.calcWinp(teamSeason);
-				teams[j].ptsPct = team.ptsPct(teamSeason);
+				teams[j] = {
+					...teams[j],
+					won: teamSeason.won,
+					lost: teamSeason.lost,
+					tied: teamSeason.tied,
+					otl: teamSeason.otl,
+					winp: helpers.calcWinp(teamSeason),
+					ptsPct: team.ptsPct(teamSeason),
+					champ:
+						teamSeason.playoffRoundsWon ===
+						g.get("numGamesPlayoffSeries", teamSeason.season).length,
+					region: teamSeason.region ?? g.get("teamInfoCache")[tid].region,
+					name: teamSeason.name ?? g.get("teamInfoCache")[tid].name,
+					abbrev: teamSeason.abbrev ?? g.get("teamInfoCache")[tid].abbrev,
+					roundsWonText: getRoundsWonText(teamSeason).toLocaleLowerCase(),
+				};
 			}
 
-			teams[j].stat = statSumsBySeason[j][i];
+			if (statSumsBySeason[j][i]?.stat > 0) {
+				teams[j].stat = statSumsBySeason[j][i]?.stat;
+			}
+			if (statSumsBySeason[j][i]?.statTeam > 0) {
+				teams[j].statTeam = statSumsBySeason[j][i]?.statTeam;
+			}
 		}
 
 		seasons.push({
@@ -232,8 +290,9 @@ type CommonActualPlayer = {
 	pot: number;
 	retiredYear: number;
 	skills: string[];
-	watch: boolean;
+	watch: number;
 	stat: number;
+	statTeam: number;
 };
 
 type CommonPick = {
@@ -245,12 +304,10 @@ type CommonPick = {
 
 type TradeEvent = DiscriminateUnion<EventBBGM, "type", "trade">;
 
-type StatSumsBySeason = [Record<number, number>, Record<number, number>];
-
 export const processAssets = async (
 	event: TradeEvent,
 	i: number,
-	statSumsBySeason?: StatSumsBySeason,
+	statSumsBySeason?: StatSumsBySeasons,
 ) => {
 	if (!event.teams || event.phase === undefined) {
 		throw new Error("Invalid event");
@@ -290,6 +347,7 @@ export const processAssets = async (
 					asset.statsIndex,
 					event.season,
 					event.phase,
+					event.tids[i],
 					statSumsBySeason ? statSumsBySeason[i] : undefined,
 				);
 
@@ -335,6 +393,7 @@ export const processAssets = async (
 					undefined,
 					event.season,
 					event.phase,
+					event.tids[i],
 					statSumsBySeason ? statSumsBySeason[i] : undefined,
 					true,
 				);
@@ -386,7 +445,7 @@ const updateTradeSummary = async (
 
 		const teams = [];
 
-		const statSumsBySeason: StatSumsBySeason = [{}, {}];
+		const statSumsBySeason: StatSumsBySeasons = [{}, {}];
 
 		for (let i = 0; i < event.tids.length; i++) {
 			const tid = event.tids[i];
@@ -398,11 +457,12 @@ const updateTradeSummary = async (
 			const assets = await processAssets(event, i, statSumsBySeason);
 
 			let statSum = 0;
+			let statSumTeam = 0;
 			for (const asset of assets) {
 				// https://github.com/microsoft/TypeScript/issues/21732
-				const stat = (asset as any).stat;
-				if (typeof stat === "number") {
-					statSum += stat;
+				if (asset.type === "player" || asset.type === "realizedPick") {
+					statSum += asset.stat;
+					statSumTeam += asset.statTeam;
 				}
 			}
 
@@ -413,6 +473,7 @@ const updateTradeSummary = async (
 				tid,
 				assets,
 				statSum,
+				statSumTeam,
 			});
 		}
 
@@ -432,7 +493,12 @@ const updateTradeSummary = async (
 			teams,
 			season: event.season,
 			phase: event.phase,
-			stat: bySport({ basketball: "WS", football: "AV", hockey: "PS" }),
+			stat: bySport({
+				baseball: "WAR",
+				basketball: "WS",
+				football: "AV",
+				hockey: "PS",
+			}),
 			seasonsToPlot,
 			usePts,
 		};

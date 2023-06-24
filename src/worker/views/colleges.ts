@@ -3,6 +3,7 @@ import { g, helpers, processPlayersHallOfFame } from "../util";
 import type { UpdateEvents, Player } from "../../common/types";
 import { bySport } from "../../common";
 import { getValueStatsRow } from "../core/player/checkJerseyNumberRetirement";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 type InfoTemp = {
 	numPlayers: number;
@@ -19,6 +20,7 @@ type InfoTemp = {
 };
 
 const displayStatNames = bySport({
+	baseball: ["war"],
 	basketball: ["ows", "dws"],
 	football: ["av"],
 	hockey: ["ops", "dps", "gps"],
@@ -98,11 +100,13 @@ export const genView = (
 		// In theory should update more frequently, but the list is potentially expensive to update and rarely changes
 		if (updateEvents.includes("firstRun")) {
 			const displayStat = bySport({
+				baseball: "war",
 				basketball: "ws",
 				football: "av",
 				hockey: "ps",
 			});
 			const stats = bySport({
+				baseball: ["keyStats", "war"],
 				basketball: [
 					"gp",
 					"min",
@@ -135,7 +139,8 @@ export const genView = (
 					const p = await idb.getCopy.playersPlus(info.best.p, {
 						attrs: [
 							"pid",
-							"name",
+							"firstName",
+							"lastName",
 							"draft",
 							"retiredYear",
 							"statsTids",
@@ -159,6 +164,13 @@ export const genView = (
 					};
 				}),
 			);
+
+			// Hacky crap because p is nested
+			const players = infos.map(info => info.p);
+			const playersWithFirstNameShort = addFirstNameShort(players);
+			for (let i = 0; i < infos.length; i++) {
+				infos[i].p = playersWithFirstNameShort[i];
+			}
 
 			return {
 				challengeNoRatings: g.get("challengeNoRatings"),

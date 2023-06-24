@@ -1,5 +1,4 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import type { View } from "../../common/types";
 import { helpers } from "../util";
 
@@ -169,7 +168,7 @@ const Team = ({
 				"fw-bold": won,
 				"table-info": highlightUser,
 				"table-warning": won && extraHighlight && !highlightUser,
-				"text-muted": lost,
+				"text-body-secondary": lost,
 			})}
 		>
 			<TeamLogo team={team} lost={lost} />
@@ -194,7 +193,7 @@ const Team = ({
 				<div className="me-1 overflow-hidden">
 					<a
 						className={classNames({
-							"text-muted": lost,
+							"text-body-secondary": lost,
 						})}
 						href={helpers.leagueUrl([
 							"roster",
@@ -212,16 +211,8 @@ const Team = ({
 						)}
 					</a>
 					<br />
-					<span className="text-muted">
-						{team.regularSeason.won}-{team.regularSeason.lost}
-						{team.regularSeason.otl !== undefined &&
-						team.regularSeason.otl > 0 ? (
-							<>-{team.regularSeason.otl}</>
-						) : null}
-						{team.regularSeason.tied !== undefined &&
-						team.regularSeason.tied > 0 ? (
-							<>-{team.regularSeason.tied}</>
-						) : null}
+					<span className="text-body-secondary">
+						{helpers.formatRecord(team.regularSeason)}
 					</span>
 				</div>
 			)}
@@ -262,14 +253,8 @@ const PlayoffMatchup = ({
 		return null;
 	}
 
-	const homeWon =
-		!series.away ||
-		(series.home.hasOwnProperty("won") &&
-			series.home.won === numGamesToWinSeries);
-	const awayWon =
-		!!series.away &&
-		series.away.hasOwnProperty("won") &&
-		series.away.won === numGamesToWinSeries;
+	const homeWon = !series.away || series.home.won === numGamesToWinSeries;
+	const awayWon = !!series.away && series.away.won === numGamesToWinSeries;
 	const showPts =
 		!!series.away &&
 		series.away.pts !== undefined &&
@@ -310,31 +295,6 @@ const PlayoffMatchup = ({
 			/>
 		</ul>
 	);
-};
-
-PlayoffMatchup.propTypes = {
-	expandTeamNames: PropTypes.bool,
-	numGamesToWinSeries: PropTypes.number,
-	season: PropTypes.number.isRequired,
-	series: PropTypes.shape({
-		away: PropTypes.shape({
-			abbrev: PropTypes.string.isRequired,
-			region: PropTypes.string.isRequired,
-			seed: PropTypes.number.isRequired,
-			tid: PropTypes.number.isRequired,
-			pts: PropTypes.number,
-			won: PropTypes.number,
-		}),
-		home: PropTypes.shape({
-			abbrev: PropTypes.string.isRequired,
-			region: PropTypes.string.isRequired,
-			seed: PropTypes.number.isRequired,
-			tid: PropTypes.number.isRequired,
-			pts: PropTypes.number,
-			won: PropTypes.number,
-		}),
-	}),
-	userTid: PropTypes.number.isRequired,
 };
 
 export default PlayoffMatchup;

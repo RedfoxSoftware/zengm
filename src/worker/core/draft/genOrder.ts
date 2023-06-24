@@ -22,14 +22,23 @@ type ReturnVal = DraftLotteryResult & {
 	>;
 };
 
+const LOTTERY_DRAFT_TYPES = [
+	"nba1994",
+	"nba2019",
+	"coinFlip",
+	"randomLottery",
+	"randomLotteryFirst3",
+	"nba1990",
+	"nhl2017",
+	"nhl2021",
+	"mlb2022",
+	"custom",
+] as const;
+
 // chances does not have to be the perfect length. If chances is too long for numLotteryTeams, it will be truncated. If it's too short, the last entry will be repeated until it's long enough.
-export const getLotteryInfo = (
-	draftType: DraftType,
-	numLotteryTeams: number,
-) => {
+const getLotteryInfo = (draftType: DraftType, numLotteryTeams: number) => {
 	if (draftType === "coinFlip") {
 		return {
-			minNumTeams: 2,
 			numToPick: 2,
 			chances: [1, 1, 0],
 		};
@@ -37,7 +46,6 @@ export const getLotteryInfo = (
 
 	if (draftType === "randomLottery") {
 		return {
-			minNumTeams: numLotteryTeams,
 			numToPick: numLotteryTeams,
 			chances: [1],
 		};
@@ -45,7 +53,6 @@ export const getLotteryInfo = (
 
 	if (draftType === "randomLotteryFirst3") {
 		return {
-			minNumTeams: 3,
 			numToPick: 3,
 			chances: [1],
 		};
@@ -58,7 +65,6 @@ export const getLotteryInfo = (
 		}
 
 		return {
-			minNumTeams: 3,
 			numToPick: 3,
 			chances,
 		};
@@ -66,7 +72,6 @@ export const getLotteryInfo = (
 
 	if (draftType === "nba1994") {
 		return {
-			minNumTeams: 3,
 			numToPick: 3,
 			chances: [250, 199, 156, 119, 88, 63, 43, 28, 17, 11, 8, 7, 6, 5],
 		};
@@ -74,7 +79,6 @@ export const getLotteryInfo = (
 
 	if (draftType === "nba2019") {
 		return {
-			minNumTeams: 4,
 			numToPick: 4,
 			chances: [140, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5],
 		};
@@ -82,46 +86,75 @@ export const getLotteryInfo = (
 
 	if (draftType === "nhl2017") {
 		return {
-			minNumTeams: 3,
 			numToPick: 3,
 			chances: [185, 135, 115, 95, 85, 75, 65, 60, 50, 35, 30, 25, 20, 15, 10],
+		};
+	}
+
+	if (draftType === "nhl2021") {
+		return {
+			numToPick: 2,
+			chances: [
+				185, 135, 115, 95, 85, 75, 65, 60, 50, 35, 30, 25, 20, 15, 5, 5,
+			],
+		};
+	}
+
+	if (draftType === "mlb2022") {
+		return {
+			numToPick: 6,
+			chances: [
+				1650, 1650, 1650, 1325, 1000, 750, 550, 390, 270, 180, 140, 110, 90, 76,
+				62, 48, 36, 23,
+			],
+		};
+	}
+
+	if (draftType === "custom") {
+		return {
+			numToPick: g.get("draftLotteryCustomNumPicks"),
+			chances: [...g.get("draftLotteryCustomChances")],
 		};
 	}
 
 	throw new Error(`Unsupported draft type "${draftType}"`);
 };
 
-const LOTTERY_DRAFT_TYPES = [
-	"nba1994",
-	"nba2019",
-	"coinFlip",
-	"randomLottery",
-	"randomLotteryFirst3",
-	"nba1990",
-	"nhl2017",
-] as const;
-
-export const draftHasLottey = (
+const draftHasLottery = (
 	draftType: any,
 ): draftType is typeof LOTTERY_DRAFT_TYPES[number] => {
 	return LOTTERY_DRAFT_TYPES.includes(draftType);
 };
 
+export const getNumToPick = (
+	draftType: DraftType | "dummy" | undefined,
+	numLotteryTeams: number,
+) => {
+	if (draftHasLottery(draftType)) {
+		return getLotteryInfo(draftType, numLotteryTeams).numToPick;
+	}
+
+	return 0;
+};
+
 const TIEBREAKER_AFTER_FIRST_ROUND = bySport<"swap" | "rotate" | "same">({
+	baseball: "swap", // MLB uses last year's record
 	basketball: "swap",
 	football: "rotate",
 	hockey: "same",
 });
 
+const DIVIDE_CHANCES_OVER_TIED_TEAMS = bySport({
+	baseball: false,
+	basketball: true,
+	football: false,
+	hockey: false,
+});
+
 /**
  * Sets draft order and save it to the draftPicks object store.
  *
- * This is currently based on an NBA-like lottery, where the first 3 picks can be any of the non-playoff teams (with weighted probabilities).
- *
  * If mock is true, then nothing is actually saved to the database and no notifications are sent
- *
- * @memberOf core.draft
- * @return {Promise}
  */
 const genOrder = async (
 	mock: boolean = false,
@@ -134,8 +167,9 @@ const genOrder = async (
 	const draftPicks = await genOrderGetPicks(mock);
 	const draftPicksIndexed: DraftPickWithoutKey[][] = [];
 	for (const dp of draftPicks) {
-		const tid = dp.originalTid; // Initialize to an array
+		const tid = dp.originalTid;
 
+		// Initialize to an array
 		if (draftPicksIndexed[tid] === undefined) {
 			draftPicksIndexed[tid] = [];
 		}
@@ -155,7 +189,7 @@ const genOrder = async (
 	const firstN: number[] = [];
 	let numLotteryTeams = 0;
 	let chances: number[] = [];
-	if (draftHasLottey(draftType)) {
+	if (draftHasLottery(draftType)) {
 		const numPlayoffTeams =
 			2 ** g.get("numGamesPlayoffSeries", "current").length -
 			g.get("numPlayoffByes", "current");
@@ -164,11 +198,10 @@ const genOrder = async (
 			draftType,
 			firstRoundTeams.length - numPlayoffTeams,
 		);
-		const minNumLotteryTeams = info.minNumTeams;
 		const numToPick = info.numToPick;
 		chances = info.chances;
 
-		if (firstRoundTeams.length < minNumLotteryTeams) {
+		if (firstRoundTeams.length < numToPick) {
 			const error = new Error(
 				`Number of teams with draft picks (${firstRoundTeams.length}) is less than the minimum required for draft type "${draftType}"`,
 			);
@@ -178,19 +211,19 @@ const genOrder = async (
 
 		numLotteryTeams = helpers.bound(
 			firstRoundTeams.length - numPlayoffTeams,
-			minNumLotteryTeams,
-			draftType === "coinFlip" ? minNumLotteryTeams : firstRoundTeams.length,
+			numToPick,
+			draftType === "coinFlip" ? numToPick : firstRoundTeams.length,
 		);
 
 		if (numLotteryTeams < chances.length) {
 			chances = chances.slice(0, numLotteryTeams);
 		} else {
 			while (numLotteryTeams > chances.length) {
-				chances.push(chances.at(-1));
+				chances.push(chances.at(-1)!);
 			}
 		}
 
-		if (draftType.startsWith("nba")) {
+		if (DIVIDE_CHANCES_OVER_TIED_TEAMS) {
 			divideChancesOverTiedTeams(chances, firstRoundTeams, true);
 		}
 
@@ -230,7 +263,7 @@ const genOrder = async (
 			}
 		}
 
-		const totalChances = chancesCumsum.at(-1);
+		const totalChances = chancesCumsum.at(-1)!;
 
 		// Pick first 3 or 4 picks based on chancesCumsum
 		let iterations = 0;
@@ -328,7 +361,7 @@ const genOrder = async (
 	}
 
 	let draftLotteryResult: ReturnVal | undefined;
-	if (draftHasLottey(draftType)) {
+	if (draftHasLottery(draftType)) {
 		const usePts = g.get("pointsFormula", "current") !== "";
 
 		// Save draft lottery results separately

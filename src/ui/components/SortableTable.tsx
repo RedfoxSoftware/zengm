@@ -1,5 +1,4 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -9,6 +8,8 @@ import {
 } from "react-sortable-hoc";
 import ResponsiveTableWrapper from "./ResponsiveTableWrapper";
 import useClickable from "../hooks/useClickable";
+import type { StickyCols } from "./DataTable";
+import useStickyXX from "./DataTable/useStickyXX";
 
 type HighlightHandle<Value> = (a: { index: number; value: Value }) => boolean;
 type RowClassName<Value> = (a: {
@@ -48,11 +49,6 @@ const ReorderHandle = SortableHandle(
 	},
 );
 
-ReorderHandle.propTypes = {
-	highlight: PropTypes.bool.isRequired,
-	isDragged: PropTypes.bool.isRequired,
-};
-
 const Row = SortableElement(
 	(props: {
 		className?: string;
@@ -62,6 +58,7 @@ const Row = SortableElement(
 		isDragged: boolean;
 		selected: boolean;
 		row: Row<ShouldBeValue>;
+		rowLabel?: string;
 		value: ShouldBeValue;
 	}) => {
 		const { clicked, toggleClicked } = useClickable();
@@ -73,6 +70,7 @@ const Row = SortableElement(
 			i,
 			isDragged,
 			row,
+			rowLabel,
 			selected,
 			value,
 		} = props;
@@ -84,7 +82,12 @@ const Row = SortableElement(
 				})}
 				onClick={toggleClicked}
 			>
-				{disabled2 ? null : (
+				{rowLabel !== undefined ? (
+					<td className="text-center">{rowLabel}</td>
+				) : null}
+				{disabled2 ? (
+					<td className="p-0" />
+				) : (
 					<ReorderHandle
 						highlight={highlight}
 						isDragged={isDragged}
@@ -100,17 +103,6 @@ const Row = SortableElement(
 	},
 );
 
-// @ts-ignore
-Row.propTypes = {
-	className: PropTypes.string,
-	disabled2: PropTypes.bool,
-	highlight: PropTypes.bool.isRequired,
-	index: PropTypes.number.isRequired,
-	isDragged: PropTypes.bool.isRequired,
-	row: PropTypes.func.isRequired,
-	value: PropTypes.object.isRequired,
-};
-
 const TBody = SortableContainer(
 	({
 		disabled,
@@ -119,6 +111,7 @@ const TBody = SortableContainer(
 		isDragged,
 		row,
 		rowClassName,
+		rowLabels,
 		values,
 	}: {
 		disabled?: boolean;
@@ -127,6 +120,7 @@ const TBody = SortableContainer(
 		isDragged: boolean;
 		row: ShouldBeValue;
 		rowClassName?: RowClassName<ShouldBeValue>;
+		rowLabels?: string[];
 		values: ShouldBeValue[];
 	}) => {
 		return (
@@ -139,9 +133,9 @@ const TBody = SortableContainer(
 
 					// Hacky! Would be better to pass in explicitly. If `index` is just used, then it breaks highlighting (highlight doesn't move with row when dragged)
 					let key;
-					if (value.hasOwnProperty("pid")) {
+					if (Object.hasOwn(value, "pid")) {
 						key = value.pid;
-					} else if (value.hasOwnProperty("tid")) {
+					} else if (Object.hasOwn(value, "tid")) {
 						key = value.tid;
 					} else {
 						key = index;
@@ -157,6 +151,7 @@ const TBody = SortableContainer(
 							index={index}
 							isDragged={isDragged}
 							selected={indexSelected === index}
+							rowLabel={rowLabels ? rowLabels[index] ?? "" : undefined}
 							row={row}
 							value={value}
 						/>
@@ -167,16 +162,6 @@ const TBody = SortableContainer(
 	},
 );
 
-// @ts-ignore
-TBody.propTypes = {
-	disabled: PropTypes.bool,
-	highlightHandle: PropTypes.func.isRequired,
-	isDragged: PropTypes.bool.isRequired,
-	row: PropTypes.func.isRequired,
-	rowClassName: PropTypes.func,
-	values: PropTypes.array.isRequired,
-};
-
 const SortableTable = <Value extends Record<string, unknown>>({
 	cols,
 	disabled,
@@ -185,6 +170,8 @@ const SortableTable = <Value extends Record<string, unknown>>({
 	onSwap,
 	row,
 	rowClassName,
+	rowLabels,
+	stickyCols = 0,
 	values,
 }: {
 	cols: () => ReactNode;
@@ -194,12 +181,16 @@ const SortableTable = <Value extends Record<string, unknown>>({
 	onSwap: (index1: number, index2: number) => void;
 	row: Row<Value>;
 	rowClassName?: RowClassName<Value>;
+	rowLabels?: string[];
+	stickyCols?: StickyCols;
 	values: Value[];
 }) => {
 	const [isDragged, setIsDragged] = useState(false);
 	const [indexSelected, setIndexSelected] = useState<number | undefined>(
 		undefined,
 	);
+
+	const { stickyClass, tableRef } = useStickyXX(stickyCols);
 
 	// Hacky shit to try to determine click from drag. Could just be a boolean, except on mobile seems sorting fires twice in a row, so we need to track the time to debounce.
 	const clicked = useRef<{
@@ -210,32 +201,36 @@ const SortableTable = <Value extends Record<string, unknown>>({
 		time: 0,
 	});
 
-	const onSortStart = useCallback(({ node, index }) => {
-		setIsDragged(true);
+	const onSortStart = useCallback(
+		({ node, index }: { node: Element; index: number }) => {
+			setIsDragged(true);
 
-		// Hack to avoid responding to duiplicated event on mobile
-		const ignoreToDebounce = Date.now() - clicked.current.time < 500;
-		if (!ignoreToDebounce) {
-			clicked.current.index = index;
-		}
+			// Hack to avoid responding to duiplicated event on mobile
+			const ignoreToDebounce = Date.now() - clicked.current.time < 500;
+			if (!ignoreToDebounce) {
+				clicked.current.index = index;
+			}
 
-		// https://github.com/clauderic/react-sortable-hoc/issues/361#issuecomment-471907612
-		const tds = document.getElementsByClassName("SortableHelper")[0].childNodes;
-		for (let i = 0; i < tds.length; i++) {
-			const childNode = node.childNodes[i];
-			// @ts-ignore
-			tds[i].style.width = `${childNode.offsetWidth}px`;
-			// @ts-ignore
-			tds[i].style.padding = "5px";
-		}
-	}, []);
+			// https://github.com/clauderic/react-sortable-hoc/issues/361#issuecomment-471907612
+			const tds =
+				document.getElementsByClassName("SortableHelper")[0].childNodes;
+			for (let i = 0; i < tds.length; i++) {
+				const childNode = node.childNodes[i];
+				// @ts-expect-error
+				tds[i].style.width = `${childNode.offsetWidth}px`;
+				// @ts-expect-error
+				tds[i].style.padding = "4px";
+			}
+		},
+		[],
+	);
 
 	const onSortOver = useCallback(() => {
 		clicked.current.index = undefined;
 	}, []);
 
 	const onSortEnd = useCallback(
-		({ oldIndex, newIndex }) => {
+		({ oldIndex, newIndex }: { oldIndex: number; newIndex: number }) => {
 			setIsDragged(false);
 
 			// Hack to avoid responding to duiplicated event on mobile
@@ -266,12 +261,19 @@ const SortableTable = <Value extends Record<string, unknown>>({
 		[onChange, onSwap, indexSelected],
 	);
 
+	let tableClasses =
+		"table table-striped table-borderless table-sm table-hover";
+	if (stickyClass) {
+		tableClasses += ` ${stickyClass}`;
+	}
+
 	return (
 		<ResponsiveTableWrapper nonfluid>
-			<table className="table table-striped table-bordered table-sm table-hover">
+			<table ref={tableRef} className={tableClasses}>
 				<thead>
 					<tr>
-						{disabled ? null : <th />}
+						<th className="p-0" />
+						{rowLabels ? <th className="p-0" /> : null}
 						{cols()}
 					</tr>
 				</thead>
@@ -286,6 +288,7 @@ const SortableTable = <Value extends Record<string, unknown>>({
 					onSortOver={onSortOver}
 					row={row}
 					rowClassName={rowClassName}
+					rowLabels={rowLabels}
 					transitionDuration={0}
 					values={values}
 					useDragHandle
@@ -293,16 +296,6 @@ const SortableTable = <Value extends Record<string, unknown>>({
 			</table>
 		</ResponsiveTableWrapper>
 	);
-};
-
-SortableTable.propTypes = {
-	cols: PropTypes.func.isRequired,
-	disabled: PropTypes.bool,
-	highlightHandle: PropTypes.func.isRequired,
-	onChange: PropTypes.func.isRequired,
-	row: PropTypes.func.isRequired,
-	rowClassName: PropTypes.func,
-	values: PropTypes.array.isRequired,
 };
 
 export default SortableTable;

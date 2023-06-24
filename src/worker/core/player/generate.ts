@@ -13,7 +13,7 @@ const generate = (
 	age: number,
 	draftYear: number,
 	newLeague: boolean,
-	scoutingRank: number,
+	scoutingLevel: number,
 	{
 		college,
 		country,
@@ -36,10 +36,18 @@ const generate = (
 ): PlayerWithoutKey<MinimalPlayerRatings> => {
 	const { heightInInches, ratings } = genRatings(
 		newLeague ? g.get("startingSeason") : draftYear,
-		scoutingRank,
+		scoutingLevel,
 	);
+	// lastName += `-${genPos}`;
 
-	const weight = genWeight(ratings.hgt, ratings.stre);
+	const weight = genWeight(ratings.hgt, (ratings as any).stre);
+
+	let actualHeightInInches = g.get("heightFactor") * heightInInches;
+	if (g.get("gender") === "female") {
+		// Ratio comes from average USA stats
+		actualHeightInInches *= 0.92;
+	}
+	actualHeightInInches = Math.round(actualHeightInInches);
 
 	const p = {
 		awards: [],
@@ -65,7 +73,7 @@ const generate = (
 		face: face.generate(race),
 		firstName,
 		gamesUntilTradable: 0,
-		hgt: heightInInches,
+		hgt: actualHeightInInches,
 		imgURL: "",
 		// Custom rosters can define player image URLs to be used rather than vector faces
 		injury: {

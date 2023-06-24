@@ -3,6 +3,7 @@ import { idb } from "../db";
 import g from "./g";
 import type { TeamFiltered } from "../../common/types";
 import advStatsSave from "./advStatsSave";
+import { groupByUnique } from "../../common/groupBy";
 
 type Team = TeamFiltered<
 	["tid"],
@@ -36,16 +37,18 @@ const calculatePS = (players: any[], teams: Team[], league: any) => {
 			gc: 0,
 			min: 0,
 		},
-		defensemen: {
+		defense: {
 			gc: 0,
 			min: 0,
 		},
 	};
 	const sumsByPosition: Record<number, any> = {};
 
+	const teamsByTid = groupByUnique(teams, "tid");
+
 	// Goals created
 	const gc = players.map(p => {
-		const t = teams.find(t => t.tid === p.tid);
+		const t = teamsByTid[p.tid];
 		if (t === undefined) {
 			throw new Error("Should never happen");
 		}
@@ -60,8 +63,8 @@ const calculatePS = (players: any[], teams: Team[], league: any) => {
 			sumsByType.forwards.gc += gcPlayer;
 			sumsByType.forwards.min += p.stats.min;
 		} else if (DEFENSIVE_POSITIONS.includes(p.ratings.pos)) {
-			sumsByType.defensemen.gc += gcPlayer;
-			sumsByType.defensemen.min += p.stats.min;
+			sumsByType.defense.gc += gcPlayer;
+			sumsByType.defense.min += p.stats.min;
 		}
 
 		if (!sumsByPosition[t.tid]) {
@@ -82,7 +85,7 @@ const calculatePS = (players: any[], teams: Team[], league: any) => {
 
 	for (let i = 0; i < players.length; i++) {
 		const p = players[i];
-		const t = teams.find(t => t.tid === p.tid);
+		const t = teamsByTid[p.tid];
 		if (t === undefined) {
 			throw new Error("Should never happen");
 		}
@@ -113,7 +116,7 @@ const calculatePS = (players: any[], teams: Team[], league: any) => {
 					p.ratings.pos,
 				)
 					? "forwards"
-					: "defensemen";
+					: "defense";
 
 				// Offensive point shares
 				const marginalGoals =
@@ -191,14 +194,14 @@ const advStats = async () => {
 	);
 	const league: any = teams.reduce((memo: any, t) => {
 		for (const key of teamStats) {
-			if (memo.hasOwnProperty(key)) {
+			if (Object.hasOwn(memo, key)) {
 				memo[key] += t.stats[key];
 			} else {
 				memo[key] = t.stats[key];
 			}
 		}
 
-		if (!memo.hasOwnProperty("ptsDefault")) {
+		if (!Object.hasOwn(memo, "ptsDefault")) {
 			memo.ptsDefault = 0;
 		}
 		if (playoffs) {
@@ -209,7 +212,7 @@ const advStats = async () => {
 		}
 
 		if (t.stats.gp > 0) {
-			if (memo.hasOwnProperty("gPerGame")) {
+			if (Object.hasOwn(memo, "gPerGame")) {
 				memo.gPerGame += t.stats.g / t.stats.gp;
 			} else {
 				memo.gPerGame = t.stats.g / t.stats.gp;

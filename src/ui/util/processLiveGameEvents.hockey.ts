@@ -1,5 +1,5 @@
 import { getPeriodName } from "../../common";
-import { helpers } from ".";
+import { helpers, local } from ".";
 import type {
 	PlayByPlayEvent,
 	PlayByPlayEventScore,
@@ -107,7 +107,10 @@ const getText = (
 		text = `Saved by ${event.names[0]}`;
 	}
 	if (event.type === "save-freeze") {
-		text = `Saved by ${event.names[0]}, and he freezes the puck`;
+		text = `Saved by ${event.names[0]}, and ${helpers.pronoun(
+			local.getState().gender,
+			"he",
+		)} freezes the puck`;
 	}
 	if (event.type === "faceoff") {
 		text = `${event.names[0]} wins the faceoff against ${event.names[1]}`;
@@ -170,6 +173,7 @@ const processLiveGameEvents = ({
 	events: PlayByPlayEvent[];
 	boxScore: {
 		quarter: string;
+		quarterShort: string;
 		numPeriods: number;
 		overtime?: string;
 		teams: any;
@@ -190,7 +194,7 @@ const processLiveGameEvents = ({
 		}
 
 		// Swap teams order, so home team is at bottom in box score
-		// @ts-ignore
+		// @ts-expect-error
 		const actualT = e.t === 0 ? 1 : 0;
 
 		if (e.type !== "init" && !quarters.includes(e.quarter)) {
@@ -198,8 +202,8 @@ const processLiveGameEvents = ({
 			boxScore.teams[0].ptsQtrs.push(0);
 			boxScore.teams[1].ptsQtrs.push(0);
 
-			const ptsQtrs = boxScore.teams[0].ptsQtrs;
-			if (ptsQtrs.length > boxScore.numPeriods) {
+			const quarter = boxScore.teams[0].ptsQtrs.length;
+			if (quarter > boxScore.numPeriods) {
 				overtimes += 1;
 				if (overtimes === 1) {
 					boxScore.overtime = " (OT)";
@@ -207,10 +211,15 @@ const processLiveGameEvents = ({
 					boxScore.overtime = ` (${overtimes}OT)`;
 				}
 				boxScore.quarter = `${helpers.ordinal(overtimes)} overtime`;
+				boxScore.quarterShort = overtimes === 1 ? "OT" : `${overtimes}OT`;
 			} else {
-				boxScore.quarter = `${helpers.ordinal(ptsQtrs.length)} ${getPeriodName(
+				boxScore.quarter = `${helpers.ordinal(quarter)} ${getPeriodName(
 					boxScore.numPeriods,
 				)}`;
+				boxScore.quarterShort = `${getPeriodName(
+					boxScore.numPeriods,
+					true,
+				)}${quarter}`;
 			}
 
 			if (e.type !== "stat" && e.type !== "playersOnIce") {
@@ -243,7 +252,7 @@ const processLiveGameEvents = ({
 					p[e.s] += e.amt;
 				}
 			}
-			if (boxScore.teams[actualT].hasOwnProperty(e.s)) {
+			if (boxScore.teams[actualT][e.s] !== undefined) {
 				boxScore.teams[actualT][e.s] += e.amt;
 			}
 		} else if (e.type === "playersOnIce") {

@@ -2,6 +2,7 @@ import { bySport, PHASE } from "../../common";
 import { idb } from "../db";
 import { g, processPlayersHallOfFame } from "../util";
 import type { UpdateEvents } from "../../common/types";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updatePlayers = async (inputs: unknown, updateEvents: UpdateEvents) => {
 	if (
@@ -10,6 +11,7 @@ const updatePlayers = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			g.get("phase") === PHASE.DRAFT_LOTTERY)
 	) {
 		const stats = bySport({
+			baseball: ["keyStats", "war"],
 			basketball: [
 				"gp",
 				"min",
@@ -31,14 +33,21 @@ const updatePlayers = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			"noCopyCache",
 		);
 		const players = await idb.getCopies.playersPlus(playersAll, {
-			attrs: ["pid", "name", "draft", "retiredYear", "statsTids"],
+			attrs: [
+				"pid",
+				"firstName",
+				"lastName",
+				"draft",
+				"retiredYear",
+				"statsTids",
+			],
 			ratings: ["ovr", "pos"],
 			stats: ["season", "abbrev", "tid", ...stats],
 			fuzz: true,
 		});
 
 		return {
-			players: processPlayersHallOfFame(players),
+			players: addFirstNameShort(processPlayersHallOfFame(players)),
 			stats,
 			userTid: g.get("userTid"),
 		};

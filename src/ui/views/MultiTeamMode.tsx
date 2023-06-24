@@ -1,13 +1,12 @@
-import PropTypes from "prop-types";
-import { useCallback, ChangeEvent, useRef } from "react";
+import { useCallback, type ChangeEvent, useRef } from "react";
 import { bySport, isSport, PHASE } from "../../common";
 import useTitleBar from "../hooks/useTitleBar";
-import { toWorker, logEvent } from "../util";
+import { toWorker, logEvent, helpers } from "../util";
 import type { View } from "../../common/types";
 import orderBy from "lodash-es/orderBy";
 
 const handleAutoSort = async (tids: number[]) => {
-	await toWorker("main", "autoSortRoster", undefined, tids);
+	await toWorker("main", "autoSortRoster", { tids });
 };
 
 const handleResetPT = async (tids: number[]) => {
@@ -15,6 +14,7 @@ const handleResetPT = async (tids: number[]) => {
 };
 
 const MultiTeamMode = ({
+	godMode,
 	phase,
 	teams,
 	userTid,
@@ -64,6 +64,18 @@ const MultiTeamMode = ({
 	);
 
 	useTitleBar({ title: "Multi Team Mode" });
+
+	if (!godMode) {
+		return (
+			<div>
+				<h2>Error</h2>
+				<p>
+					You cannot switch to a new team now unless you enable{" "}
+					<a href={helpers.leagueUrl(["god_mode"])}>God Mode</a>.
+				</p>
+			</div>
+		);
+	}
 
 	if (phase === PHASE.RESIGN_PLAYERS) {
 		return (
@@ -128,10 +140,10 @@ const MultiTeamMode = ({
 				(command+click on Mac) to select individual teams.
 			</p>
 
-			<div className="btn-group mb-3">
+			<div className="d-flex mb-3">
 				<button
 					type="button"
-					className="btn btn-light-bordered"
+					className="btn btn-light-bordered me-2"
 					onClick={async () => {
 						await toWorker("main", "updateMultiTeamMode", {
 							userTids: teams.map(t => t.tid),
@@ -198,18 +210,6 @@ const MultiTeamMode = ({
 			</div>
 		</>
 	);
-};
-
-MultiTeamMode.propTypes = {
-	phase: PropTypes.number.isRequired,
-	teams: PropTypes.arrayOf(
-		PropTypes.shape({
-			name: PropTypes.string.isRequired,
-			tid: PropTypes.number.isRequired,
-		}),
-	).isRequired,
-	userTid: PropTypes.number.isRequired,
-	userTids: PropTypes.arrayOf(PropTypes.number).isRequired,
 };
 
 export default MultiTeamMode;

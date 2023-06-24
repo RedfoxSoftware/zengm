@@ -3,6 +3,7 @@ import { player } from "../core";
 import { idb } from "../db";
 import { g } from "../util";
 import type { UpdateEvents, ViewInput } from "../../common/types";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updatePlayers = async (
 	inputs: ViewInput<"watchList">,
@@ -18,6 +19,7 @@ const updatePlayers = async (
 		inputs.flagNote !== state.flagNote
 	) {
 		const stats = bySport({
+			baseball: ["gp", "keyStats", "war"],
 			basketball: [
 				"gp",
 				"min",
@@ -45,34 +47,37 @@ const updatePlayers = async (
 			"noCopyCache",
 		);
 
-		const players = await idb.getCopies.playersPlus(playersAll, {
-			attrs: [
-				"pid",
-				"name",
-				"age",
-				"ageAtDeath",
-				"injury",
-				"tid",
-				"abbrev",
-				"watch",
-				"contract",
-				"draft",
-				"jerseyNumber",
-				"note",
-			],
-			ratings: ["ovr", "pot", "skills", "pos"],
-			stats,
-			season: g.get("season"),
-			statType: inputs.statType,
-			playoffs: inputs.playoffs === "playoffs",
-			regularSeason: inputs.playoffs !== "playoffs",
-			fuzz: true,
-			showNoStats: true,
-			showRookies: true,
-			showRetired: true,
-			showDraftProspectRookieRatings: true,
-			oldStats: true,
-		});
+		const players = addFirstNameShort(
+			await idb.getCopies.playersPlus(playersAll, {
+				attrs: [
+					"pid",
+					"firstName",
+					"lastName",
+					"age",
+					"ageAtDeath",
+					"injury",
+					"tid",
+					"abbrev",
+					"watch",
+					"contract",
+					"draft",
+					"jerseyNumber",
+					"note",
+				],
+				ratings: ["ovr", "pot", "skills", "pos"],
+				stats,
+				season: g.get("season"),
+				statType: inputs.statType,
+				playoffs: inputs.playoffs === "playoffs",
+				regularSeason: inputs.playoffs !== "playoffs",
+				fuzz: true,
+				showNoStats: true,
+				showRookies: true,
+				showRetired: true,
+				showDraftProspectRookieRatings: true,
+				oldStats: true,
+			}),
+		);
 
 		// Add mood to free agent contracts
 		for (const p of players) {

@@ -1,9 +1,7 @@
-import PropTypes from "prop-types";
 import {
 	DataTable,
 	DraftAbbrev,
 	SkillsBlock,
-	PlayerNameLabels,
 	MoreLinks,
 	PlusMinus,
 } from "../components";
@@ -11,7 +9,7 @@ import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers, useLocal } from "../util";
 import type { View } from "../../common/types";
 import { PLAYER } from "../../common";
-import SeasonIcons from "./Player/SeasonIcons";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const DraftTeamHistory = ({
 	abbrev,
@@ -91,36 +89,24 @@ const DraftTeamHistory = ({
 				`${p.draft.round}-${p.draft.pick}`,
 				p.preLotteryRank,
 				p.lotteryChange !== undefined ? (
-					<PlusMinus decimalPlaces={0} includePlus>
-						{p.lotteryChange}
-					</PlusMinus>
+					<PlusMinus decimalPlaces={0}>{p.lotteryChange}</PlusMinus>
 				) : undefined,
 				p.lotteryProb !== undefined ? (
 					<a href={helpers.leagueUrl(["draft_lottery", p.draft.year])}>
 						{(p.lotteryProb * 100).toFixed(1)}%
 					</a>
 				) : undefined,
-				{
-					value: (
-						<div className="d-flex">
-							<PlayerNameLabels
-								jerseyNumber={p.jerseyNumber}
-								pid={p.pid}
-								season={p.draft.year}
-								skills={p.currentSkills}
-								watch={p.watch}
-							>
-								{p.name}
-							</PlayerNameLabels>
-							<div className="ms-auto">
-								<SeasonIcons className="ms-1" awards={p.awards} playoffs />
-								<SeasonIcons className="ms-1" awards={p.awards} />
-							</div>
-						</div>
-					),
-					sortValue: p.name,
-					searchValue: p.name,
-				},
+				wrappedPlayerNameLabels({
+					awards: p.awards,
+					jerseyNumber: p.jerseyNumber,
+					pid: p.pid,
+					season: p.draft.year,
+					skills: p.currentSkills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.pos,
 				{
 					searchValue: `${teamInfoCache[p.draft.tid]?.abbrev} ${
@@ -184,6 +170,7 @@ const DraftTeamHistory = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[0, "desc"]}
+				defaultStickyCols={2}
 				name="DraftTeamHistory"
 				rows={rows}
 				superCols={superCols}
@@ -191,14 +178,6 @@ const DraftTeamHistory = ({
 			/>
 		</>
 	);
-};
-
-DraftTeamHistory.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	draftType: PropTypes.string.isRequired,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userAbbrev: PropTypes.string.isRequired,
 };
 
 export default DraftTeamHistory;

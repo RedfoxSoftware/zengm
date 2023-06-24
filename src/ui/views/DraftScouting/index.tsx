@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { useState } from "react";
 import DraftClass from "./DraftClass";
 import useTitleBar from "../../hooks/useTitleBar";
@@ -10,6 +9,7 @@ const PAGE_SIZE = 3;
 const DraftScouting = ({
 	challengeNoRatings,
 	draftType,
+	fantasyDraft,
 	godMode,
 	seasons,
 }: View<"draftScouting">) => {
@@ -78,6 +78,7 @@ const DraftScouting = ({
 						<div key={info.season} className="col-md-4 col-sm-6">
 							<DraftClass
 								challengeNoRatings={challengeNoRatings}
+								fantasyDraft={fantasyDraft}
 								godMode={godMode}
 								offset={offset}
 								players={info.players}
@@ -89,16 +90,6 @@ const DraftScouting = ({
 			</div>
 		</>
 	);
-};
-
-DraftScouting.propTypes = {
-	draftType: PropTypes.string,
-	seasons: PropTypes.arrayOf(
-		PropTypes.shape({
-			players: PropTypes.arrayOf(PropTypes.object).isRequired,
-			season: PropTypes.number.isRequired,
-		}),
-	).isRequired,
 };
 
 export default DraftScouting;

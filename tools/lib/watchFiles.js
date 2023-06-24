@@ -1,11 +1,11 @@
-const chokidar = require("chokidar");
-const build = require("./buildFuncs");
+import chokidar from "chokidar";
+import { copyFiles, genRev, reset, setTimestamps } from "./buildFuncs.js";
 
 // Would be better to only copy individual files on update, but this is fast enough
 
 const watchFiles = (updateStart, updateEnd, updateError) => {
 	const watcher = chokidar.watch(
-		["public", "data", "node_modules/flag-icon-css"],
+		["public", "data", "node_modules/flag-icons"],
 		{},
 	);
 
@@ -15,11 +15,11 @@ const watchFiles = (updateStart, updateEnd, updateError) => {
 		try {
 			updateStart(outFilename);
 
-			build.copyFiles(true);
+			copyFiles(true);
 
-			const rev = build.genRev();
-			build.setTimestamps(rev, true);
-			//build.minifyIndexHTML();
+			const rev = genRev();
+			setTimestamps(rev, true);
+			//minifyIndexHTML();
 
 			updateEnd(outFilename);
 		} catch (error) {
@@ -27,10 +27,10 @@ const watchFiles = (updateStart, updateEnd, updateError) => {
 		}
 	};
 
-	build.reset();
+	reset();
 	buildWatchFiles();
 
 	watcher.on("change", buildWatchFiles);
 };
 
-module.exports = watchFiles;
+export default watchFiles;

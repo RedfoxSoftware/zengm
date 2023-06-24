@@ -1,12 +1,15 @@
-import { ChangeEvent, useRef, useState } from "react";
-import { Dropdown, Modal } from "react-bootstrap";
+import { type ChangeEvent, useRef, useState } from "react";
+import { Dropdown } from "react-bootstrap";
 import { helpers, logEvent } from "../../util";
 import classNames from "classnames";
-import { isInvalidNumber, PlayerBioInfoState } from "./PlayerBioInfo";
+import { isInvalidNumber, type PlayerBioInfoState } from "./PlayerBioInfo";
 import {
 	PlayerBioInfoRowButton,
 	smallColStyle,
 } from "./PlayerBioInfoCountries";
+import PlayerBioInfoSortButton from "./PlayerBioInfoSortButton";
+import Modal from "../../components/Modal";
+import orderBy from "lodash-es/orderBy";
 
 type RaceRow = PlayerBioInfoState["countries"][number]["races"][number];
 
@@ -212,13 +215,12 @@ const CollegesControls = ({
 				</button>
 				<Dropdown>
 					<Dropdown.Toggle
-						className="btn-light-bordered btn-light-bordered-group-right"
+						className="btn-light-bordered btn-light-bordered-group-left btn-light-bordered-group-right"
 						variant="foo"
 						id="dropdown-colleges-reset"
 					>
 						Reset
 					</Dropdown.Toggle>
-
 					<Dropdown.Menu>
 						<Dropdown.Item
 							onClick={() => {
@@ -236,6 +238,22 @@ const CollegesControls = ({
 						</Dropdown.Item>
 					</Dropdown.Menu>
 				</Dropdown>
+				<PlayerBioInfoSortButton
+					type="colleges"
+					onClick={(field, direction) => {
+						let colleges: typeof rows;
+						if (field === "name") {
+							colleges = orderBy(rows, field, direction);
+						} else {
+							colleges = orderBy(
+								rows,
+								row => parseInt(row.frequency),
+								direction,
+							);
+						}
+						onSave(colleges);
+					}}
+				/>
 			</div>
 		</>
 	);
@@ -364,7 +382,7 @@ export const CollegesEditor = ({
 									: "Value must be blank (default) or between 0 and 1."}
 							</span>
 						) : (
-							<span className="form-text text-muted">
+							<span className="form-text text-body-secondary">
 								{defaults
 									? "By default, USA and Canada have their own default fraction that override this value."
 									: `Leave blank to use the current default value (${defaultFractionSkipCollege}).`}
@@ -499,13 +517,12 @@ const NamesControls = ({
 				</button>
 				<Dropdown>
 					<Dropdown.Toggle
-						className="btn-light-bordered btn-light-bordered-group-right"
+						className="btn-light-bordered btn-light-bordered-group-left btn-light-bordered-group-right"
 						variant="foo"
 						id="dropdown-names-reset"
 					>
 						Reset
 					</Dropdown.Toggle>
-
 					<Dropdown.Menu>
 						{defaultRows ? (
 							<Dropdown.Item
@@ -525,6 +542,18 @@ const NamesControls = ({
 						</Dropdown.Item>
 					</Dropdown.Menu>
 				</Dropdown>
+				<PlayerBioInfoSortButton
+					type="names"
+					onClick={(field, direction) => {
+						let names: typeof rows;
+						if (field === "name") {
+							names = orderBy(rows, field, direction);
+						} else {
+							names = orderBy(rows, row => parseInt(row.frequency), direction);
+						}
+						onSave(names);
+					}}
+				/>
 			</div>
 		</>
 	);
@@ -765,7 +794,7 @@ export const FlagEditor = ({
 								setFlagEdited(event.target.value);
 							}}
 						/>
-						<span className="form-text text-muted">
+						<span className="form-text text-body-secondary">
 							Enter the URL to an image of a flag. Leave blank to use the
 							default built-in flag for this country.
 						</span>

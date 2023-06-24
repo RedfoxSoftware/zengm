@@ -1,8 +1,9 @@
 /* eslint-disable import/first */
 import "./util/initBugsnag";
 import "bbgm-polyfills"; // eslint-disable-line
+import "bbgm-polyfills-ui"; // eslint-disable-line
 import type { ReactNode } from "react";
-import ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 import api from "./api";
 import { Controller, ErrorBoundary } from "./components";
 import router from "./router";
@@ -12,6 +13,7 @@ import { EMAIL_ADDRESS, GAME_NAME, WEBSITE_ROOT } from "../common";
 import Bugsnag from "@bugsnag/browser";
 window.bbgm = { api, ...util };
 const {
+	analyticsEvent,
 	compareVersions,
 	confirm,
 	genStaticPage,
@@ -47,16 +49,14 @@ const handleVersion = async () => {
 			}
 		}
 	});
-	api.bbgmPing("version");
+	analyticsEvent("app_version", {
+		app_version: window.bbgmVersion,
+	});
 
-	if (window.withGoodUI) {
-		window.withGoodUI();
-	}
+	window.withGoodUI?.();
 
-	toWorker("main", "ping").then(() => {
-		if (window.withGoodWorker) {
-			window.withGoodWorker();
-		}
+	toWorker("main", "ping", undefined).then(() => {
+		window.withGoodWorker?.();
 	});
 
 	// Check if there are other tabs open with a different version
@@ -68,7 +68,7 @@ const handleVersion = async () => {
 		if (cmpResult === 1) {
 			// This version is newer than another tab's - send a signal to the other tabs
 			let conflictNum = parseInt(
-				// @ts-ignore
+				// @ts-expect-error
 				safeLocalStorage.getItem("bbgmVersionConflict"),
 			);
 
@@ -182,17 +182,12 @@ const setupEnv = async () => {
 };
 
 const render = () => {
-	const contentEl = document.getElementById("content");
-
-	if (!contentEl) {
-		throw new Error('Could not find element with id "content"');
-	}
-
-	ReactDOM.render(
+	const container = document.getElementById("content");
+	const root = createRoot(container!);
+	root.render(
 		<ErrorBoundary>
 			<Controller />
 		</ErrorBoundary>,
-		contentEl,
 	);
 };
 
@@ -201,22 +196,27 @@ const setupRoutes = () => {
 	router.start({
 		routeMatched: async ({ context }) => {
 			if (!context.state.backendRedirect) {
-				if (
+				const liveGame =
 					window.location.pathname.includes("/live_game") &&
-					!context.path.includes("/live_game")
-				) {
-					const liveGameInProgress = local.getState().liveGameInProgress;
-					if (liveGameInProgress) {
-						const proceed = await confirm(
-							"If you navigate away from this page, you won't be able to see these play-by-play results again.",
-							{
-								okText: "Navigate Away",
-								cancelText: "Stay Here",
-							},
-						);
-						if (!proceed) {
-							return false;
-						}
+					!context.path.includes("/live_game") &&
+					local.getState().liveGameInProgress;
+				const liveGameExhibition =
+					window.location.pathname.includes("/exhibition/game") &&
+					!context.path.includes("/exhibition/game");
+				if (liveGame || liveGameExhibition) {
+					const proceed = await confirm(
+						`If you navigate away from this page, you won't be able to see ${
+							window.location.pathname.includes("/exhibition")
+								? "this box score"
+								: "these play-by-play results"
+						} again.`,
+						{
+							okText: "Navigate Away",
+							cancelText: "Stay Here",
+						},
+					);
+					if (!proceed) {
+						return false;
 					}
 				}
 
@@ -250,12 +250,30 @@ const setupRoutes = () => {
 			if (!context.state.noTrack) {
 				if (window.enableLogging) {
 					if (!initialLoad) {
-						if (window.gtag) {
-							window.gtag("config", window.googleAnalyticsID, {
-								// Normalize league URLs to all look the same
-								page_path: context.path.replace(/^\/l\/[0-9]+/, "/l/0"),
-							});
-						}
+						const pagePath = context.path.replace(/^\/l\/[0-9]+/, "/l/0");
+
+						// https://developers.google.com/analytics/devguides/collection/gtagjs/pages
+						analyticsEvent("page_view", {
+							page_path: pagePath,
+
+							// https://online-metrics.com/page-view-in-google-analytics-4/
+							page_location: `${location.origin}${pagePath}`,
+						});
+
+						// https://help.freestar.com/help/how-to-track-virtual-page-views
+						window.freestar.queue.push(() => {
+							window.freestar.trackPageview();
+						});
+
+						// https://developers.google.com/analytics/devguides/collection/gtagjs/single-page-applications
+						// gtag('set', 'page_path', pagePath);
+						// gtag('event', 'page_view');
+
+						/*// Prev, also similar to https://developers.google.com/analytics/devguides/collection/ga4/views?technology=websites - but did not work
+						window.gtag("config", window.googleAnalyticsID, {
+							// Normalize league URLs to all look the same
+							page_path: pagePath,
+						});*/
 
 						/*if (window._qevents) {
 							window._qevents.push({
@@ -337,7 +355,7 @@ const setupRoutes = () => {
 
 (async () => {
 	promiseWorker.register(([name, ...params]) => {
-		if (!api.hasOwnProperty(name)) {
+		if (!Object.hasOwn(api, name)) {
 			throw new Error(
 				`API call to nonexistant UI function "${name}" with params ${JSON.stringify(
 					params,
@@ -346,7 +364,7 @@ const setupRoutes = () => {
 		}
 
 		// https://github.com/microsoft/TypeScript/issues/21732
-		// @ts-ignore
+		// @ts-expect-error
 		return api[name](...params);
 	});
 	await handleVersion();

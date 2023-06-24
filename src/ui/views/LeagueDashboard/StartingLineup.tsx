@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import {
 	PlayerNameLabels,
 	RatingWithChange,
@@ -6,7 +5,8 @@ import {
 } from "../../components";
 import { getCols, helpers } from "../../util";
 import type { View } from "../../../common/types";
-import { isSport } from "../../../common";
+import { DEPTH_CHART_NAME, isSport } from "../../../common";
+import { Contract } from "../../components/contract";
 
 const StartingLineup = ({
 	challengeNoRatings,
@@ -28,7 +28,7 @@ const StartingLineup = ({
 					: "Top Players"}
 			</h2>
 			<ResponsiveTableWrapper nonfluid className="mb-0">
-				<table className="table table-striped table-bordered table-sm">
+				<table className="table table-striped table-borderless table-sm sticky-x">
 					<thead>
 						<tr>
 							<th>Name</th>
@@ -55,9 +55,10 @@ const StartingLineup = ({
 										pid={p.pid}
 										skills={p.ratings.skills}
 										watch={p.watch}
-									>
-										{p.name}
-									</PlayerNameLabels>
+										firstName={p.firstName}
+										firstNameShort={p.firstNameShort}
+										lastName={p.lastName}
+									/>
 								</td>
 								<td>{p.ratings.pos}</td>
 								<td>{p.age}</td>
@@ -77,8 +78,7 @@ const StartingLineup = ({
 									) : null}
 								</td>
 								<td>
-									{helpers.formatCurrency(p.contract.amount, "M")} thru{" "}
-									{p.contract.exp}
+									<Contract p={p} />
 								</td>
 								{startersStats.map(stat => (
 									<td key={stat}>{helpers.roundStat(p.stats[stat], stat)}</td>
@@ -89,14 +89,13 @@ const StartingLineup = ({
 				</table>
 			</ResponsiveTableWrapper>
 			<div />
-			<a href={helpers.leagueUrl(["roster"])}>» Full Roster</a>
+			{DEPTH_CHART_NAME ? (
+				<a href={helpers.leagueUrl(["depth"])}>» {DEPTH_CHART_NAME}</a>
+			) : (
+				<a href={helpers.leagueUrl(["roster"])}>» Full Roster</a>
+			)}
 		</>
 	);
-};
-
-StartingLineup.propTypes = {
-	starters: PropTypes.arrayOf(PropTypes.object).isRequired,
-	startersStats: PropTypes.arrayOf(PropTypes.string).isRequired,
 };
 
 export default StartingLineup;

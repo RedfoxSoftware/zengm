@@ -1,9 +1,16 @@
-import { ChangeEvent, useRef, useState } from "react";
-import { Modal } from "react-bootstrap";
-import type { PlayerBioInfo } from "../../../common/types";
-import { confirm, helpers, logEvent, toWorker } from "../../util";
+import { type ChangeEvent, useRef, useState } from "react";
+import type {
+	GameAttributesLeague,
+	PlayerBioInfo,
+} from "../../../common/types";
+import {
+	confirm,
+	helpers,
+	logEvent,
+	safeLocalStorage,
+	toWorker,
+} from "../../util";
 import { godModeRequiredMessage } from "./SettingsFormOptions";
-import { animation } from "./RowsEditor";
 import type { initDefaults } from "../../../worker/util/loadNames";
 import { getFrequencies, mergeCountries } from "../../../common/names";
 import isEqual from "lodash-es/isEqual";
@@ -15,6 +22,7 @@ import {
 	RacesEditor,
 } from "./PlayerBioInfoEditors";
 import { CountriesEditor } from "./PlayerBioInfoCountries";
+import Modal from "../../components/Modal";
 
 export type Defaults = Awaited<ReturnType<typeof initDefaults>>;
 
@@ -32,7 +40,7 @@ export const objectToArray = <T extends string>(
 					frequency: String(frequency),
 				} as Record<T | "frequency", string>),
 		),
-		sortKey,
+		sortKey === "frequency" ? row => parseInt(row.frequency) : sortKey,
 		order,
 	);
 
@@ -46,6 +54,16 @@ export const arrayToObject = <T extends string>(
 	}
 
 	return output;
+};
+
+export const PLAYER_BIO_INFO_SORT_DEFAULT: {
+	colleges: ["name" | "frequency", "asc" | "desc"];
+	countries: ["country" | "frequency", "asc" | "desc"];
+	names: ["name" | "frequency", "asc" | "desc"];
+} = {
+	colleges: ["name", "asc"],
+	countries: ["country", "asc"],
+	names: ["frequency", "desc"],
 };
 
 export const formatPlayerBioInfoState = (
@@ -92,6 +110,30 @@ export const formatPlayerBioInfoState = (
 	const defaultFractionSkipCollege2 =
 		playerBioInfo?.default?.fractionSkipCollege ?? 0.98;
 
+	let playerBioInfoSort = { ...PLAYER_BIO_INFO_SORT_DEFAULT };
+	try {
+		const temp = safeLocalStorage.getItem("playerBioInfoSort");
+		if (temp) {
+			playerBioInfoSort = JSON.parse(temp);
+		}
+		for (const key of ["colleges", "countries", "names"] as const) {
+			const nameKey = key === "countries" ? "country" : "name";
+			if (
+				!playerBioInfoSort[key] ||
+				!Array.isArray(playerBioInfoSort[key]) ||
+				(playerBioInfoSort[key][0] !== nameKey &&
+					playerBioInfoSort[key][0] !== "frequency") ||
+				(playerBioInfoSort[key][1] !== "asc" &&
+					playerBioInfoSort[key][1] !== "desc")
+			) {
+				// @ts-expect-error
+				playerBioInfoSort[key] = PLAYER_BIO_INFO_SORT_DEFAULT[key];
+			}
+		}
+	} catch (err) {
+		playerBioInfoSort = { ...PLAYER_BIO_INFO_SORT_DEFAULT };
+	}
+
 	for (const [country, frequency] of Object.entries(frequencies)) {
 		const mergedCountry = mergedCountries[country];
 		if (!mergedCountry) {
@@ -130,12 +172,20 @@ export const formatPlayerBioInfoState = (
 			last: [],
 		};
 		for (const key of ["first", "last"] as const) {
-			namesText[key] = objectToArray(names[key], "name", "frequency", "desc");
+			namesText[key] = objectToArray(
+				names[key],
+				"name",
+				...playerBioInfoSort.names,
+			);
 		}
 
 		const colleges = mergedCountry.colleges ?? defaultColleges2;
 		const defaultColleges = allDefaults || isEqual(colleges, defaultColleges2);
-		const collegesText = objectToArray(colleges, "name", "name");
+		const collegesText = objectToArray(
+			colleges,
+			"name",
+			...playerBioInfoSort.colleges,
+		);
 
 		const defaultRaces2 =
 			defaults.races[country] ??
@@ -178,7 +228,11 @@ export const formatPlayerBioInfoState = (
 		});
 	}
 
-	const defaultCollegesText = objectToArray(defaultColleges2, "name", "name");
+	const defaultCollegesText = objectToArray(
+		defaultColleges2,
+		"name",
+		...playerBioInfoSort.colleges,
+	);
 	const defaultRacesText = objectToArray(
 		playerBioInfo?.default?.races ?? defaults.races.USA,
 		"race",
@@ -186,11 +240,22 @@ export const formatPlayerBioInfoState = (
 	);
 	const defaultFractionSkipCollegeText = String(defaultFractionSkipCollege2);
 
+	let countriesSorted;
+	if (playerBioInfoSort.countries[0] === "frequency") {
+		countriesSorted = orderBy(
+			countries,
+			row => parseInt(row.frequency),
+			playerBioInfoSort.countries[1],
+		);
+	} else {
+		countriesSorted = orderBy(countries, ...playerBioInfoSort.countries);
+	}
+
 	return {
 		defaultColleges: defaultCollegesText,
 		defaultRaces: defaultRacesText,
 		defaultFractionSkipCollege: defaultFractionSkipCollegeText,
-		countries: orderBy(countries, "country"),
+		countries: countriesSorted,
 	};
 };
 
@@ -212,7 +277,7 @@ export const parseAndValidate = (state: PlayerBioInfoState) => {
 	};
 
 	for (const row of state.countries) {
-		if (output.frequencies.hasOwnProperty(row.country)) {
+		if (Object.hasOwn(output.frequencies, row.country)) {
 			throw new Error(
 				`Country names must be unique, but you have multiple countries named "${row.country}"`,
 			);
@@ -226,7 +291,7 @@ export const parseAndValidate = (state: PlayerBioInfoState) => {
 		}
 		output.frequencies[row.country] = frequency;
 
-		const country: typeof output["countries"][string] = {};
+		const country: (typeof output)["countries"][string] = {};
 		for (const type of ["first", "last"] as const) {
 			if (row.names[type].length === 0) {
 				throw new Error(
@@ -276,6 +341,14 @@ export const prune = (
 			if (isEqual(country[key], mergedCountry[key])) {
 				delete country[key];
 			}
+		}
+
+		if (
+			(name === "USA" || name === "Canada") &&
+			country.fractionSkipCollege === undefined
+		) {
+			// Would be better to have it undefined, as in using the global default. But that can't be persisted to JSON, so we need some other way to encode it. Until that exists, just set the default here, better than nothing. Actually seems to work, just results in a bit of extra storage overhead.
+			country.fractionSkipCollege = info.default.fractionSkipCollege;
 		}
 
 		if (
@@ -361,11 +434,13 @@ export type PageInfo =
 const PlayerBioInfo2 = ({
 	defaultValue,
 	disabled,
+	gender,
 	godModeRequired,
 	onChange,
 }: {
 	defaultValue: PlayerBioInfo | undefined;
 	disabled: boolean;
+	gender: GameAttributesLeague["gender"];
 	godModeRequired?: "always" | "existingLeagueOnly";
 	onChange: (playerBioInfo: PlayerBioInfo | undefined) => void;
 }) => {
@@ -392,7 +467,9 @@ const PlayerBioInfo2 = ({
 	};
 
 	const loadDefaults = async () => {
-		const defaults = await toWorker("main", "getPlayerBioInfoDefaults");
+		const defaults = await toWorker("main", "getPlayerBioInfoDefaults", {
+			gender,
+		});
 		setDefaults(defaults);
 
 		const infoState = formatPlayerBioInfoState(defaultValue, defaults);
@@ -407,7 +484,7 @@ const PlayerBioInfo2 = ({
 	};
 
 	const handleShow = async () => {
-		if (!defaults) {
+		if (!defaults || defaults.gender !== gender) {
 			await loadDefaults();
 		}
 
@@ -484,14 +561,14 @@ const PlayerBioInfo2 = ({
 						return row;
 					}
 
-					const extraProps: Partial<typeof data["countries"][number]> = {};
+					const extraProps: Partial<(typeof data)["countries"][number]> = {};
 					if (key === "country") {
 						// Just sets the default to false. Might be better to compare values, like it does in prune.
 						extraProps.defaultNames = false;
 						extraProps.defaultRaces = false;
-						extraProps.builtIn = !!defaults?.countries.hasOwnProperty(
-							event.target.value,
-						);
+						extraProps.builtIn = defaults
+							? Object.hasOwn(defaults.countries, event.target.value)
+							: false;
 					}
 
 					return {
@@ -600,13 +677,7 @@ const PlayerBioInfo2 = ({
 		}
 
 		modal = (
-			<Modal
-				size="lg"
-				show={show}
-				onHide={handleCancel}
-				animation={animation}
-				scrollable
-			>
+			<Modal size="lg" show={show} onHide={handleCancel} scrollable>
 				<Modal.Header closeButton>
 					<Modal.Title>{title}</Modal.Title>
 				</Modal.Header>

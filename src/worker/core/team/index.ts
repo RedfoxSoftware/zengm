@@ -1,5 +1,4 @@
 import addNewTeamToExistingLeague from "./addNewTeamToExistingLeague";
-import autoBudgetSettings from "./autoBudgetSettings";
 import avgAge from "./avgAge";
 import checkRosterSizes from "./checkRosterSizes";
 import deleteUnreadMessages from "./deleteUnreadMessages";
@@ -8,6 +7,7 @@ import evaluatePointsFormula from "./evaluatePointsFormula";
 import genSeasonRow from "./genSeasonRow";
 import genStatsRow from "./genStatsRow";
 import generate from "./generate";
+import genDepth from "./genDepth";
 import getContracts from "./getContracts";
 import getDepthPlayers from "./getDepthPlayers";
 import getPayroll from "./getPayroll";
@@ -16,6 +16,7 @@ import ovr from "./ovr";
 import processStats from "./processStats";
 import ptsMax from "./ptsMax";
 import ptsPct from "./ptsPct";
+import resetTicketPrice from "./resetTicketPrice";
 import rosterAutoSort from "./rosterAutoSort";
 import switchTo from "./switchTo";
 import stats from "./stats";
@@ -25,7 +26,6 @@ import valueChange from "./valueChange";
 
 export default {
 	addNewTeamToExistingLeague,
-	autoBudgetSettings,
 	avgAge,
 	checkRosterSizes,
 	deleteUnreadMessages,
@@ -34,6 +34,7 @@ export default {
 	genSeasonRow,
 	genStatsRow,
 	generate,
+	genDepth,
 	getContracts,
 	getDepthPlayers,
 	getPayroll,
@@ -42,6 +43,7 @@ export default {
 	processStats,
 	ptsMax,
 	ptsPct,
+	resetTicketPrice,
 	rosterAutoSort,
 	switchTo,
 	stats,

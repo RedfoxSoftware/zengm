@@ -3,7 +3,7 @@ import type { Team } from "../../../common/types";
 import generate from "./generate";
 import genSeasonRow from "./genSeasonRow";
 import genStatsRow from "./genStatsRow";
-import { draft, league, finances } from "..";
+import { draft, league } from "..";
 import { idb } from "../../db";
 import { PHASE } from "../../../common";
 
@@ -17,6 +17,7 @@ const addNewTeamToExistingLeague = async (
 		imgURL: string | undefined;
 		firstSeasonAfterExpansion?: number;
 		tid?: number;
+		stadiumCapacity?: number;
 	},
 	{
 		expansionDraft,
@@ -33,7 +34,7 @@ const addNewTeamToExistingLeague = async (
 
 	let div = divs.find(d => d.did === teamInfo.did);
 	if (!div) {
-		div = divs.at(-1);
+		div = divs.at(-1)!;
 	}
 	const cid = div.cid;
 
@@ -103,8 +104,6 @@ const addNewTeamToExistingLeague = async (
 		// Generate scrubs only!
 		await draft.genPlayers(draftYear, undefined, true);
 	}
-
-	await finances.updateRanks(["budget"]);
 
 	logEvent({
 		text: `A new team called the ${t.region} ${t.name} ${

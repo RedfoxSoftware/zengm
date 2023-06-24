@@ -1,4 +1,4 @@
-import { PHASE } from "../../../common";
+import { getBestPlayerBoxScore, isSport, PHASE } from "../../../common";
 import { saveAwardsByPlayer } from "../season/awards";
 import { idb } from "../../db";
 import { g, helpers, logEvent, toUI } from "../../util";
@@ -17,17 +17,30 @@ const allStarMVP = async (
 	conditions: Conditions,
 ) => {
 	let mvp;
-	let maxScore = -Infinity; // Find MVP
 
-	for (const t of game.teams) {
-		const wonBonus = game.won.tid === t.tid ? 8 : 0;
+	// Why special case for basketball? No real reason, but it was there before the other sports and seems to work better than getBestPlayer because efficiency gets factored into gmSc.
+	if (isSport("basketball")) {
+		let maxScore = -Infinity;
 
-		for (const p of t.players) {
-			const score = helpers.gameScore(p) + p.pts / 2 + wonBonus;
+		for (const t of game.teams) {
+			const wonBonus = game.won.tid === t.tid ? 8 : 0;
 
-			if (score > maxScore) {
-				mvp = p;
-				maxScore = score;
+			for (const p of t.players) {
+				const score = helpers.gameScore(p) + p.pts / 2 + wonBonus;
+
+				if (score > maxScore) {
+					mvp = p;
+					maxScore = score;
+				}
+			}
+		}
+	} else {
+		for (const t of game.teams) {
+			if (game.won.tid === t.tid) {
+				const output = getBestPlayerBoxScore(t.players);
+				if (output) {
+					mvp = output.p;
+				}
 			}
 		}
 	}
@@ -169,11 +182,7 @@ const getPlayoffInfos = async (game: Game) => {
 	};
 };
 
-const writeGameStats = async (
-	results: GameResults,
-	att: number,
-	conditions: Conditions,
-) => {
+export const gameSimToBoxScore = async (results: GameResults, att: number) => {
 	const playoffs = g.get("phase") === PHASE.PLAYOFFS;
 
 	const gameStats: Game = {
@@ -262,6 +271,20 @@ const writeGameStats = async (
 			}
 			gameStats.teams[t].players[p].jerseyNumber =
 				results.team[t].player[p].jerseyNumber;
+
+			if (isSport("baseball")) {
+				gameStats.teams[t].players[p].seasonStats =
+					results.team[t].player[p].seasonStats;
+
+				// These are either integers or undefined
+				const baseballMaybeKeys = ["battingOrder", "subIndex"];
+				for (const key of baseballMaybeKeys) {
+					const value = results.team[t].player[p][key];
+					if (value !== undefined) {
+						gameStats.teams[t].players[p][key] = value;
+					}
+				}
+			}
 		}
 	}
 
@@ -300,6 +323,44 @@ const writeGameStats = async (
 		gameStats.teams[1].playoffs = playoffInfos[1];
 		gameStats.numGamesToWinSeries = numGamesToWinSeries;
 	}
+
+	// We want text at the beginning, because adding game information is redundant when attached to the box score. Later notify about events
+	for (const clutchPlay of results.clutchPlays) {
+		// @ts-expect-error
+		gameStats.clutchPlays.push(`${clutchPlay.text}.`);
+	}
+
+	return {
+		allStarGame,
+		allStars,
+		currentRound,
+		gameStats,
+		numGamesToWinSeries,
+		playoffInfos,
+		playoffs,
+		tied,
+		tl,
+		tw,
+	};
+};
+
+const writeGameStats = async (
+	results: GameResults,
+	att: number,
+	conditions: Conditions,
+) => {
+	const {
+		allStarGame,
+		allStars,
+		currentRound,
+		gameStats,
+		numGamesToWinSeries,
+		playoffInfos,
+		playoffs,
+		tied,
+		tl,
+		tw,
+	} = await gameSimToBoxScore(results, att);
 
 	if (
 		results.team[0].id === g.get("userTid") ||
@@ -472,6 +533,7 @@ const writeGameStats = async (
 					forceWin: results.forceWin,
 					gid: results.gid,
 					overtimes: results.overtimes,
+					numPeriods: g.get("numPeriods"),
 					teams: [
 						{
 							ovr: results.team[0].ovr,
@@ -492,9 +554,6 @@ const writeGameStats = async (
 	}
 
 	for (const clutchPlay of results.clutchPlays) {
-		// We want text at the beginning, because adding game information is redundant when attached to the box score
-		// @ts-ignore
-		gameStats.clutchPlays.push(`${clutchPlay.text}.`);
 		const indTeam = clutchPlay.tids[0] === results.team[0].id ? 0 : 1;
 		const indOther = indTeam === 0 ? 1 : 0;
 		const won = indTeam === tw;

@@ -1,11 +1,10 @@
 import classNames from "classnames";
-import { bySport, isSport } from "../../../common";
-import { helpers, useLocalShallow } from "../../util";
-import { memo, ReactNode } from "react";
+import { bySport, getBestPlayerBoxScore, isSport } from "../../../common";
+import { getCols, helpers, useLocalPartial } from "../../util";
+import React, { memo, type ReactNode } from "react";
 import TeamLogoInline from "../TeamLogoInline";
 import defaultGameAttributes from "../../../common/defaultGameAttributes";
-import { PlayerNameLabels } from "..";
-import getBestPlayer from "./getBestPlayer";
+import PlayerNameLabels from "../PlayerNameLabels";
 
 const roundHalf = (x: number) => {
 	return Math.round(x * 2) / 2;
@@ -30,21 +29,14 @@ type Team = {
 
 const getRecord = (t: Team) => {
 	if (t.playoffs) {
-		return ` ${t.playoffs.won}`;
+		return <b>{t.playoffs.won}</b>;
 	}
 
 	if (t.won === undefined || t.lost === undefined) {
 		return "";
 	}
 
-	let record = `${t.won}-${t.lost}`;
-	if (t.tied !== undefined && t.tied > 0) {
-		record += `-${t.tied}`;
-	}
-	if (t.otl !== undefined && t.otl > 0) {
-		record += `-${t.otl}`;
-	}
-	return ` ${record}`;
+	return helpers.formatRecord(t as any);
 };
 
 const smallStyle = {
@@ -55,6 +47,7 @@ const smallStyle = {
 const ScoreBox = memo(
 	({
 		actions = [],
+		boxScoreTeamOverride,
 		className,
 		game,
 		playersUpcoming,
@@ -68,13 +61,15 @@ const ScoreBox = memo(
 			onClick?: () => void;
 			text: ReactNode;
 		}[];
+		boxScoreTeamOverride?: string;
 		className?: string;
 		game: {
 			forceWin?: number;
 			gid: number;
-			overtimes?: number;
 			season?: number;
 			teams: [Team, Team];
+			numPeriods?: number;
+			overtimes?: number;
 		};
 		playersUpcoming?: any[];
 		playersUpcomingAbbrev?: boolean;
@@ -88,15 +83,15 @@ const ScoreBox = memo(
 			season,
 			teamInfoCache,
 			userTid,
-		} = useLocalShallow(state => ({
-			challengeNoRatings: state.challengeNoRatings,
-			homeCourtAdvantage: state.homeCourtAdvantage,
-			numPeriods: state.numPeriods,
-			quarterLength: state.quarterLength,
-			season: state.season,
-			teamInfoCache: state.teamInfoCache,
-			userTid: state.userTid,
-		}));
+		} = useLocalPartial([
+			"challengeNoRatings",
+			"homeCourtAdvantage",
+			"numPeriods",
+			"quarterLength",
+			"season",
+			"teamInfoCache",
+			"userTid",
+		]);
 
 		let winner: -1 | 0 | 1 | undefined;
 		if (game.teams[0].pts !== undefined && game.teams[1].pts !== undefined) {
@@ -129,23 +124,20 @@ const ScoreBox = memo(
 			game.teams[1].ovr !== undefined &&
 			(!small || !final)
 		) {
-			let spread;
+			const ovr0 = game.teams[0].ovr;
+			const ovr1 = game.teams[1].ovr;
+			let spread = bySport({
+				baseball: () => (1 / 10) * (ovr0 - ovr1) + 1 * homeCourtAdvantage,
 
-			if (isSport("basketball")) {
 				// From @nicidob https://github.com/nicidob/bbgm/blob/master/team_win_testing.ipynb
 				// Default homeCourtAdvantage is 1
-				spread =
-					(15 / 50) * (game.teams[0].ovr - game.teams[1].ovr) +
-					3.3504 * homeCourtAdvantage;
-			} else if (isSport("hockey")) {
-				spread =
-					(1.8 / 100) * (game.teams[0].ovr - game.teams[1].ovr) +
-					0.25 * homeCourtAdvantage;
-			} else {
-				spread =
-					(3 / 10) * (game.teams[0].ovr - game.teams[1].ovr) +
-					3 * homeCourtAdvantage;
-			}
+				basketball: () =>
+					(15 / 50) * (ovr0 - ovr1) + 3.3504 * homeCourtAdvantage,
+
+				football: () => (3 / 10) * (ovr0 - ovr1) + 3 * homeCourtAdvantage,
+
+				hockey: () => (1.8 / 100) * (ovr0 - ovr1) + 0.25 * homeCourtAdvantage,
+			})();
 
 			// Adjust for game length
 			spread *=
@@ -174,14 +166,7 @@ const ScoreBox = memo(
 			}
 		}
 
-		let overtimes;
-		if (game.overtimes !== undefined && game.overtimes > 0) {
-			if (game.overtimes === 1) {
-				overtimes = "OT";
-			} else if (game.overtimes > 1) {
-				overtimes = `${game.overtimes}OT`;
-			}
-		}
+		const overtimes = helpers.overtimeText(game.overtimes, game.numPeriods);
 
 		const gameSeason = game.season ?? season;
 
@@ -196,6 +181,8 @@ const ScoreBox = memo(
 						"game_log",
 						allStarGame
 							? "special"
+							: boxScoreTeamOverride !== undefined
+							? boxScoreTeamOverride
 							: `${teamInfoCache[game.teams[0].tid]?.abbrev}_${
 									game.teams[0].tid
 							  }`,
@@ -226,7 +213,11 @@ const ScoreBox = memo(
 								small ? "score-box-deadline-small" : "score-box-deadline"
 							} p-1 d-flex align-items-center ms-1`}
 						>
-							Trade deadline
+							{small ? (
+								"Trade Deadline"
+							) : (
+								<h2 className="mb-0">Trade Deadline</h2>
+							)}
 						</div>
 					) : allStarGame && !final ? (
 						[1, 2].map(i => (
@@ -238,10 +229,10 @@ const ScoreBox = memo(
 							>
 								<div className={classNames("p-1", { "pe-5": small })}>
 									<a
-										href={helpers.leagueUrl(["all_star", "draft"])}
+										href={helpers.leagueUrl(["all_star", "teams"])}
 										className={!small ? "fw-bold" : undefined}
 									>
-										{small ? `AS${i}` : `All-Star Team ${i}`}
+										{small ? `AS${i}` : `All-Stars ${i}`}
 									</a>
 								</div>
 							</div>
@@ -283,10 +274,10 @@ const ScoreBox = memo(
 							let teamName;
 							let rosterURL;
 							if (allStarGame) {
-								imgURL = `https://zengm.com/files/logo-${process.env.SPORT}.png`;
+								imgURL = `https://zengm.com/files/logo-${process.env.SPORT}.svg`;
 								teamName = small
 									? `AS${i === 0 ? 2 : 1}`
-									: `All-Star Team ${i === 0 ? 2 : 1}`;
+									: `All-Stars ${i === 0 ? 2 : 1}`;
 								rosterURL = helpers.leagueUrl(["all_star", "history"]);
 							} else {
 								imgURL =
@@ -320,6 +311,9 @@ const ScoreBox = memo(
 										) : null}
 										{!challengeNoRatings ? `${p.ratings.ovr} ovr` : null}
 										{bySport({
+											baseball: `${!challengeNoRatings ? ", " : ""}${
+												p.stats.keyStatsShort
+											}`,
 											basketball: `${
 												!challengeNoRatings ? ", " : ""
 											}${p.stats.pts.toFixed(1)} / ${p.stats.trb.toFixed(
@@ -333,10 +327,29 @@ const ScoreBox = memo(
 									</>
 								);
 							} else if (final && t.players) {
-								const best = getBestPlayer(t.players);
+								const best = getBestPlayerBoxScore(t.players);
 								if (best) {
 									p = best.p;
-									playerStatText = best.statText;
+									playerStatText = best.statTexts.map((stat, i) => {
+										const col = getCols([`stat:${stat}`])[0];
+
+										let title = col.title;
+										// Add back in prefix for some football ones
+										if (isSport("football")) {
+											if (!stat.startsWith("def")) {
+												title = helpers.upperCaseFirstLetter(stat);
+											}
+										}
+
+										return (
+											<React.Fragment key={stat}>
+												{i > 0 ? ", " : null}
+												<span title={col.desc}>
+													{best.processedStats[stat]} {title}
+												</span>
+											</React.Fragment>
+										);
+									});
 								}
 							}
 
@@ -344,7 +357,7 @@ const ScoreBox = memo(
 								<div
 									key={i}
 									className={classNames(
-										"d-flex align-items-center",
+										"d-flex align-items-center alert-bg-color",
 										scoreClassForceWin,
 										userTeamClass,
 									)}
@@ -385,7 +398,7 @@ const ScoreBox = memo(
 												{teamName}
 											</a>
 											{!small ? (
-												<div className="text-muted text-truncate">
+												<div className="text-body-secondary text-truncate">
 													{getRecord(t)}
 													{hasOvrs ? (
 														<>
@@ -421,7 +434,7 @@ const ScoreBox = memo(
 										{final ? (
 											<div
 												className={classNames(
-													"text-body text-end align-self-stretch d-flex align-items-center",
+													"text-body text-end align-self-stretch d-flex align-items-center alert-bg-color",
 													scoreClass,
 													userTeamClass,
 													{
@@ -458,7 +471,7 @@ const ScoreBox = memo(
 									</div>
 									{p ? (
 										<div
-											className="align-self-stretch border-start ps-2 flex-grow-1 text-muted d-none d-sm-flex align-items-center overflow-hidden text-nowrap"
+											className="align-self-stretch border-start ps-2 flex-grow-1 text-body-secondary d-none d-sm-flex align-items-center overflow-hidden text-nowrap"
 											style={{
 												backgroundColor: "var(--bs-white)",
 												width: 200,
@@ -471,9 +484,8 @@ const ScoreBox = memo(
 														injury={p.injury}
 														pos={p.ratings?.pos ?? p.pos}
 														season={season}
-													>
-														{p.name}
-													</PlayerNameLabels>
+														legacyName={p.name}
+													/>
 												</div>
 												<div>{playerStatText}</div>
 											</div>
@@ -486,7 +498,7 @@ const ScoreBox = memo(
 				</div>
 				{small && overtimes ? (
 					<div
-						className="text-end text-muted px-1 d-flex align-items-center"
+						className="text-end text-body-secondary px-1 d-flex align-items-center"
 						style={{ height: 28 }}
 					>
 						{overtimes}
@@ -529,7 +541,7 @@ const ScoreBox = memo(
 						</div>
 					</div>
 					{!small && overtimes ? (
-						<div className="text-muted p-1">{overtimes}</div>
+						<div className="text-body-secondary p-1">{overtimes}</div>
 					) : null}
 				</div>
 			);

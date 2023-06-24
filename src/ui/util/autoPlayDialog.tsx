@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { confirmable, createConfirmation } from "react-confirm";
-import { Modal } from "react-bootstrap";
+import Modal from "../components/Modal";
 import { PHASE, PHASE_TEXT, helpers } from "../../common";
 
 const Confirm = confirmable(
@@ -47,7 +47,7 @@ const Confirm = confirmable(
 		}
 
 		return (
-			<Modal show={show} onHide={cancel}>
+			<Modal animation show={show} onHide={cancel}>
 				<Modal.Body>
 					During auto play, the AI will manage your team. How long to you want
 					to simulate until?
@@ -69,6 +69,7 @@ const Confirm = confirmable(
 										setSeason(event.target.value);
 									}}
 									value={season}
+									inputMode="numeric"
 								/>
 							</div>
 							<div className="col">
@@ -113,7 +114,7 @@ const autoPlayDialog = (
 	phase: string;
 	season: string;
 } | null => {
-	// @ts-ignore
+	// @ts-expect-error
 	return confirmFunction({
 		currentSeason,
 		repeatSeason,

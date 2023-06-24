@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import { loadTeamSeasons } from "./testHelpers";
 import lotterySort from "./lotterySort";
 import divideChancesOverTiedTeams from "./divideChancesOverTiedTeams";
@@ -14,7 +14,7 @@ describe("worker/core/draft/divideChancesOverTiedTeams", () => {
 		await loadTeamSeasons();
 	});
 	afterAll(() => {
-		// @ts-ignore
+		// @ts-expect-error
 		idb.league = undefined;
 	});
 

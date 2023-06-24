@@ -1,8 +1,8 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
+import range from "lodash-es/range";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { isSport, PHASE } from "../../common";
-import { helpers, realtimeUpdate, toWorker, useLocalShallow } from "../util";
+import { helpers, realtimeUpdate, toWorker, useLocalPartial } from "../util";
 import BoxScore from "./BoxScore";
 
 const TeamNameLink = ({
@@ -27,10 +27,6 @@ const TeamNameLink = ({
 		<>{children}</>
 	);
 };
-TeamNameLink.propTypes = {
-	season: PropTypes.number.isRequired,
-	t: PropTypes.object.isRequired,
-};
 
 const TeamLogo = ({
 	season,
@@ -49,14 +45,6 @@ const TeamLogo = ({
 		otl?: number;
 	};
 }) => {
-	let record = `${t.won}-${t.lost}`;
-	if (typeof t.otl === "number" && !Number.isNaN(t.otl) && t.otl > 0) {
-		record += `-${t.otl}`;
-	}
-	if (typeof t.tied === "number" && !Number.isNaN(t.tied) && t.tied > 0) {
-		record += `-${t.tied}`;
-	}
-
 	return t.imgURL !== undefined && t.imgURL !== "" ? (
 		<div className="w-100 d-none d-lg-flex justify-content-center">
 			<div>
@@ -69,13 +57,19 @@ const TeamLogo = ({
 						/>
 					</TeamNameLink>
 				</div>
-				<div className="mt-1 mb-3 fw-bold">{record}</div>
+				<div className="mt-1 mb-3 fw-bold">{helpers.formatRecord(t)}</div>
 			</div>
 		</div>
 	) : null;
 };
 
-const HeadlineScore = ({ boxScore }: any) => {
+export const HeadlineScore = ({
+	boxScore,
+	small,
+}: {
+	boxScore: any;
+	small?: boolean;
+}) => {
 	// Historical games will have boxScore.won.name and boxScore.lost.name so use that for ordering, but live games
 	// won't. This is hacky, because the existence of this property is just a historical coincidence, and maybe it'll
 	// change in the future.
@@ -85,46 +79,80 @@ const HeadlineScore = ({ boxScore }: any) => {
 	const t1 =
 		boxScore.lost?.name !== undefined ? boxScore.lost : boxScore.teams[1];
 
+	const className = small
+		? "d-none"
+		: `d-none d-${boxScore.exhibition ? "md" : "sm"}-inline`;
+
 	return (
-		<>
-			<h2>
+		<div
+			className={
+				small
+					? "d-flex align-items-center flex-wrap justify-content-between gap-3 row-gap-0 mb-2"
+					: liveGameSim
+					? "d-none d-md-block"
+					: undefined
+			}
+		>
+			<h2 className={small ? "mb-0" : liveGameSim ? "mb-1" : "mb-2"}>
 				{t0.playoffs ? (
-					<span className="text-muted">{t0.playoffs.seed}. </span>
+					<span className="text-body-secondary">{t0.playoffs.seed}. </span>
 				) : null}
 				<TeamNameLink season={boxScore.season} t={t0}>
-					<span className="d-none d-sm-inline">{t0.region} </span>
+					{t0.season !== undefined ? `${t0.season} ` : null}
+					<span className={className}>{t0.region} </span>
 					{t0.name}
 				</TeamNameLink>{" "}
 				{t0.pts},{" "}
 				{t1.playoffs ? (
-					<span className="text-muted">{t1.playoffs.seed}. </span>
+					<span className="text-body-secondary">{t1.playoffs.seed}. </span>
 				) : null}
 				<TeamNameLink season={boxScore.season} t={t1}>
-					<span className="d-none d-sm-inline">{t1.region} </span>
+					{t1.season !== undefined ? `${t1.season} ` : null}
+					<span className={className}>{t1.region} </span>
 					{t1.name}
 				</TeamNameLink>{" "}
 				{t1.pts}
 				{boxScore.overtime}
 			</h2>
 			{liveGameSim ? (
-				<div className="mb-2">
-					{boxScore.gameOver
-						? "Final score"
-						: boxScore.elamTarget !== undefined
-						? `Elam Ending target: ${boxScore.elamTarget} points`
-						: `${boxScore.quarter}, ${boxScore.time} remaining`}
+				<div className={small ? undefined : "mb-2"}>
+					<span className="d-none d-sm-inline">
+						{boxScore.gameOver
+							? "Final score"
+							: boxScore.elamTarget !== undefined
+							? `Elam Ending target: ${boxScore.elamTarget} points`
+							: isSport("baseball")
+							? `${
+									boxScore.teams[0].ptsQtrs.length ===
+									boxScore.teams[1].ptsQtrs.length
+										? "Bottom"
+										: "Top"
+							  } of the ${boxScore.quarter}`
+							: `${boxScore.quarter}, ${boxScore.time} remaining`}
+					</span>
+					<span className="d-sm-none">
+						{boxScore.gameOver
+							? "F"
+							: boxScore.elamTarget !== undefined
+							? `Elam Ending target: ${boxScore.elamTarget} points`
+							: isSport("baseball")
+							? `${
+									boxScore.teams[0].ptsQtrs.length ===
+									boxScore.teams[1].ptsQtrs.length
+										? "B"
+										: "T"
+							  }${boxScore.quarterShort}`
+							: `${boxScore.quarterShort}, ${boxScore.time}`}
+					</span>
 				</div>
 			) : null}
-		</>
+		</div>
 	);
-};
-HeadlineScore.propTypes = {
-	boxScore: PropTypes.object.isRequired,
 };
 
 const FourFactors = ({ teams }: { teams: any[] }) => {
 	return (
-		<table className="table table-bordered table-sm mb-2 mb-sm-0">
+		<table className="table table-sm mb-2 mb-sm-0">
 			<thead>
 				<tr />
 				<tr>
@@ -171,8 +199,97 @@ const FourFactors = ({ teams }: { teams: any[] }) => {
 		</table>
 	);
 };
-FourFactors.propTypes = {
-	teams: PropTypes.array.isRequired,
+
+const FourFactorsFootball = ({ teams }: { teams: any[] }) => {
+	return (
+		<table className="table table-sm mb-2 mb-sm-0">
+			<thead>
+				<tr />
+				<tr>
+					<th title="Passing Yards">PssYds</th>
+					<th title="Rushing Yards">RusYds</th>
+					<th title="Penalties">Pen</th>
+					<th title="Turnovers">TOV</th>
+				</tr>
+			</thead>
+			<tbody>
+				{teams.map((t, i) => {
+					const t2 = teams[1 - i];
+
+					const tov = t.pssInt + t.fmbLost;
+					const tov2 = t2.pssInt + t2.fmbLost;
+
+					return (
+						<tr key={t.abbrev}>
+							<td
+								className={t.pssYds > t2.pssYds ? "table-success" : undefined}
+							>
+								{t.pssYds}
+							</td>
+							<td
+								className={t.rusYds > t2.rusYds ? "table-success" : undefined}
+							>
+								{t.rusYds}
+							</td>
+							<td
+								className={t.penYds < t2.penYds ? "table-success" : undefined}
+							>
+								{t.pen}-{t.penYds}
+							</td>
+							<td className={tov < tov2 ? "table-success" : undefined}>
+								{tov}
+							</td>
+						</tr>
+					);
+				})}
+			</tbody>
+		</table>
+	);
+};
+
+const FourFactorsHockey = ({ teams }: { teams: any[] }) => {
+	return (
+		<table className="table table-sm mb-2 mb-sm-0">
+			<thead>
+				<tr />
+				<tr>
+					<th title="Shots">S</th>
+					<th title="Power Plays">PP</th>
+					<th title="Takeaways">TK</th>
+					<th title="Giveaway">GV</th>
+					<th title="Faceoff Win Percentage">FO%</th>
+				</tr>
+			</thead>
+			<tbody>
+				{teams.map((t, i) => {
+					const t2 = teams[1 - i];
+
+					const foPct = t.fow / (t.fow + t.fol);
+					const foPct2 = t2.fow / (t2.fow + t2.fol);
+
+					return (
+						<tr key={t.abbrev}>
+							<td className={t.s > t2.s ? "table-success" : undefined}>
+								{t.s}
+							</td>
+							<td className={t.ppG > t2.ppG ? "table-success" : undefined}>
+								{t.ppG}/{t.ppo}
+							</td>
+							<td className={t.tk > t2.tk ? "table-success" : undefined}>
+								{t.tk}
+							</td>
+							<td className={t.gv < t2.gv ? "table-success" : undefined}>
+								{t.gv}
+							</td>
+							<td className={foPct > foPct2 ? "table-success" : undefined}>
+								{helpers.roundStat(100 * foPct, "foPct")}
+							</td>
+						</tr>
+					);
+				})}
+			</tbody>
+		</table>
+	);
 };
 
 const NextButton = ({
@@ -194,7 +311,7 @@ const NextButton = ({
 	const simNext = useCallback(async () => {
 		setAutoGoToNext(true);
 		setClickedGoToNext(true);
-		await toWorker("playMenu", "day");
+		await toWorker("playMenu", "day", undefined);
 	}, []);
 
 	useEffect(() => {
@@ -228,11 +345,11 @@ const NextButton = ({
 		};
 	}, [abbrev, autoGoToNext, boxScore.season, nextGid, tid]);
 
-	const { phase, playMenuOptions, season } = useLocalShallow(state => ({
-		phase: state.phase,
-		playMenuOptions: state.playMenuOptions,
-		season: state.season,
-	}));
+	const { phase, playMenuOptions, season } = useLocalPartial([
+		"phase",
+		"playMenuOptions",
+		"season",
+	]);
 
 	const canPlay = playMenuOptions.some(
 		option => option.id === "day" || option.id === "week",
@@ -272,11 +389,80 @@ const NextButton = ({
 		</div>
 	);
 };
-NextButton.propTypes = {
-	abbrev: PropTypes.string,
-	boxScore: PropTypes.object.isRequired,
-	currentGidInList: PropTypes.bool,
-	nextGid: PropTypes.number,
+
+const Base = ({
+	pid,
+	shiftDown,
+}: {
+	pid: number | undefined;
+	shiftDown?: boolean;
+}) => {
+	const [state, setState] = useState<
+		| {
+				name: string;
+				spd: number;
+		  }
+		| undefined
+	>();
+	useEffect(() => {
+		if (pid === undefined) {
+			setState(undefined);
+		} else {
+			let active = true;
+			const run = async () => {
+				const info = await toWorker("main", "getDiamondInfo", pid);
+				if (active && info) {
+					setState(info);
+				}
+			};
+
+			run();
+
+			return () => {
+				active = false;
+			};
+		}
+	}, [pid]);
+
+	return (
+		<div
+			className={`baseball-base ${
+				pid !== undefined ? "bg-secondary" : "border border-secondary"
+			}`}
+			style={shiftDown ? { marginTop: 20 } : undefined}
+			title={state ? `${state.name} (${state.spd} spd)` : undefined}
+		></div>
+	);
+};
+
+const BaseballDiamond = ({
+	bases,
+	outs,
+	balls,
+	strikes,
+}: {
+	bases: [number | undefined, number | undefined, number | undefined];
+	outs: number;
+	balls: number;
+	strikes: number;
+}) => {
+	return (
+		<div>
+			<div className="text-center mb-2">
+				{outs} out{outs === 1 ? "" : "s"}
+			</div>
+			<div className="d-flex justify-content-center">
+				<div className="d-flex mx-1">
+					<Base pid={bases[2]} shiftDown />
+					<Base pid={bases[1]} />
+					<Base pid={bases[0]} shiftDown />
+				</div>
+			</div>
+			<div className="text-center mt-1">
+				{balls}-{strikes}
+			</div>
+		</div>
+	);
 };
 
 const DetailedScore = ({
@@ -286,6 +472,7 @@ const DetailedScore = ({
 	nextGid,
 	prevGid,
 	showNextPrev,
+	sportState,
 	tid,
 }: {
 	abbrev?: string;
@@ -294,17 +481,27 @@ const DetailedScore = ({
 	nextGid?: number;
 	prevGid?: number;
 	showNextPrev?: boolean;
+	sportState: any;
 	tid?: number;
 }) => {
 	// Quarter/overtime labels
-	const qtrs: string[] = boxScore.teams[0].ptsQtrs.map(
-		(pts: number, i: number) => {
-			return i < boxScore.numPeriods
-				? `${i + 1}`
-				: `OT${i - boxScore.numPeriods + 1}`;
-		},
+	const numPeriods = Math.max(
+		boxScore.teams[0].ptsQtrs.length,
+		boxScore.numPeriods ?? 0,
 	);
-	qtrs.push("F");
+	const qtrs: string[] = range(numPeriods).map(i => {
+		return i < boxScore.numPeriods || isSport("baseball")
+			? `${i + 1}`
+			: `OT${i - boxScore.numPeriods + 1}`;
+	});
+
+	if (isSport("baseball")) {
+		qtrs.push("R", "H", "E");
+	} else {
+		qtrs.push("F");
+	}
+
+	const liveGameSim = boxScore.won?.name === undefined;
 
 	return (
 		<div className="d-flex align-items-center justify-content-center">
@@ -325,16 +522,20 @@ const DetailedScore = ({
 					</a>
 				</div>
 			) : null}
-			<div>
-				<div className="me-4 mx-xs-auto table-nonfluid text-center">
-					<table className="table table-bordered table-sm mb-2 mb-sm-0">
+			<div className="d-sm-flex">
+				<div className="mx-xs-auto text-center">
+					<table className="table table-sm mb-2 mb-sm-0">
 						<thead>
 							<tr>
 								<th />
 								{qtrs.map((qtr, i) => (
 									<th
 										key={qtr}
-										className={i < qtrs.length - 1 ? "text-muted" : undefined}
+										className={
+											i < qtrs.length - (isSport("baseball") ? 3 : 1)
+												? "text-body-secondary"
+												: undefined
+										}
 									>
 										{qtr}
 									</th>
@@ -362,15 +563,46 @@ const DetailedScore = ({
 									{t.ptsQtrs.map((pts: number, i: number) => (
 										<td key={i}>{pts}</td>
 									))}
+									{range(numPeriods - t.ptsQtrs.length).map(i => (
+										<td key={i}>-</td>
+									))}
 									<th>{t.pts}</th>
+									{isSport("baseball") ? (
+										<>
+											<th>{t.h}</th>
+											<th>
+												{Array.isArray(t.e)
+													? (t.e as (number | undefined)[]).reduce<number>(
+															(prev, current) => prev + (current ?? 0),
+															0,
+													  )
+													: t.e}
+											</th>
+										</>
+									) : null}
 								</tr>
 							))}
 						</tbody>
 					</table>
 				</div>
+				{isSport("baseball") && liveGameSim ? (
+					<div className="ms-4 mx-xs-auto d-sm-inline-block text-start">
+						<BaseballDiamond {...sportState} />
+					</div>
+				) : null}
 				{isSport("basketball") ? (
-					<div className="mx-xs-auto table-nonfluid text-center">
+					<div className="ms-4 mx-xs-auto d-sm-inline-block text-center">
 						<FourFactors teams={boxScore.teams} />
+					</div>
+				) : null}
+				{isSport("football") ? (
+					<div className="ms-4 mx-xs-auto d-sm-inline-block text-center">
+						<FourFactorsFootball teams={boxScore.teams} />
+					</div>
+				) : null}
+				{isSport("hockey") ? (
+					<div className="ms-4 mx-xs-auto d-sm-inline-block text-center">
+						<FourFactorsHockey teams={boxScore.teams} />
 					</div>
 				) : null}
 			</div>
@@ -385,16 +617,6 @@ const DetailedScore = ({
 			) : null}
 		</div>
 	);
-};
-
-DetailedScore.propTypes = {
-	abbrev: PropTypes.string,
-	boxScore: PropTypes.object.isRequired,
-	currentGidInList: PropTypes.bool,
-	nextGid: PropTypes.number,
-	prevGid: PropTypes.number,
-	showNextPrev: PropTypes.bool,
-	tid: PropTypes.number,
 };
 
 const PlayoffRecord = ({
@@ -473,6 +695,7 @@ const BoxScoreWrapper = ({
 	playIndex,
 	prevGid,
 	showNextPrev,
+	sportState,
 	tid,
 	Row,
 }: {
@@ -483,6 +706,7 @@ const BoxScoreWrapper = ({
 	playIndex?: number;
 	prevGid?: number;
 	showNextPrev?: boolean;
+	sportState: any;
 	tid?: number;
 	Row: any;
 }) => {
@@ -502,7 +726,7 @@ const BoxScoreWrapper = ({
 	}
 
 	const handleKeydown = useCallback(
-		e => {
+		(e: KeyboardEvent) => {
 			if (showNextPrev) {
 				if (e.altKey || e.ctrlKey || e.shiftKey || e.isComposing || e.metaKey) {
 					return;
@@ -595,6 +819,7 @@ const BoxScoreWrapper = ({
 						nextGid={nextGid}
 						prevGid={prevGid}
 						showNextPrev={showNextPrev}
+						sportState={sportState}
 						tid={tid}
 					/>
 					<div className="mt-sm-1">
@@ -608,22 +833,16 @@ const BoxScoreWrapper = ({
 				</div>
 				<TeamLogo season={boxScore.season} t={t1} />
 			</div>
-			<BoxScore boxScore={boxScore} Row={Row} forceRowUpdate={forceRowUpdate} />
+			<BoxScore
+				boxScore={boxScore}
+				Row={Row}
+				forceRowUpdate={forceRowUpdate}
+				sportState={sportState}
+			/>
 			Attendance: {helpers.numberWithCommas(boxScore.att)}
 			{forcedWinText}
 		</>
 	);
-};
-
-BoxScoreWrapper.propTypes = {
-	abbrev: PropTypes.string,
-	boxScore: PropTypes.object.isRequired,
-	currentGidInList: PropTypes.bool,
-	nextGid: PropTypes.number,
-	prevGid: PropTypes.number,
-	showNextPrev: PropTypes.bool,
-	tid: PropTypes.number,
-	Row: PropTypes.any,
 };
 
 export default BoxScoreWrapper;

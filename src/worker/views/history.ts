@@ -1,6 +1,7 @@
 import { idb } from "../db";
 import { g, local, updatePlayMenu } from "../util";
 import type { UpdateEvents, ViewInput } from "../../common/types";
+import { bySport, SIMPLE_AWARDS } from "../../common";
 
 const viewedSeasonSummary = async () => {
 	local.unviewedSeasonSummary = false;
@@ -55,19 +56,7 @@ const updateHistory = async (
 			}
 		};
 
-		const possibleSimpleAwards = [
-			"finalsMvp",
-			"mvp",
-			"dpoy",
-			"dfoy",
-			"goy",
-			"smoy",
-			"mip",
-			"roy",
-			"oroy",
-			"droy",
-		];
-		for (const key of possibleSimpleAwards) {
+		for (const key of SIMPLE_AWARDS) {
 			addAbbrev(awards[key]);
 		}
 		const possibleTeamAwards = ["allLeague", "allDefensive"];
@@ -80,12 +69,22 @@ const updateHistory = async (
 				}
 			}
 		}
-		for (const p of awards.allRookie) {
-			addAbbrev(p);
+		const flatTeams = bySport({
+			baseball: ["allRookie", "allOffense", "allDefense"],
+			basketball: ["allRookie", "sfmvp"],
+			football: ["allRookie"],
+			hockey: ["allRookie"],
+		});
+		for (const key of flatTeams) {
+			if (awards[key]) {
+				for (const p of awards[key]) {
+					addAbbrev(p);
+				}
+			}
 		}
 
-		// Hack placeholder for old seasons before Finals MVP existed
-		if (!awards.hasOwnProperty("allRookie")) {
+		// Hack placeholder for old seasons
+		if (!awards.allRookie) {
 			awards.allRookie = [];
 		}
 

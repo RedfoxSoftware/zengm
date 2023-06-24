@@ -37,6 +37,74 @@ const RatingsOverview = ({
 			}[]
 		>[]
 	>({
+		baseball: [
+			{
+				Physical: [
+					{
+						label: "Height",
+						rating: "hgt",
+					},
+					{
+						label: "Speed",
+						rating: "spd",
+					},
+				],
+				Hitting: [
+					{
+						label: "Power",
+						rating: "hpw",
+					},
+					{
+						label: "Contact",
+						rating: "con",
+					},
+					{
+						label: "Eye",
+						rating: "eye",
+					},
+				],
+			},
+			{
+				Defense: [
+					{
+						label: "Ground Balls",
+						rating: "gnd",
+					},
+					{
+						label: "Fly Balls",
+						rating: "fly",
+					},
+					{
+						label: "Throwing",
+						rating: "thr",
+					},
+					{
+						label: "Catcher",
+						rating: "cat",
+					},
+				],
+			},
+			{
+				Pitching: [
+					{
+						label: "Power",
+						rating: "ppw",
+					},
+					{
+						label: "Control",
+						rating: "ctl",
+					},
+					{
+						label: "Movement",
+						rating: "mov",
+					},
+					{
+						label: "Endurance",
+						rating: "endu",
+					},
+				],
+			},
+		],
 		basketball: [
 			{
 				Physical: [

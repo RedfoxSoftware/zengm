@@ -1,6 +1,7 @@
-import PropTypes from "prop-types";
+import { useState } from "react";
 import { isSport } from "../../common";
-import { helpers } from "../util";
+import { downloadFile, helpers, toWorker } from "../util";
+import ActionButton from "./ActionButton";
 
 const RetiredPlayers = ({
 	retiredPlayers,
@@ -23,6 +24,7 @@ const RetiredPlayers = ({
 	season: number;
 	userTid: number;
 }) => {
+	const [exporting, setExporting] = useState(false);
 	return (
 		<>
 			<h2>Retired Players</h2>
@@ -68,14 +70,30 @@ const RetiredPlayers = ({
 					</span>
 				))}
 			</p>
+			<ActionButton
+				variant="light-bordered"
+				disabled={exporting}
+				onClick={async () => {
+					try {
+						setExporting(true);
+
+						const { filename, json } = await toWorker(
+							"main",
+							"exportDraftClass",
+							{ season, retiredPlayers: true },
+						);
+						downloadFile(filename, json, "application/json");
+					} finally {
+						setExporting(false);
+					}
+				}}
+				processing={exporting}
+				processingText="Exporting"
+			>
+				Export as draft class
+			</ActionButton>
 		</>
 	);
-};
-
-RetiredPlayers.propTypes = {
-	retiredPlayers: PropTypes.arrayOf(PropTypes.object).isRequired,
-	season: PropTypes.number.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default RetiredPlayers;

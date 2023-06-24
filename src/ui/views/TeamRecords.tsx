@@ -4,13 +4,15 @@ import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import type { View } from "../../common/types";
 import { bySport } from "../../common";
+import TeamLogoAndName from "../components/TeamLogoAndName";
 
 const teamLink = (t: View<"teamRecords">["teams"][number]) => {
 	return {
 		value: t.root ? (
-			<a href={helpers.leagueUrl(["team_history", `${t.abbrev}_${t.tid}`])}>
-				{t.region} {t.name}
-			</a>
+			<TeamLogoAndName
+				t={{ ...t, seasonAttrs: t }}
+				url={helpers.leagueUrl(["team_history", `${t.abbrev}_${t.tid}`])}
+			/>
 		) : (
 			<span className="ms-2">
 				{t.region} {t.name}
@@ -21,6 +23,19 @@ const teamLink = (t: View<"teamRecords">["teams"][number]) => {
 };
 
 const categories = bySport({
+	baseball: [
+		"mvp",
+		"poy",
+		"rpoy",
+		"roy",
+		"bestRecord",
+		"bestRecordConf",
+		"allRookie",
+		"allOffense",
+		"allDefense",
+		"allStar",
+		"allStarMVP",
+	],
 	basketball: [
 		"mvp",
 		"dpoy",
@@ -44,6 +59,8 @@ const categories = bySport({
 		"bestRecordConf",
 		"allRookie",
 		"allLeague",
+		"allStar",
+		"allStarMVP",
 	],
 	hockey: [
 		"mvp",
@@ -55,6 +72,8 @@ const categories = bySport({
 		"bestRecordConf",
 		"allRookie",
 		"allLeague",
+		"allStar",
+		"allStarMVP",
 	],
 });
 
@@ -139,7 +158,7 @@ const TeamRecords = ({
 					...categories.map(category => (t as any)[category]),
 				],
 				classNames: {
-					"text-muted": !t.root,
+					"text-body-secondary": !t.root,
 					"table-info": byType === "by_team" && t.root && t.tid === userTid,
 				},
 			};
@@ -163,10 +182,12 @@ const TeamRecords = ({
 			) : null}
 
 			<DataTable
+				className="align-middle"
 				cols={cols}
 				defaultSort={[0, "asc"]}
+				defaultStickyCols={1}
 				name="TeamRecords"
-				pagination={false}
+				nonfluid
 				rows={rows}
 			/>
 		</>

@@ -7,22 +7,42 @@ import type {
 	Game,
 } from "../../common/types";
 
+export type TeamSeasonOverride = {
+	region?: string;
+	name?: string;
+	abbrev?: string;
+	imgURL?: string;
+	colors?: [string, string, string];
+};
+
 export const setTeamInfo = async (
 	t: any,
 	i: number,
 	allStars: AllStars | undefined,
 	game: any,
+	teamSeasonOverride?: TeamSeasonOverride,
 ) => {
 	if (allStars) {
 		const ind = t.tid === -1 ? 0 : 1;
-		t.region = "Team";
-		t.name = allStars.teamNames[ind].replace("Team ", "");
-		t.abbrev = t.name.slice(0, 3).toUpperCase();
-		t.imgURL = "";
 
-		if (i === 1 && t.abbrev === game.teams[0].abbrev) {
-			t.abbrev = `${t.abbrev.slice(0, 2)}2`;
+		if (allStars.type === "byConf" || allStars.type === "top") {
+			t.name = allStars.teamNames[ind];
+		} else {
+			// Covers type==="draft" and undefind type, from when draft was the only option
+			t.region = "Team";
+			t.name = allStars.teamNames[ind].replace("Team ", "");
 		}
+
+		if (allStars.type === "top") {
+			t.abbrev = `AS${i === 0 ? 2 : 1}`;
+		} else {
+			t.abbrev = t.name.slice(0, 3).toUpperCase();
+			if (i === 1 && t.abbrev === game.teams[0].abbrev) {
+				t.abbrev = `${t.abbrev.slice(0, 2)}2`;
+			}
+		}
+
+		t.imgURL = "";
 
 		for (const p of t.players) {
 			const entry = allStars.teams[ind].find(p2 => p2.pid === p.pid);
@@ -30,22 +50,54 @@ export const setTeamInfo = async (
 			p.tid = entry ? entry.tid : g.get("userTid");
 		}
 	} else {
-		const teamSeason = await idb.cache.teamSeasons.indexGet(
-			"teamSeasonsByTidSeason",
-			[t.tid, game.season],
-		);
+		const teamSeason =
+			teamSeasonOverride ??
+			(await idb.cache.teamSeasons.indexGet("teamSeasonsByTidSeason", [
+				t.tid,
+				game.season,
+			]));
 		if (teamSeason) {
-			t.region = teamSeason.region || g.get("teamInfoCache")[t.tid]?.region;
-			t.name = teamSeason.name || g.get("teamInfoCache")[t.tid]?.name;
-			t.abbrev = teamSeason.abbrev || g.get("teamInfoCache")[t.tid]?.abbrev;
-			t.imgURL = teamSeason.imgURL || g.get("teamInfoCache")[t.tid]?.imgURL;
+			t.region =
+				teamSeason.region ??
+				(Object.hasOwn(g, "teamInfoCache")
+					? g.get("teamInfoCache")[t.tid]?.region
+					: "");
+			t.name =
+				teamSeason.name ??
+				(Object.hasOwn(g, "teamInfoCache")
+					? g.get("teamInfoCache")[t.tid]?.name
+					: "");
+			t.abbrev =
+				teamSeason.abbrev ??
+				(Object.hasOwn(g, "teamInfoCache")
+					? g.get("teamInfoCache")[t.tid]?.abbrev
+					: "");
+			t.imgURL =
+				teamSeason.imgURL ??
+				(Object.hasOwn(g, "teamInfoCache")
+					? g.get("teamInfoCache")[t.tid]?.imgURL
+					: "");
 			t.colors = teamSeason.colors;
-		} else {
+		} else if (Object.hasOwn(g, "teamInfoCache")) {
 			t.region = g.get("teamInfoCache")[t.tid]?.region;
 			t.name = g.get("teamInfoCache")[t.tid]?.name;
 			t.abbrev = g.get("teamInfoCache")[t.tid]?.abbrev;
 			t.imgURL = g.get("teamInfoCache")[t.tid]?.imgURL;
+		} else {
+			t.region = "";
+			t.name = "";
+			t.abbrev = "";
+			t.imgURL = "";
 		}
+	}
+};
+
+export const makeAbbrevsUnique = <T extends { abbrev: string }>(
+	teams: [T, T],
+) => {
+	if (teams[0].abbrev === teams[1].abbrev) {
+		teams[0].abbrev = `${teams[0].abbrev}2`;
+		teams[1].abbrev = `${teams[1].abbrev}1`;
 	}
 };
 
@@ -105,18 +157,13 @@ const boxScore = async (gid: number) => {
 			);
 		});
 	}
+	makeAbbrevsUnique(game.teams as any);
 
 	const wonInd = game.won.tid === game.teams[0].tid ? 0 : 1;
 	const lostInd = wonInd === 0 ? 1 : 0;
 
-	let overtime;
-	if (game.overtimes === 1) {
-		overtime = " (OT)";
-	} else if (game.overtimes > 1) {
-		overtime = ` (${game.overtimes}OT)`;
-	} else {
-		overtime = "";
-	}
+	const overtimeText = helpers.overtimeText(game.overtimes, game.numPeriods);
+	const overtime = overtimeText === "" ? "" : ` (${overtimeText})`;
 
 	if (game.numPeriods === undefined) {
 		game.numPeriods = 4;

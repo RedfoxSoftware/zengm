@@ -1,4 +1,9 @@
-import { useState, ChangeEvent, FormEvent, MouseEvent } from "react";
+import {
+	useState,
+	type ChangeEvent,
+	type FormEvent,
+	type MouseEvent,
+} from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import { helpers, logEvent, toWorker } from "../util";
 import type { View } from "../../common/types";
@@ -86,7 +91,10 @@ const ManageTeams = ({ confs, divs, phase }: View<"manageConfs">) => {
 		event.preventDefault();
 		setSaving(true);
 
-		await toWorker("main", "updateConfsDivs", liveConfs, liveDivs);
+		await toWorker("main", "updateConfsDivs", {
+			confs: liveConfs,
+			divs: liveDivs,
+		});
 
 		let text = "Saved conferences and divisions.";
 

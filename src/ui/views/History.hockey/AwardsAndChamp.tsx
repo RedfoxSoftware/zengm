@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { helpers } from "../../../ui/util";
 import type { ActualProps } from ".";
 import { AWARD_NAMES } from "../../../common";
@@ -17,8 +16,7 @@ const Winner = ({
 	userTid: number;
 }) => {
 	if (!award) {
-		// https://github.com/DefinitelyTyped/DefinitelyTyped/issues/20544
-		return finals ? <>???</> : <p>???</p>;
+		return finals ? "???" : <p>???</p>;
 	}
 
 	let stats;
@@ -79,14 +77,6 @@ const Winner = ({
 	);
 
 	return finals ? nameAndStats : <p>{nameAndStats}</p>;
-};
-
-Winner.propTypes = {
-	award: PropTypes.object,
-	defense: PropTypes.bool,
-	finals: PropTypes.bool,
-	season: PropTypes.number.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 const AwardsAndChamp = ({
@@ -153,9 +143,7 @@ const AwardsAndChamp = ({
 								>
 									{t.region} {t.name}
 								</a>{" "}
-								({t.won}-{t.lost}
-								{t.otl !== undefined && t.otl > 0 ? <>-{t.otl}</> : null}
-								{t.tied !== undefined && t.tied > 0 ? <>-{t.tied}</> : null})
+								({helpers.formatRecord(t)})
 							</span>
 							<br />
 						</p>
@@ -200,14 +188,6 @@ const AwardsAndChamp = ({
 			</div>
 		</div>
 	);
-};
-
-AwardsAndChamp.propTypes = {
-	awards: PropTypes.object.isRequired,
-	champ: PropTypes.object.isRequired,
-	confs: PropTypes.arrayOf(PropTypes.object).isRequired,
-	season: PropTypes.number.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default AwardsAndChamp;

@@ -1,5 +1,5 @@
 import orderBy from "lodash-es/orderBy";
-import { isSport, PLAYER, POSITIONS } from "../../../common";
+import { bySport, isSport, PLAYER, POSITIONS } from "../../../common";
 import developSeason from "./developSeason";
 import ovr from "./ovr";
 import pos from "./pos";
@@ -8,11 +8,14 @@ import { g, helpers, random } from "../../util";
 import type { MinimalPlayerRatings } from "../../../common/types";
 import genWeight from "./genWeight";
 import potEstimator from "./potEstimator";
+import { BANNED_POSITIONS } from "./pos.baseball";
+import { TOO_MANY_TEAMS_TOO_SLOW } from "../season/getInitialNumGamesConfDivSettings";
+import { DEFAULT_LEVEL } from "../../../common/budgetLevels";
 
 const NUM_SIMULATIONS = 20; // Higher is more accurate, but slower. Low accuracy is fine, though!
 
 // Repeatedly simulate aging up to 29, and pick the 75th percentile max
-export const bootstrapPot = async ({
+export const monteCarloPot = async ({
 	ratings,
 	age,
 	srID,
@@ -30,14 +33,18 @@ export const bootstrapPot = async ({
 	}
 
 	if (
-		isSport("football") ||
-		isSport("hockey") ||
-		(isSport("basketball") && usePotEstimator)
+		bySport({
+			baseball: true,
+			basketball:
+				usePotEstimator || g.get("numActiveTeams") >= TOO_MANY_TEAMS_TOO_SLOW,
+			football: true,
+			hockey: true,
+		})
 	) {
 		let ovr;
 		let pot;
 
-		if (isSport("football") || isSport("hockey")) {
+		if (!isSport("basketball")) {
 			if (pos === undefined) {
 				throw new Error("pos is required for potEstimator");
 			}
@@ -65,7 +72,7 @@ export const bootstrapPot = async ({
 		let maxOvr = pos ? ratings.ovrs[pos] : ratings.ovr;
 
 		for (let ageTemp = age + 1; ageTemp < 30; ageTemp++) {
-			await developSeason(copiedRatings, ageTemp, srID); // Purposely no coachingRank
+			await developSeason(copiedRatings, ageTemp, srID); // Purposely no coachingLevel
 
 			const currentOvr = ovr(copiedRatings, pos);
 
@@ -89,7 +96,7 @@ export const bootstrapPot = async ({
  * @param {Object} p Player object.
  * @param {number=} years Number of years to develop (default 1).
  * @param {boolean=} newPlayer Generating a new player? (default false). If true, then the player's age is also updated based on years.
- * @param {number=} coachingRank From 1 to g.get("numActiveTeams") (default 30), where 1 is best coaching staff and g.get("numActiveTeams") is worst. Default is 15.5
+ * @param {number=} coachingLevel
  * @return {Object} Updated player object.
  */
 const develop = async (
@@ -111,10 +118,10 @@ const develop = async (
 	},
 	years: number = 1,
 	newPlayer: boolean = false,
-	coachingRank: number = (g.get("numActiveTeams") + 1) / 2,
+	coachingLevel: number = DEFAULT_LEVEL,
 	skipPot: boolean = false, // Only for making testing or core/debug faster
 ) => {
-	const ratings = p.ratings.at(-1);
+	const ratings = p.ratings.at(-1)!;
 	let age = ratings.season - p.born.year;
 
 	for (let i = 0; i < years; i++) {
@@ -124,7 +131,7 @@ const develop = async (
 		}
 
 		if (!ratings.locked) {
-			await developSeason(ratings, age, p.srID, coachingRank);
+			await developSeason(ratings, age, p.srID, coachingLevel);
 		}
 	}
 
@@ -135,10 +142,10 @@ const develop = async (
 			ratings.ovr = ovr(ratings);
 
 			if (!skipPot) {
-				ratings.pot = await bootstrapPot({ ratings, age, srID: p.srID });
+				ratings.pot = await monteCarloPot({ ratings, age, srID: p.srID });
 			}
 
-			if (p.hasOwnProperty("pos") && typeof p.pos === "string") {
+			if (typeof p.pos === "string") {
 				// Must be a custom league player, let's not rock the boat
 				ratings.pos = p.pos;
 			} else {
@@ -148,11 +155,10 @@ const develop = async (
 			let pos;
 			let maxOvr = -Infinity; // A player can never have KR or PR as his main position
 
-			const bannedPositions = ["KR", "PR"];
 			ratings.ovrs = POSITIONS.reduce((ovrs, pos2) => {
 				ovrs[pos2] = ovr(ratings, pos2);
 
-				if (!bannedPositions.includes(pos2) && ovrs[pos2] > maxOvr) {
+				if (!BANNED_POSITIONS.includes(pos2) && ovrs[pos2] > maxOvr) {
 					pos = pos2;
 					maxOvr = ovrs[pos2];
 				}
@@ -163,7 +169,7 @@ const develop = async (
 			if (!skipPot) {
 				ratings.pots = {};
 				for (const pos2 of POSITIONS) {
-					ratings.pots[pos2] = await bootstrapPot({
+					ratings.pots[pos2] = await monteCarloPot({
 						ratings,
 						age,
 						srID: p.srID,
@@ -176,7 +182,7 @@ const develop = async (
 				throw new Error("Should never happen");
 			}
 
-			if (p.hasOwnProperty("pos") && typeof p.pos === "string") {
+			if (typeof p.pos === "string") {
 				pos = p.pos;
 			}
 
@@ -189,7 +195,11 @@ const develop = async (
 	if (!ratings.locked && years > 0) {
 		// In the NBA displayed weights seem to never change and seem inaccurate
 		if (isSport("football")) {
-			const newWeight = genWeight(ratings.hgt, ratings.stre, ratings.pos);
+			const newWeight = genWeight(
+				ratings.hgt,
+				(ratings as any).stre,
+				ratings.pos,
+			);
 			if (p.ratings.length <= 1) {
 				p.weight = newWeight;
 			} else {

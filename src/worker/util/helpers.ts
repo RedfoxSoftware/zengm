@@ -2,6 +2,7 @@ import {
 	PLAYER,
 	helpers as commonHelpers,
 	timeBetweenGames,
+	isSport,
 } from "../../common";
 import { idb } from "../db";
 import g from "./g";
@@ -104,20 +105,6 @@ const correctLinkLid = (lid: number, text: string) => {
 	return text.replace(/\/l\/\d+\//g, `/l/${lid}/`);
 };
 
-const defaultBudgetAmount = (
-	popRank: number = g.get("numActiveTeams"),
-	salaryCap: number = g.get("salaryCap"),
-) => {
-	return (
-		Math.round(
-			20 +
-				(salaryCap / 90000) * 1330 +
-				(900 * (salaryCap / 90000) * (g.get("numActiveTeams") - popRank)) /
-					(g.get("numActiveTeams") - 1),
-		) * 10
-	);
-};
-
 const defaultTicketPrice = (
 	popRank: number = g.get("numActiveTeams"),
 	salaryCap: number = g.get("salaryCap"),
@@ -167,6 +154,10 @@ const getAbbrev = (tid: number | string): string => {
 		return "DNE";
 	}
 
+	if (tid === PLAYER.TOT) {
+		return "TOT";
+	}
+
 	if (tid < 0 || Number.isNaN(tid)) {
 		// Weird or retired
 		return "";
@@ -181,26 +172,6 @@ const getAbbrev = (tid: number | string): string => {
 
 const leagueUrl = (components: (number | string | undefined)[]): string =>
 	commonHelpers.leagueUrlFactory(g.get("lid"), components);
-
-/**
- * Pad an array with nulls or truncate it so that it has a fixed length.
- *
- * @memberOf util.helpers
- * @param {Array} array Input array.
- * @param {number} length Desired length.
- * @return {Array} Original array padded with null or truncated so that it has the required length.
- */
-function zeroPad(array: number[], length: number) {
-	if (array.length > length) {
-		return array.slice(0, length);
-	}
-
-	while (array.length < length) {
-		array.push(0);
-	}
-
-	return array;
-}
 
 const numGamesToWinSeries = (numGamesPlayoffSeries: number | undefined) => {
 	if (
@@ -244,7 +215,7 @@ const overtimeCounter = (n: number): string => {
 	}
 };
 
-const pickDesc = (dp: DraftPick, short?: "short"): string => {
+const pickDesc = async (dp: DraftPick, short?: "short") => {
 	const season =
 		dp.season === "fantasy"
 			? "Fantasy draft"
@@ -261,12 +232,46 @@ const pickDesc = (dp: DraftPick, short?: "short"): string => {
 	}
 
 	if (dp.tid !== dp.originalTid) {
-		extras.push(`from ${g.get("teamInfoCache")[dp.originalTid]?.abbrev}`);
+		const abbrev = g.get("teamInfoCache")[dp.originalTid]?.abbrev;
+		if (abbrev) {
+			extras.push(
+				`from <a href="${leagueUrl([
+					"roster",
+					`${abbrev}_${dp.originalTid}`,
+				])}">${abbrev}</a>`,
+			);
+		}
+	}
+
+	// Show record for traded pick, Cause in the trade UI there's no other way to see how good the team is.
+	if (
+		typeof dp.season === "number" &&
+		dp.tid !== dp.originalTid &&
+		dp.pick === 0
+	) {
+		const currentSeason = g.get("season");
+		let teamSeason = await idb.cache.teamSeasons.indexGet(
+			"teamSeasonsByTidSeason",
+			[dp.originalTid, currentSeason],
+		);
+		const gp = teamSeason ? helpers.getTeamSeasonGp(teamSeason) : 0;
+		if (gp === 0) {
+			teamSeason = await idb.cache.teamSeasons.indexGet(
+				"teamSeasonsByTidSeason",
+				[dp.originalTid, currentSeason - 1],
+			);
+		}
+		if (teamSeason && helpers.getTeamSeasonGp(teamSeason) > 0) {
+			const record = commonHelpers.formatRecord(teamSeason);
+			extras.push(record);
+		}
 	}
 
 	let desc = `${season} ${commonHelpers.ordinal(dp.round)}`;
 	if (extras.length === 0 || !short) {
 		desc += " round pick";
+	} else if (extras.length === 1) {
+		desc += " round";
 	}
 	if (extras.length > 0) {
 		desc += ` (${extras.join(", ")})`;
@@ -298,14 +303,22 @@ const sigmoid = (x: number, a: number, b: number): number => {
 	return 1 / (1 + Math.exp(-(a * (x - b))));
 };
 
-const quarterLengthFactor = () => {
-	if (g.get("quarterLength") <= 0) {
-		return 1;
+const effectiveGameLength = () => {
+	let gameLength = g.get("numPeriods") * g.get("quarterLength");
+	if (isSport("basketball") && g.get("elam") && !g.get("elamOvertime")) {
+		gameLength -= g.get("elamMinutes");
+
+		// Assume 2.3 pts per minute
+		gameLength += g.get("elamPoints") / 2.3;
 	}
 
+	return gameLength;
+};
+
+const quarterLengthFactor = () => {
 	// sqrt is to account for fatigue in short/long games. Also https://news.ycombinator.com/item?id=11032596
 	return Math.sqrt(
-		(g.get("numPeriods") * g.get("quarterLength")) /
+		effectiveGameLength() /
 			(defaultGameAttributes.numPeriods * defaultGameAttributes.quarterLength),
 	);
 };
@@ -322,17 +335,26 @@ const daysLeft = (freeAgents: boolean, days?: number) => {
 	return `${actualDays} ${dayWeek} left`;
 };
 
+const getTeamSeasonGp = (teamSeason: {
+	won: number;
+	lost: number;
+	tied: number;
+	otl: number;
+}) => {
+	return teamSeason.won + teamSeason.lost + teamSeason.tied + teamSeason.otl;
+};
+
 const helpers = {
 	...commonHelpers,
 	augmentSeries,
 	calcWinp,
 	correctLinkLid,
-	defaultBudgetAmount,
 	defaultTicketPrice,
+	effectiveGameLength,
 	gb,
 	getAbbrev,
+	getTeamSeasonGp,
 	leagueUrl,
-	zeroPad,
 	numGamesToWinSeries,
 	overtimeCounter,
 	pickDesc,

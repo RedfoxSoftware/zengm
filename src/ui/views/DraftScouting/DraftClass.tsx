@@ -1,22 +1,20 @@
-import PropTypes from "prop-types";
 import { useState } from "react";
-import {
-	DataTable,
-	LeagueFileUpload,
-	PlayerNameLabels,
-} from "../../components";
+import { DataTable, LeagueFileUpload } from "../../components";
 import { confirm, downloadFile, getCols, toWorker } from "../../util";
 import type { View } from "../../../common/types";
 import { WEBSITE_ROOT } from "../../../common";
+import { wrappedPlayerNameLabels } from "../../components/PlayerNameLabels";
 
 const DraftClass = ({
 	challengeNoRatings,
+	fantasyDraft,
 	godMode,
 	offset,
 	players,
 	season,
 }: {
 	challengeNoRatings: boolean;
+	fantasyDraft: boolean;
 	godMode: boolean;
 	offset: number;
 	players: View<"draftScouting">["seasons"][0]["players"];
@@ -32,20 +30,15 @@ const DraftClass = ({
 			key: p.pid,
 			data: [
 				p.rank,
-				{
-					value: (
-						<PlayerNameLabels
-							pid={p.pid}
-							season={season}
-							skills={p.skills}
-							watch={p.watch}
-						>
-							{p.nameAbbrev}
-						</PlayerNameLabels>
-					),
-					sortValue: p.name,
-					searchValue: p.name,
-				},
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					season,
+					skills: p.skills,
+					watch: p.watch,
+					firstName: p.firstNameShort,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.pos,
 				p.age,
 				!challengeNoRatings ? p.ovr : null,
@@ -58,75 +51,81 @@ const DraftClass = ({
 		<>
 			<h2>{season}</h2>
 
-			<div className="btn-group mb-3">
-				<button
-					className="btn btn-light-bordered btn-xs"
-					onClick={() => setShowImportForm(val => !val)}
-				>
-					Import
-				</button>
-				<button
-					className="btn btn-light-bordered btn-xs"
-					disabled={status === "exporting" || status === "loading"}
-					onClick={async () => {
-						setStatus("exporting");
-
-						const { filename, json } = await toWorker(
-							"main",
-							"exportDraftClass",
-							season,
-						);
-						downloadFile(filename, json, "application/json");
-
-						setStatus(undefined);
-					}}
-				>
-					Export
-				</button>
-				{godMode ? (
+			{fantasyDraft ? (
+				<div className="mb-3 text-warning">
+					You cannot import/export future draft classes during a fantasy draft
+				</div>
+			) : (
+				<div className="btn-group mb-3">
 					<button
-						className="btn btn-outline-god-mode btn-xs"
-						disabled={status === "exporting" || status === "loading"}
-						onClick={async () => {
-							setStatus("loading");
-
-							await toWorker("main", "regenerateDraftClass", season);
-
-							setStatus(undefined);
-						}}
+						className="btn btn-light-bordered btn-xs"
+						onClick={() => setShowImportForm(val => !val)}
 					>
-						Regenerate
+						Import
 					</button>
-				) : null}
-				{godMode ? (
 					<button
-						className="btn btn-outline-god-mode btn-xs"
+						className="btn btn-light-bordered btn-xs"
 						disabled={status === "exporting" || status === "loading"}
 						onClick={async () => {
-							setStatus("loading");
+							setStatus("exporting");
 
-							const proceed = await confirm(
-								`Are you sure you want to delete all ${players.length} players in the ${season} draft class?`,
-								{
-									okText: "Delete Players",
-								},
+							const { filename, json } = await toWorker(
+								"main",
+								"exportDraftClass",
+								{ season },
 							);
-
-							if (proceed) {
-								await toWorker(
-									"main",
-									"removePlayers",
-									players.map(p => p.pid),
-								);
-							}
+							downloadFile(filename, json, "application/json");
 
 							setStatus(undefined);
 						}}
 					>
-						Clear
+						Export
 					</button>
-				) : null}
-			</div>
+					{godMode ? (
+						<button
+							className="btn btn-outline-god-mode btn-xs"
+							disabled={status === "exporting" || status === "loading"}
+							onClick={async () => {
+								setStatus("loading");
+
+								await toWorker("main", "regenerateDraftClass", season);
+
+								setStatus(undefined);
+							}}
+						>
+							Regenerate
+						</button>
+					) : null}
+					{godMode ? (
+						<button
+							className="btn btn-outline-god-mode btn-xs"
+							disabled={status === "exporting" || status === "loading"}
+							onClick={async () => {
+								setStatus("loading");
+
+								const proceed = await confirm(
+									`Are you sure you want to delete all ${players.length} players in the ${season} draft class?`,
+									{
+										okText: "Delete Players",
+									},
+								);
+
+								if (proceed) {
+									await toWorker(
+										"main",
+										"removePlayers",
+										players.map(p => p.pid),
+									);
+								}
+
+								setStatus(undefined);
+							}}
+						>
+							Clear
+						</button>
+					) : null}
+				</div>
+			)}
 
 			{showImportForm ? (
 				<div>
@@ -152,12 +151,10 @@ const DraftClass = ({
 								return;
 							}
 
-							await toWorker(
-								"main",
-								"handleUploadedDraftClass",
-								output.basicInfo,
-								season,
-							);
+							await toWorker("main", "handleUploadedDraftClass", {
+								uploadedFile: output.basicInfo,
+								draftYear: season,
+							});
 
 							setShowImportForm(false);
 							setStatus(undefined);
@@ -175,12 +172,6 @@ const DraftClass = ({
 			/>
 		</>
 	);
-};
-
-DraftClass.propTypes = {
-	offset: PropTypes.number.isRequired,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	season: PropTypes.number.isRequired,
 };
 
 export default DraftClass;

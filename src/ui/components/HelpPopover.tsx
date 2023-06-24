@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { OverlayTrigger, Popover } from "react-bootstrap";
 import type { ReactNode } from "react";
 
@@ -13,7 +12,7 @@ const HelpPopover = ({
 	style?: {
 		[key: string]: number | string;
 	};
-	title: string;
+	title?: string;
 }) => {
 	if (!className) {
 		className = "";
@@ -26,7 +25,7 @@ const HelpPopover = ({
 			placement="auto"
 			overlay={
 				<Popover id={title}>
-					<Popover.Header as="h3">{title}</Popover.Header>
+					{title ? <Popover.Header as="h3">{title}</Popover.Header> : null}
 					<Popover.Body>{children}</Popover.Body>
 				</Popover>
 			}
@@ -35,12 +34,6 @@ const HelpPopover = ({
 			<span className={className} style={style} />
 		</OverlayTrigger>
 	);
-};
-
-HelpPopover.propTypes = {
-	children: PropTypes.any,
-	style: PropTypes.object,
-	title: PropTypes.string.isRequired,
 };
 
 export default HelpPopover;

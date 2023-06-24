@@ -5,29 +5,29 @@ import { defaultGameAttributes, g, local } from "../worker/util";
 import "smoke-test-overrides"; // eslint-disable-line
 import { deleteDB } from "idb";
 import createStreamFromLeagueObject from "../worker/core/league/create/createStreamFromLeagueObject";
-import { helpers, MAX_SUPPORTED_LEAGUE_VERSION } from "../common";
+import { helpers, LEAGUE_DATABASE_VERSION } from "../common";
 
 describe("Smoke Tests", () => {
 	let intervalID: number;
 
 	it("Create a new league and simuluate a season without error", async function () {
 		// Don't want to include Mocha and Jest types cause they conflict
-		// @ts-ignore
+		// @ts-expect-error
 		this.timeout(5 * 60 * 1000); // 5 minutes
 
 		idb.meta = await connectMeta();
 		const stream = createStreamFromLeagueObject({});
 
 		await league.createStream(stream, {
-			confs: defaultGameAttributes.confs.at(-1).value,
-			divs: defaultGameAttributes.divs.at(-1).value,
+			confs: defaultGameAttributes.confs.at(-1)!.value,
+			divs: defaultGameAttributes.divs.at(-1)!.value,
 			fromFile: {
 				gameAttributes: undefined,
 				hasRookieContracts: true,
 				maxGid: undefined,
 				startingSeason: undefined,
 				teams: undefined,
-				version: MAX_SUPPORTED_LEAGUE_VERSION,
+				version: LEAGUE_DATABASE_VERSION,
 			},
 			getLeagueOptions: undefined,
 			keptKeys: new Set(),
@@ -58,7 +58,7 @@ describe("Smoke Tests", () => {
 	});
 
 	// Don't want to include Mocha and Jest types cause they conflict
-	// @ts-ignore
+	// @ts-expect-error
 	after(async () => {
 		clearInterval(intervalID);
 		await league.remove(g.get("lid"));
@@ -72,7 +72,7 @@ describe("Smoke Tests", () => {
 		}
 
 		await deleteDB("meta");
-		// @ts-ignore
+		// @ts-expect-error
 		idb.meta = undefined;
 	});
 });

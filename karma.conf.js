@@ -1,6 +1,6 @@
-const karmaConfig = require("./tools/lib/karmaConfig");
+module.exports = async config => {
+	const karmaConfig = (await import("./tools/lib/karmaConfig.js")).default;
 
-module.exports = function (config) {
 	config.set({
 		...karmaConfig,
 		browsers: ["ChromeHeadless", "FirefoxHeadless"],

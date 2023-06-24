@@ -1,10 +1,5 @@
 import { idb, iterate } from "../db";
-import {
-	defaultGameAttributes,
-	g,
-	helpers,
-	processPlayersHallOfFame,
-} from "../util";
+import { g, helpers, processPlayersHallOfFame } from "../util";
 import type {
 	UpdateEvents,
 	Player,
@@ -17,6 +12,7 @@ import { bySport, PLAYER } from "../../common";
 import { getValueStatsRow } from "../core/player/checkJerseyNumberRetirement";
 import goatFormula from "../util/goatFormula";
 import orderBy from "lodash-es/orderBy";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 type Most = {
 	value: number;
@@ -34,16 +30,16 @@ export const getMostXPlayers = async ({
 	sortParams,
 }: {
 	filter?: (p: Player) => boolean;
-	getValue: (p: Player) => Most | undefined;
+	getValue: (p: Player) => Most | Most[] | undefined;
 	after?: (most: Most) => Promise<Most> | Most;
 	sortParams?: any;
 }) => {
 	const LIMIT = 100;
-	const playersAll: PlayersAll = [];
+	let playersAll: PlayersAll = [];
 
 	await iterate(
-		idb.league.transaction("players").store,
-		undefined,
+		idb.league.transaction("players").store.index("draft.year, retiredYear"),
+		IDBKeyRange.bound([-Infinity], [g.get("season") - 1, Infinity]),
 		undefined,
 		p => {
 			if (filter !== undefined && !filter(p)) {
@@ -55,19 +51,23 @@ export const getMostXPlayers = async ({
 				return;
 			}
 
-			playersAll.push({
-				...p,
-				most,
-			});
+			const mosts = Array.isArray(most) ? most : [most];
+
+			for (const row of mosts) {
+				playersAll.push({
+					...p,
+					most: row,
+				});
+			}
+
 			playersAll.sort((a, b) => b.most.value - a.most.value);
 
-			if (playersAll.length > LIMIT) {
-				playersAll.pop();
-			}
+			playersAll = playersAll.slice(0, LIMIT);
 		},
 	);
 
 	const stats = bySport({
+		baseball: ["gp", "keyStats", "war"],
 		basketball: ["gp", "min", "pts", "trb", "ast", "per", "ewa", "ws", "ws48"],
 		football: ["gp", "keyStats", "av"],
 		hockey: ["gp", "keyStats", "ops", "dps", "ps"],
@@ -76,7 +76,8 @@ export const getMostXPlayers = async ({
 	const players = await idb.getCopies.playersPlus(playersAll, {
 		attrs: [
 			"pid",
-			"name",
+			"firstName",
+			"lastName",
 			"draft",
 			"retiredYear",
 			"statsTids",
@@ -90,6 +91,7 @@ export const getMostXPlayers = async ({
 		ratings: ["ovr", "pos"],
 		stats: ["season", "abbrev", "tid", ...stats],
 		fuzz: true,
+		mergeStats: "totOnly",
 	});
 
 	const ordered = sortParams ? orderBy(players, ...sortParams) : players;
@@ -103,8 +105,19 @@ export const getMostXPlayers = async ({
 		}
 	}
 
+	const processedPlayers = addFirstNameShort(processPlayersHallOfFame(ordered));
+
+	for (const p of processedPlayers) {
+		const bestSeasonOverride = p.most?.extra?.bestSeasonOverride;
+		if (bestSeasonOverride !== undefined) {
+			p.awards = (p.awards as any[]).filter(
+				row => row.season === bestSeasonOverride,
+			);
+		}
+	}
+
 	return {
-		players: processPlayersHallOfFame(ordered),
+		players: processedPlayers,
 		stats,
 	};
 };
@@ -124,7 +137,9 @@ const playerValue = (p: Player<MinimalPlayerRatings>) => {
 const tidAndSeasonToAbbrev = async (most: Most) => {
 	let abbrev;
 
-	const { season, tid } = most.extra as any;
+	const extra = most.extra as any;
+	const tid = extra.tid;
+	const season = extra.bestSeasonOverride ?? extra.season;
 	const teamSeason = await idb.league
 		.transaction("teamSeasons")
 		.store.index("season, tid")
@@ -166,7 +181,8 @@ const updatePlayers = async (
 	if (
 		updateEvents.includes("firstRun") ||
 		type !== state.type ||
-		(type === "goat" && updateEvents.includes("g.goatFormula"))
+		(type === "goat" && updateEvents.includes("g.goatFormula")) ||
+		(type === "goat_season" && updateEvents.includes("g.goatSeasonFormula"))
 	) {
 		let filter: Parameters<typeof getMostXPlayers>[0]["filter"];
 		let getValue: Parameters<typeof getMostXPlayers>[0]["getValue"];
@@ -179,6 +195,9 @@ const updatePlayers = async (
 			colName: string;
 		}[] = [];
 		let extraProps: any;
+
+		const challengeNoRatingsText =
+			' Because you\'re using the "no visible ratings" challenge mode, only retired players are shown here.';
 
 		if (type === "at_pick") {
 			if (arg === undefined) {
@@ -254,7 +273,7 @@ const updatePlayers = async (
 				colName: "GOAT",
 			});
 			extraProps = {
-				goatFormula: g.get("goatFormula") ?? goatFormula.DEFAULT_FORMULA,
+				formula: g.get("goatFormula") ?? goatFormula.DEFAULT_FORMULA,
 				awards: goatFormula.AWARD_VARIABLES,
 				stats: goatFormula.STAT_VARIABLES,
 			};
@@ -262,12 +281,64 @@ const updatePlayers = async (
 			getValue = (p: Player<MinimalPlayerRatings>) => {
 				let value = 0;
 				try {
-					value = goatFormula.evaluate(p);
+					value = goatFormula.evaluate(p, undefined, {
+						type: "career",
+					});
 				} catch (error) {}
 
 				return {
 					value,
 				};
+			};
+		} else if (type === "goat_season") {
+			title = "GOAT Season";
+			description =
+				"Define your own formula to rank the greatest seasons of all time.";
+			extraCols.push(
+				{
+					key: ["most", "value"],
+					colName: "GOAT",
+				},
+				{
+					key: ["most", "extra", "bestSeasonOverride"],
+					colName: "Season",
+				},
+			);
+			const awards = {
+				...goatFormula.AWARD_VARIABLES,
+			};
+			delete awards.numSeasons;
+			extraProps = {
+				formula:
+					g.get("goatSeasonFormula") ?? goatFormula.DEFAULT_FORMULA_SEASON,
+				awards,
+				stats: goatFormula.STAT_VARIABLES,
+			};
+
+			getValue = (p: Player<MinimalPlayerRatings>) => {
+				const seasons = Array.from(
+					new Set(p.stats.filter(row => !row.playoffs).map(row => row.season)),
+				);
+
+				return seasons
+					.map(season => {
+						try {
+							const value = goatFormula.evaluate(p, undefined, {
+								type: "season",
+								season,
+							});
+							return {
+								value,
+								extra: {
+									// If this is set, it will specify the season to use for the "Best Season" section, rather than picking the best season by the normal metric. Useful if you want to display a list of seasons (like goat_season)
+									bestSeasonOverride: season,
+								},
+							};
+						} catch (error) {}
+
+						return [];
+					})
+					.flat();
 			};
 		} else if (type === "teams") {
 			title = "Most Teams";
@@ -325,8 +396,64 @@ const updatePlayers = async (
 			description =
 				"These are the players who had the biggest single season increases in ovr rating.";
 			if (g.get("challengeNoRatings")) {
-				description +=
-					' Because you\'re using the "no visible ratings" challenge mode, only retired players are shown here.';
+				description += challengeNoRatingsText;
+			}
+			extraCols.push(
+				{
+					key: ["most", "extra", "bestSeasonOverride"],
+					colName: "Season",
+				},
+				{
+					key: ["most", "extra", "age"],
+					colName: "Age",
+				},
+				{
+					key: ["most", "value"],
+					colName: "Prog",
+				},
+			);
+
+			filter = p =>
+				p.ratings.length > 1 &&
+				(!g.get("challengeNoRatings") || p.tid === PLAYER.RETIRED);
+			getValue = p => {
+				// Handle duplicate entries, like due to injury - we only want the first one
+				const seasonsSeen = new Set<number>();
+
+				return p.ratings
+					.map((row, i) => {
+						if (i === 0) {
+							return [];
+						}
+
+						if (seasonsSeen.has(row.season)) {
+							return [];
+						}
+						seasonsSeen.add(row.season);
+
+						const ovr = player.fuzzRating(row.ovr, row.fuzz);
+						const prevOvr = player.fuzzRating(
+							p.ratings[i - 1].ovr,
+							p.ratings[i - 1].fuzz,
+						);
+						const prog = ovr - prevOvr;
+
+						return {
+							value: prog,
+							extra: {
+								bestSeasonOverride: row.season,
+								age: row.season - p.born.year,
+							},
+						};
+					})
+					.flat();
+			};
+		} else if (type === "progs_career") {
+			title = "Career Progs";
+			description =
+				"These are the players who had the biggest improvements from draft prospect to peak, by ovr rating.";
+			if (g.get("challengeNoRatings")) {
+				description += challengeNoRatingsText;
 			}
 			extraCols.push(
 				{
@@ -349,13 +476,10 @@ const updatePlayers = async (
 			getValue = p => {
 				let maxProg = -Infinity;
 				let maxSeason = p.ratings[0].season;
+				const ovr0 = player.fuzzRating(p.ratings[0].ovr, p.ratings[0].fuzz);
 				for (let i = 1; i < p.ratings.length; i++) {
 					const ovr = player.fuzzRating(p.ratings[i].ovr, p.ratings[i].fuzz);
-					const prevOvr = player.fuzzRating(
-						p.ratings[i - 1].ovr,
-						p.ratings[i - 1].fuzz,
-					);
-					const prog = ovr - prevOvr;
+					const prog = ovr - ovr0;
 					if (prog > maxProg) {
 						maxProg = prog;
 						maxSeason = p.ratings[i].season;
@@ -395,6 +519,8 @@ const updatePlayers = async (
 		} else if (type === "steals") {
 			title = "Biggest Steals";
 			description = bySport({
+				baseball:
+					"These are the undrafted players or 5th+ round picks who had the best careers.",
 				basketball:
 					"These are the undrafted players or second round picks who had the best careers.",
 				football:
@@ -410,6 +536,7 @@ const updatePlayers = async (
 			filter = p =>
 				p.draft.round === 0 ||
 				bySport({
+					baseball: p.draft.round >= 5,
 					basketball: p.draft.round >= 2,
 					football: p.draft.round >= 5,
 					hockey: p.draft.round >= 3,
@@ -460,12 +587,7 @@ const updatePlayers = async (
 				}
 
 				if (
-					min >
-						g.get("numGames") *
-							(g.get("quarterLength") > 0
-								? g.get("quarterLength")
-								: defaultGameAttributes.quarterLength) *
-							g.get("numPeriods") &&
+					min > g.get("numGames") * helpers.effectiveGameLength() &&
 					(p.retiredYear === Infinity || p.ratings.length > 3)
 				) {
 					return { value: -valueTimesMin / min };
@@ -610,7 +732,7 @@ const updatePlayers = async (
 				colName: "Age",
 			});
 			extraCols.push({
-				key: ["most", "extra", "season"],
+				key: ["most", "extra", "bestSeasonOverride"],
 				colName: "Season",
 			});
 			extraCols.push({
@@ -688,7 +810,7 @@ const updatePlayers = async (
 					value: oldest ? maxAge : -maxAge,
 					extra: {
 						age: maxAge,
-						season,
+						bestSeasonOverride: season,
 						ovr: maxOvr,
 						tid,
 					},
@@ -700,8 +822,7 @@ const updatePlayers = async (
 			description =
 				"These are the players who experienced the largest ovr drops after injuries.";
 			if (g.get("challengeNoRatings")) {
-				description +=
-					' Because you\'re using the "no visible ratings" challenge mode, only retired players are shown here.';
+				description += challengeNoRatingsText;
 			}
 			extraCols.push({
 				key: ["most", "extra", "type"],
@@ -781,6 +902,36 @@ const updatePlayers = async (
 				return college === arg;
 			};
 			getValue = playerValue;
+		} else if (type === "rookies") {
+			title = "Best Rookies";
+			description = "These are the players who had the best rookie seasons.";
+			extraCols.push(
+				{
+					key: ["most", "extra", "bestSeasonOverride"],
+					colName: "Season",
+				},
+				{
+					key: ["most", "extra", "age"],
+					colName: "Age",
+				},
+			);
+
+			filter = p =>
+				p.stats.length > 1 && p.stats[0].season === p.draft.year + 1;
+			getValue = p => {
+				const row = p.stats[0];
+				const value = getValueStatsRow(row);
+
+				return {
+					value: value,
+					extra: {
+						tid: row.tid,
+						bestSeasonOverride: row.season,
+						age: row.season - p.born.year,
+					},
+				};
+			};
+			after = tidAndSeasonToAbbrev;
 		} else {
 			throw new Error(`Unknown type "${type}"`);
 		}

@@ -57,9 +57,8 @@ const TradeSummary = ({
 													season={season}
 													skills={asset.skills}
 													watch={asset.watch}
-												>
-													{asset.name}
-												</PlayerNameLabels>
+													legacyName={asset.name}
+												/>
 											</div>
 											<div>
 												{helpers.formatCurrency(
@@ -74,6 +73,8 @@ const TradeSummary = ({
 												{asset.age} years old
 												<br />
 												{helpers.roundStat(asset.stat, "ws")} {stat} after trade
+												({helpers.roundStat(asset.statTeam, "ws")} with{" "}
+												{t.abbrev})
 											</div>
 										</div>
 									);
@@ -110,12 +111,11 @@ const TradeSummary = ({
 													pos={asset.pos}
 													skills={asset.skills}
 													watch={asset.watch}
-												>
-													{asset.name}
-												</PlayerNameLabels>
+													legacyName={asset.name}
+												/>
 											</div>
 											<div>
-												<span className="text-muted">
+												<span className="text-body-secondary">
 													via <PickText asset={asset} season={season} />
 												</span>
 												<br />
@@ -125,6 +125,8 @@ const TradeSummary = ({
 												{asset.age} years old
 												<br />
 												{helpers.roundStat(asset.stat, "ws")} {stat} after trade
+												({helpers.roundStat(asset.statTeam, "ws")} with{" "}
+												{t.abbrev})
 											</div>
 										</div>
 									);
@@ -133,7 +135,10 @@ const TradeSummary = ({
 								return "???";
 							})}
 							<b>
-								Total {stat} after trade: {helpers.roundStat(t.statSum, "ws")}
+								{helpers.roundStat(t.statSum, "ws")} {stat} after trade (total)
+								<br />
+								{helpers.roundStat(t.statSumTeam, "ws")} {stat} after trade
+								(with {t.abbrev})
 							</b>
 						</div>
 					))}

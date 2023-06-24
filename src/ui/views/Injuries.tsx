@@ -1,12 +1,14 @@
-import { DataTable, PlayerNameLabels } from "../components";
+import { DataTable } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers, toWorker } from "../util";
 import type { View } from "../../common/types";
 import { PLAYER } from "../../common";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const Injuries = ({
 	abbrev,
 	challengeNoRatings,
+	currentSeason,
 	godMode,
 	injuries,
 	season,
@@ -39,14 +41,17 @@ const Injuries = ({
 		return {
 			key: season === "current" ? p.pid : i,
 			data: [
-				<PlayerNameLabels
-					pid={p.pid}
-					skills={p.ratings.skills}
-					season={typeof season === "number" ? season : undefined}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					season: typeof season === "number" ? season : undefined,
+					skills: p.ratings.skills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+					awards: p.awards,
+					awardsSeason: typeof season === "number" ? season : currentSeason,
+				}),
 				p.ratings.pos,
 				<a
 					href={helpers.leagueUrl([
@@ -86,7 +91,7 @@ const Injuries = ({
 				<button
 					className="btn btn-god-mode mb-3"
 					onClick={async () => {
-						await toWorker("main", "clearInjury", "all");
+						await toWorker("main", "clearInjuries", "all");
 					}}
 				>
 					Heal All Injuries
@@ -97,6 +102,7 @@ const Injuries = ({
 				<DataTable
 					cols={cols}
 					defaultSort={[cols.length - 3, "asc"]}
+					defaultStickyCols={window.mobile ? 0 : 1}
 					name="Injuries"
 					pagination
 					rows={rows}

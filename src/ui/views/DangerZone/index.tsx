@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { isSport, PHASE, WEBSITE_ROOT } from "../../../common";
+import { PHASE, WEBSITE_ROOT } from "../../../common";
 import type { View } from "../../../common/types";
 import { ActionButton } from "../../components";
 import useTitleBar from "../../hooks/useTitleBar";
@@ -38,7 +38,7 @@ const DangerZone = ({
 						processing={regeneratingSchedule}
 						onClick={async () => {
 							setRegeneratingSchedule(true);
-							await toWorker("main", "regenerateSchedule");
+							await toWorker("main", "regenerateSchedule", undefined);
 							setRegeneratingSchedule(false);
 						}}
 					>
@@ -59,7 +59,7 @@ const DangerZone = ({
 						type="button"
 						className="btn btn-light-bordered"
 						onClick={() => {
-							toWorker("toolsMenu", "skipToPlayoffs");
+							toWorker("toolsMenu", "skipToPlayoffs", undefined);
 						}}
 					>
 						Playoffs
@@ -68,7 +68,7 @@ const DangerZone = ({
 						type="button"
 						className="btn btn-light-bordered"
 						onClick={() => {
-							toWorker("toolsMenu", "skipToBeforeDraft");
+							toWorker("toolsMenu", "skipToBeforeDraft", undefined);
 						}}
 					>
 						Before draft
@@ -77,7 +77,7 @@ const DangerZone = ({
 						type="button"
 						className="btn btn-light-bordered"
 						onClick={() => {
-							toWorker("toolsMenu", "skipToAfterDraft");
+							toWorker("toolsMenu", "skipToAfterDraft", undefined);
 						}}
 					>
 						After draft
@@ -86,7 +86,7 @@ const DangerZone = ({
 						type="button"
 						className="btn btn-light-bordered"
 						onClick={() => {
-							toWorker("toolsMenu", "skipToPreseason");
+							toWorker("toolsMenu", "skipToPreseason", undefined);
 						}}
 					>
 						Preseason
@@ -119,7 +119,7 @@ const DangerZone = ({
 						className="btn btn-god-mode border-0"
 						disabled={!godMode}
 						onClick={() => {
-							toWorker("main", "toggleTradeDeadline");
+							toWorker("main", "toggleTradeDeadline", undefined);
 						}}
 					>
 						Switch to before trade deadline
@@ -130,67 +130,65 @@ const DangerZone = ({
 						className="btn btn-god-mode border-0"
 						disabled={phase !== PHASE.REGULAR_SEASON || !godMode}
 						onClick={() => {
-							toWorker("main", "toggleTradeDeadline");
+							toWorker("main", "toggleTradeDeadline", undefined);
 						}}
 					>
 						Switch to after trade deadline
 					</button>
 				)}
 
-				{isSport("basketball") ? (
-					<div className="mt-5">
-						<h2>All-Star Game</h2>
+				<div className="mt-5">
+					<h2>All-Star Game</h2>
 
-						<p>
-							If the All-Star Game has not yet happened, you can move it up to
-							right now, so that it will happen before the next currently
-							scheduled game. This also works if the current season has no
-							All-Star Game - it will add one, and it will happen before the
-							next game.
+					<p>
+						If the All-Star Game has not yet happened, you can move it up to
+						right now, so that it will happen before the next currently
+						scheduled game. This also works if the current season has no
+						All-Star Game - it will add one, and it will happen before the next
+						game.
+					</p>
+
+					<p>
+						If the All-Star Game has already happened and you add another one...
+						I guess you get an extra All-Star Game?
+					</p>
+
+					{!godMode ? (
+						<p className="text-warning">
+							This feature is only available in{" "}
+							<a href={helpers.leagueUrl(["god_mode"])}>God Mode</a>.
 						</p>
-
-						<p>
-							If the All-Star Game has already happened and you add another
-							one... I guess you get an extra All-Star Game?
+					) : phase !== PHASE.REGULAR_SEASON &&
+					  phase !== PHASE.AFTER_TRADE_DEADLINE ? (
+						<p className="text-warning">
+							This only works during the regular season.
 						</p>
+					) : null}
 
-						{!godMode ? (
-							<p className="text-warning">
-								This feature is only available in{" "}
-								<a href={helpers.leagueUrl(["god_mode"])}>God Mode</a>.
-							</p>
-						) : phase !== PHASE.REGULAR_SEASON &&
-						  phase !== PHASE.AFTER_TRADE_DEADLINE ? (
-							<p className="text-warning">
-								This only works during the regular season.
-							</p>
-						) : null}
+					<button
+						type="button"
+						className="btn btn-god-mode border-0"
+						disabled={
+							(phase !== PHASE.REGULAR_SEASON &&
+								phase !== PHASE.AFTER_TRADE_DEADLINE) ||
+							!godMode
+						}
+						onClick={async () => {
+							await toWorker("main", "allStarGameNow", undefined);
 
-						<button
-							type="button"
-							className="btn btn-god-mode border-0"
-							disabled={
-								(phase !== PHASE.REGULAR_SEASON &&
-									phase !== PHASE.AFTER_TRADE_DEADLINE) ||
-								!godMode
-							}
-							onClick={async () => {
-								await toWorker("main", "allStarGameNow");
-
-								logEvent({
-									saveToDb: false,
-									text: "The All-Star Game has been scheduled.",
-									type: "info",
-								});
-							}}
-						>
-							Schedule All-Star Game now
-						</button>
-					</div>
-				) : null}
+							logEvent({
+								saveToDb: false,
+								text: "The All-Star Game has been scheduled.",
+								type: "info",
+							});
+						}}
+					>
+						Schedule All-Star Game now
+					</button>
+				</div>
 			</div>
 
-			<div className="col-md-6">
+			<div className="col-md-6 mt-5 mt-sm-0">
 				<h2>Auto save</h2>
 
 				<p>

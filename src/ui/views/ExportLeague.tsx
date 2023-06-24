@@ -1,5 +1,5 @@
 import classNames from "classnames";
-import { useState, ReactNode, useRef } from "react";
+import { useState, type ReactNode, useRef } from "react";
 import { GAME_NAME, isSport, WEBSITE_ROOT } from "../../common";
 import {
 	gameAttributesKeysGameState,
@@ -13,6 +13,7 @@ import type {
 	Team,
 	View,
 } from "../../common/types";
+import type { LeagueDBStoreNames } from "../../worker/db/connectLeague";
 import { ActionButton, MoreLinks, ProgressBarText } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { helpers, safeLocalStorage, toWorker, useLocal } from "../util";
@@ -264,7 +265,7 @@ const getExportInfo = (
 	stats: View<"exportLeague">["stats"],
 	checked: Record<ExportLeagueKey, boolean>,
 ) => {
-	const storesSet = new Set<string>();
+	const storesSet = new Set<LeagueDBStoreNames>();
 
 	const storesByKey = {
 		players: ["players", "releasedPlayers", "awards"],
@@ -283,11 +284,12 @@ const getExportInfo = (
 			"playerFeats",
 			"allStars",
 			"scheduledEvents",
+			"seasonLeaders",
 		],
 		newsFeedTransactions: ["events"],
 		newsFeedOther: ["events"],
 		games: ["games"],
-	};
+	} satisfies Record<string, LeagueDBStoreNames[]>;
 
 	for (const key of helpers.keys(storesByKey)) {
 		if (checked[key]) {
@@ -315,7 +317,7 @@ const getExportInfo = (
 		checked.gameState ||
 		checked.teamsBasic
 	) {
-		filter.gameAttributes = (row: GameAttribute) => {
+		filter.gameAttributes = (row: GameAttribute<any>) => {
 			if (!checked.leagueSettings) {
 				if (
 					!gameAttributesKeysGameState.includes(row.key) &&
@@ -423,7 +425,7 @@ const RenderOption = ({
 						}}
 					/>
 					{title}
-					<p className="text-muted">{desc}</p>
+					<p className="text-body-secondary">{desc}</p>
 				</label>
 			</div>
 			{children
@@ -493,7 +495,7 @@ const ExportLeague = ({ stats }: View<"exportLeague">) => {
 				filter,
 				forEach,
 				map,
-				name: await toWorker("main", "getLeagueName"),
+				name: await toWorker("main", "getLeagueName", undefined),
 				hasHistoricalData,
 				onPercentDone: percent => {
 					setPercentDone(percent);
@@ -544,7 +546,7 @@ const ExportLeague = ({ stats }: View<"exportLeague">) => {
 										<p className="mb-0">
 											The file URL could not be retrieved (maybe you still need
 											to verify the email address for your Dropbox account), but
-											it should be in your DropBox account under: Apps/
+											it should be in your Dropbox account under: Apps/
 											{GAME_NAME}/{filename}
 										</p>
 									</>
@@ -568,7 +570,9 @@ const ExportLeague = ({ stats }: View<"exportLeague">) => {
 			cleanupAfterStream(status);
 		} catch (error) {
 			cleanupAfterStream(
-				<span className="text-danger">Error: "{error.message}"</span>,
+				<span className="text-danger">
+					<b>Error:</b> {error.message}
+				</span>,
 			);
 			throw error;
 		}
@@ -708,7 +712,7 @@ const ExportLeague = ({ stats }: View<"exportLeague">) => {
 							/>
 							Streaming download
 							{HAS_FILE_SYSTEM_ACCESS_API ? (
-								<p className="text-muted">
+								<p className="text-body-secondary">
 									Keep this enabled unless you're having trouble getting your
 									browser to download an export. If that happens to you, please{" "}
 									<a
@@ -721,7 +725,7 @@ const ExportLeague = ({ stats }: View<"exportLeague">) => {
 									, because ideally it should always work with this enabled.
 								</p>
 							) : (
-								<p className="text-muted">
+								<p className="text-body-secondary">
 									This works better for large leagues, but is not supported well
 									in your browser so it might fail.
 								</p>

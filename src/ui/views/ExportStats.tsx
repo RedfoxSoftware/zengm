@@ -1,5 +1,4 @@
-import PropTypes from "prop-types";
-import { useCallback, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import { downloadFile, toWorker } from "../util";
 import type { View } from "../../common/types";
@@ -24,12 +23,13 @@ const genFilename = (
 const ExportStats = ({ seasons }: View<"exportStats">) => {
 	const [status, setStatus] = useState<string | undefined>();
 
-	const handleSubmit = useCallback(async event => {
+	const handleSubmit = useCallback(async (event: FormEvent) => {
 		event.preventDefault();
 
 		setStatus("Exporting...");
 
 		// Get array of object stores to export
+		// @ts-expect-error
 		const selectEls = event.target.getElementsByTagName("select");
 		const grouping = selectEls[0].value;
 		const season =
@@ -48,7 +48,7 @@ const ExportStats = ({ seasons }: View<"exportStats">) => {
 		try {
 			const [data, leagueName] = await Promise.all([
 				csvPromise,
-				toWorker("main", "getLeagueName"),
+				toWorker("main", "getLeagueName", undefined),
 			]);
 
 			const filename = genFilename(leagueName, season, grouping);
@@ -113,15 +113,6 @@ const ExportStats = ({ seasons }: View<"exportStats">) => {
 			) : null}
 		</>
 	);
-};
-
-ExportStats.propTypes = {
-	seasons: PropTypes.arrayOf(
-		PropTypes.shape({
-			key: PropTypes.string.isRequired,
-			val: PropTypes.string.isRequired,
-		}),
-	).isRequired,
 };
 
 export default ExportStats;

@@ -1,11 +1,13 @@
-import loadStatsBasketball, { BasketballStats } from "./loadStats.basketball";
+import loadStatsBasketball, {
+	type BasketballStats,
+} from "./loadStats.basketball";
 import { helpers, PHASE, PLAYER } from "../../../common";
 import type {
 	GetLeagueOptions,
 	PlayerContract,
 	PlayerInjury,
 } from "../../../common/types";
-import { LATEST_SEASON, LATEST_SEASON_WITH_DRAFT_POSITIONS } from "./getLeague";
+import { LATEST_SEASON } from "./getLeague";
 import getOnlyRatings from "./getOnlyRatings";
 import type { Basketball, Ratings } from "./loadData.basketball";
 import nerfDraftProspect from "./nerfDraftProspect";
@@ -39,7 +41,7 @@ const formatPlayerFactory = async (
 		if (abbrev === undefined) {
 			return;
 		}
-		if (tidCache.hasOwnProperty(abbrev)) {
+		if (Object.hasOwn(tidCache, abbrev)) {
 			return tidCache[abbrev];
 		}
 
@@ -72,7 +74,7 @@ const formatPlayerFactory = async (
 			? ratingsInput
 			: [ratingsInput];
 
-		const ratings = allRatings.at(-1);
+		const ratings = allRatings.at(-1)!;
 
 		const slug = ratings.slug;
 
@@ -120,7 +122,9 @@ const formatPlayerFactory = async (
 
 		let tid: number;
 		let jerseyNumber: string | undefined;
-		if (draftProspect) {
+		if (ratings.retiredUntil !== undefined) {
+			tid = PLAYER.RETIRED;
+		} else if (draftProspect) {
 			tid = PLAYER.UNDRAFTED;
 		} else if (!legends && ratings.season < season) {
 			tid = PLAYER.RETIRED;
@@ -255,9 +259,11 @@ const formatPlayerFactory = async (
 					}
 				}
 
+				const maxSalaryHistorySeason = contract?.exp ?? season - 1;
 				salaries = [];
 				for (const row of salaryRows) {
-					for (let season = row.start; season <= row.exp; season++) {
+					const maxSeason = Math.min(row.exp, maxSalaryHistorySeason);
+					for (let season = row.start; season <= maxSeason; season++) {
 						salaries.push({
 							amount: row.amount / 1000,
 							season,
@@ -321,11 +327,7 @@ const formatPlayerFactory = async (
 				nerfDraftProspect(currentRatings);
 			}
 
-			if (
-				options.type === "real" &&
-				options.realDraftRatings === "draft" &&
-				draft.year <= LATEST_SEASON_WITH_DRAFT_POSITIONS
-			) {
+			if (options.type === "real" && options.realDraftRatings === "draft") {
 				const age = currentRatings.season! - bornYear;
 				setDraftProspectRatingsBasedOnDraftPosition(currentRatings, age, bio);
 			}
@@ -334,7 +336,7 @@ const formatPlayerFactory = async (
 		const name = legends ? `${bio.name} ${ratings.season}` : bio.name;
 
 		type StatsRow = Omit<
-			BasketballStats[number],
+			BasketballStats["stats"][number],
 			"slug" | "abbrev" | "playoffs"
 		> & {
 			playoffs: boolean;
@@ -344,7 +346,7 @@ const formatPlayerFactory = async (
 		};
 		let stats: StatsRow[] | undefined;
 		if (options.type === "real" && basketballStats) {
-			let statsTemp: BasketballStats | undefined;
+			let statsTemp: BasketballStats["stats"] | undefined;
 
 			const statsSeason =
 				options.phase > PHASE.REGULAR_SEASON
@@ -353,7 +355,7 @@ const formatPlayerFactory = async (
 			const includePlayoffs = options.phase !== PHASE.PLAYOFFS;
 
 			if (options.realStats === "lastSeason") {
-				statsTemp = basketballStats.filter(
+				statsTemp = basketballStats.stats.filter(
 					row =>
 						row.slug === slug &&
 						row.season === statsSeason &&
@@ -364,7 +366,7 @@ const formatPlayerFactory = async (
 				options.realStats === "allActive" ||
 				options.realStats === "all"
 			) {
-				statsTemp = basketballStats.filter(
+				statsTemp = basketballStats.stats.filter(
 					row =>
 						row.slug === slug &&
 						row.season <= statsSeason &&
@@ -400,8 +402,25 @@ const formatPlayerFactory = async (
 			awards.some(award => award.type === "Inducted into the Hall of Fame")
 				? 1
 				: undefined;
-		const retiredYear = tid === PLAYER.RETIRED ? ratings.season : Infinity;
-		const diedYear = tid === PLAYER.RETIRED ? bio.diedYear : undefined;
+		const diedYear =
+			tid === PLAYER.RETIRED && bio.diedYear <= season
+				? bio.diedYear
+				: undefined;
+
+		let retiredYear;
+		if (ratings.retiredUntil !== undefined) {
+			const lastNonRetiredSeason = allRatings.findLast(
+				row => row.season < ratings.season && row.retiredUntil === undefined,
+			);
+			if (lastNonRetiredSeason) {
+				retiredYear = lastNonRetiredSeason.season;
+			} else {
+				// Maybe only one ratings row was passed, so we don't have full history - well, it was sometime before this year!
+				retiredYear = ratings.season - 1;
+			}
+		} else {
+			retiredYear = tid === PLAYER.RETIRED ? ratings.season : Infinity;
+		}
 
 		pid += 1;
 

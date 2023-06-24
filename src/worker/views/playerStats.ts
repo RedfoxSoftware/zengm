@@ -1,4 +1,10 @@
-import { isSport, PHASE, PLAYER, PLAYER_STATS_TABLES } from "../../common";
+import {
+	helpers,
+	isSport,
+	PHASE,
+	PLAYER,
+	PLAYER_STATS_TABLES,
+} from "../../common";
 import { idb } from "../db";
 import { g } from "../util";
 import type {
@@ -6,6 +12,7 @@ import type {
 	ViewInput,
 	PlayerStatType,
 } from "../../common/types";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updatePlayers = async (
 	inputs: ViewInput<"playerStats">,
@@ -68,9 +75,7 @@ const updatePlayers = async (
 			tid = undefined;
 		}
 
-		// Show all teams
 		let statType: PlayerStatType;
-
 		if (isSport("basketball")) {
 			if (inputs.statType === "totals") {
 				statType = "totals";
@@ -90,8 +95,8 @@ const updatePlayers = async (
 		let players = await idb.getCopies.playersPlus(playersAll, {
 			attrs: [
 				"pid",
-				"nameAbbrev",
-				"name",
+				"firstName",
+				"lastName",
 				"age",
 				"born",
 				"ageAtDeath",
@@ -100,6 +105,7 @@ const updatePlayers = async (
 				"abbrev",
 				"hof",
 				"watch",
+				"awards",
 			],
 			ratings: ["skills", "pos", "season"],
 			stats: ["abbrev", "tid", "jerseyNumber", "season", ...stats],
@@ -108,7 +114,7 @@ const updatePlayers = async (
 			statType,
 			playoffs: inputs.playoffs === "playoffs",
 			regularSeason: inputs.playoffs !== "playoffs",
-			mergeStats: true,
+			mergeStats: "totOnly",
 		});
 
 		if (inputs.season === "all") {
@@ -154,7 +160,7 @@ const updatePlayers = async (
 		} else if (
 			inputs.abbrev !== "watch" &&
 			statsTable.onlyShowIf &&
-			(isSport("football") || isSport("hockey"))
+			!isSport("basketball")
 		) {
 			// Ensure some non-zero stat for this position
 			const onlyShowIf = statsTable.onlyShowIf;
@@ -172,13 +178,30 @@ const updatePlayers = async (
 
 			players = players.filter(p => {
 				for (const stat of onlyShowIf) {
-					if (typeof p[obj][stat] === "number" && p[obj][stat] > 0) {
+					// Array check is for byPos stats
+					if (
+						(typeof p[obj][stat] === "number" && p[obj][stat] > 0) ||
+						(Array.isArray(p[obj][stat]) && p[obj][stat].length > 0)
+					) {
 						return true;
 					}
 				}
 
 				return false;
 			});
+		}
+
+		players = addFirstNameShort(players);
+
+		let superCols;
+		if (inputs.season === "all") {
+			if (statsTable.superCols) {
+				// Account for extra "Season" column
+				superCols = helpers.deepCopy(statsTable.superCols);
+				superCols[0].colspan += 1;
+			}
+		} else {
+			superCols = statsTable.superCols;
 		}
 
 		return {
@@ -188,7 +211,7 @@ const updatePlayers = async (
 			statType: inputs.statType,
 			playoffs: inputs.playoffs,
 			stats,
-			superCols: statsTable.superCols,
+			superCols,
 			userTid: g.get("userTid"),
 		};
 	}

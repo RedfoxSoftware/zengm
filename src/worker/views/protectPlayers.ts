@@ -1,6 +1,7 @@
 import { g, helpers } from "../util";
 import { idb } from "../db";
 import { bySport } from "../../common";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updateProtectPlayers = async () => {
 	const expansionDraft = g.get("expansionDraft");
@@ -28,6 +29,7 @@ const updateProtectPlayers = async () => {
 	}
 
 	const stats = bySport({
+		baseball: ["yearsWithTeam", "gp", "keyStats"],
 		basketball: ["yearsWithTeam", "gp", "min", "pts", "trb", "ast", "per"],
 		football: ["yearsWithTeam", "gp", "keyStats", "av"],
 		hockey: ["yearsWithTeam", "gp", "keyStats", "ops", "dps", "ps"],
@@ -42,26 +44,29 @@ const updateProtectPlayers = async () => {
 			"playersByTid",
 			g.get("userTid"),
 		);
-		players = await idb.getCopies.playersPlus(playersAll, {
-			attrs: [
-				"pid",
-				"name",
-				"age",
-				"injury",
-				"watch",
-				"contract",
-				"draft",
-				"latestTransaction",
-				"latestTransactionSeason",
-				"jerseyNumber",
-			],
-			ratings: ["ovr", "pot", "skills", "pos"],
-			stats,
-			season: g.get("season"),
-			tid: g.get("userTid"),
-			showNoStats: true,
-			fuzz: true,
-		});
+		players = addFirstNameShort(
+			await idb.getCopies.playersPlus(playersAll, {
+				attrs: [
+					"pid",
+					"firstName",
+					"lastName",
+					"age",
+					"injury",
+					"watch",
+					"contract",
+					"draft",
+					"latestTransaction",
+					"latestTransactionSeason",
+					"jerseyNumber",
+				],
+				ratings: ["ovr", "pot", "skills", "pos"],
+				stats,
+				season: g.get("season"),
+				tid: g.get("userTid"),
+				showNoStats: true,
+				fuzz: true,
+			}),
+		);
 	}
 
 	return {

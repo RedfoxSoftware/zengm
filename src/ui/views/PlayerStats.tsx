@@ -1,16 +1,27 @@
-import PropTypes from "prop-types";
-import { DataTable, MoreLinks, PlayerNameLabels } from "../components";
+import { DataTable, MoreLinks, PlusMinus } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import type { View } from "../../common/types";
 import { isSport } from "../../common";
 import { wrappedAgeAtDeath } from "../components/AgeAtDeath";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
+import { expandFieldingStats } from "../util/expandFieldingStats.baseball";
 
 export const formatStatGameHigh = (
 	ps: any,
 	stat: string,
 	statType?: string,
 ) => {
+	if (isSport("baseball")) {
+		// Catcher-only fielding stats
+		if (
+			ps.pos !== "C" &&
+			(stat === "pb" || stat === "sbF" || stat === "csF" || stat === "csp")
+		) {
+			return null;
+		}
+	}
+
 	if (stat.endsWith("Max")) {
 		if (!Array.isArray(ps[stat])) {
 			return null;
@@ -37,6 +48,10 @@ export const formatStatGameHigh = (
 				{helpers.roundStat(row[0], stat, statType === "totals")}
 			</a>
 		);
+	}
+
+	if (isSport("basketball") && (stat === "pm100" || stat === "onOff100")) {
+		return <PlusMinus>{ps[stat]}</PlusMinus>;
 	}
 
 	return helpers.roundStat(ps[stat], stat, statType === "totals");
@@ -71,8 +86,10 @@ const PlayerStats = ({
 		"Age",
 		"Team",
 		...(season === "all" ? ["Season"] : []),
-		...stats.map(
-			stat => `stat:${stat.endsWith("Max") ? stat.replace("Max", "") : stat}`,
+		...stats.map(stat =>
+			stat === "pos"
+				? "Pos"
+				: `stat:${stat.endsWith("Max") ? stat.replace("Max", "") : stat}`,
 		),
 	]);
 
@@ -97,6 +114,22 @@ const PlayerStats = ({
 		}
 	}
 
+	let statsProperty: "careerStats" | "careerStatsPlayoffs" | "stats";
+	if (season === "career") {
+		statsProperty =
+			playoffs === "playoffs" ? "careerStatsPlayoffs" : "careerStats";
+	} else {
+		statsProperty = "stats";
+	}
+
+	if (isSport("baseball") && statType === "fielding") {
+		players = expandFieldingStats({
+			rows: players,
+			stats,
+			statsProperty,
+		});
+	}
+
 	const rows = players.map(p => {
 		let pos;
 		if (Array.isArray(p.ratings) && p.ratings.length > 0) {
@@ -111,42 +144,47 @@ const PlayerStats = ({
 		let actualAbbrev;
 		let actualTid;
 		if (season === "career") {
-			p.stats = p.careerStats;
 			actualAbbrev = p.abbrev;
 			actualTid = p.tid;
-			if (playoffs === "playoffs") {
-				p.stats = p.careerStatsPlayoffs;
-			}
 		} else {
 			actualAbbrev = p.stats.abbrev;
 			actualTid = p.stats.tid;
+		}
+		if (statsProperty !== "stats") {
+			p.stats = p[statsProperty];
 		}
 
 		const statsRow = stats.map(stat =>
 			formatStatGameHigh(p.stats, stat, statType),
 		);
 
-		const key = season === "all" ? `${p.pid}-${p.stats.season}` : p.pid;
+		let key;
+		if (isSport("baseball") && statType === "fielding") {
+			key = `${p.pid}-${p.stats.season}-${p.stats.pos}`;
+		} else if (season === "all") {
+			key = `${p.pid}-${p.stats.season}`;
+		} else {
+			key = p.pid;
+		}
+
+		const numericSeason = season === "career" ? undefined : p.stats.season;
 
 		return {
 			key,
 			data: [
-				{
-					value: (
-						<PlayerNameLabels
-							injury={p.injury}
-							jerseyNumber={p.stats.jerseyNumber}
-							pid={p.pid}
-							season={season === "career" ? undefined : p.stats.season}
-							skills={p.ratings.skills}
-							watch={p.watch}
-						>
-							{p.nameAbbrev}
-						</PlayerNameLabels>
-					),
-					sortValue: p.name,
-					searchValue: p.name,
-				},
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					season: numericSeason,
+					skills: p.ratings.skills,
+					jerseyNumber: p.stats.jerseyNumber,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+					awards: p.awards,
+					awardsSeason: numericSeason,
+				}),
 				pos,
 
 				// Only show age at death for career totals, otherwise just use current age
@@ -195,6 +233,7 @@ const PlayerStats = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[sortCol, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name={`PlayerStats${statType}`}
 				rows={rows}
 				superCols={superCols}
@@ -202,16 +241,6 @@ const PlayerStats = ({
 			/>
 		</>
 	);
-};
-
-PlayerStats.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	playoffs: PropTypes.oneOf(["playoffs", "regularSeason"]).isRequired,
-	statType: PropTypes.string.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	superCols: PropTypes.array,
-	userTid: PropTypes.number,
 };
 
 export default PlayerStats;

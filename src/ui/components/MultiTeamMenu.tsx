@@ -1,6 +1,7 @@
 import type { ChangeEvent } from "react";
-import { realtimeUpdate, toWorker, useLocalShallow } from "../util";
+import { realtimeUpdate, toWorker, useLocalPartial } from "../util";
 import orderBy from "lodash-es/orderBy";
+import { MOBILE_AD_BOTTOM_MARGIN } from "../../common";
 
 const setUserTid = async (userTid: number) => {
 	await toWorker("main", "updateGameAttributes", {
@@ -15,13 +16,13 @@ const handleChange = async (event: ChangeEvent<HTMLSelectElement>) => {
 };
 
 const MultiTeamMenu = () => {
-	const state = useLocalShallow(state2 => ({
-		stickyFooterAd: state2.stickyFooterAd,
-		stickyFormButtons: state2.stickyFormButtons,
-		teamInfoCache: state2.teamInfoCache,
-		userTid: state2.userTid,
-		userTids: state2.userTids,
-	}));
+	const state = useLocalPartial([
+		"stickyFooterAd",
+		"stickyFormButtons",
+		"teamInfoCache",
+		"userTid",
+		"userTids",
+	]);
 
 	// Hide if not multi team or not loaded yet
 	if (state.userTids.length <= 1 || state.stickyFormButtons) {
@@ -59,7 +60,7 @@ const MultiTeamMenu = () => {
 
 	let bottom = 0;
 	if (state.stickyFooterAd) {
-		bottom += 52;
+		bottom += MOBILE_AD_BOTTOM_MARGIN;
 	}
 
 	return (

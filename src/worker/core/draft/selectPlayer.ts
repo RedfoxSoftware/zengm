@@ -42,15 +42,18 @@ const selectPlayer = async (dp: DraftPick, pid: number) => {
 			prevTid,
 			prevAbbrev: g.get("teamInfoCache")[prevTid]?.abbrev,
 		};
+
+		const { ovr, pot, skills } = p.ratings.at(-1)!;
+
 		fakeP.draft = {
 			round: dp.round,
 			pick: dp.pick,
 			tid: dp.tid,
 			year: g.get("season"),
 			originalTid: dp.originalTid,
-			pot: p.ratings.at(-1).pot,
-			ovr: p.ratings.at(-1).ovr,
-			skills: p.ratings.at(-1).skills,
+			pot,
+			ovr,
+			skills,
 			dpid: dp.dpid,
 		};
 		local.fantasyDraftResults.push(fakeP);
@@ -70,7 +73,7 @@ const selectPlayer = async (dp: DraftPick, pid: number) => {
 
 	// Contract
 	if (!fantasyOrExpansionDraft) {
-		if (g.get("hardCap")) {
+		if (!g.get("draftPickAutoContract")) {
 			// Make it an expiring contract, so player immediately becomes a free agent
 			player.setContract(
 				p,
@@ -84,13 +87,17 @@ const selectPlayer = async (dp: DraftPick, pid: number) => {
 			const rookieSalaries = getRookieSalaries();
 			const i = dp.pick - 1 + g.get("numActiveTeams") * (dp.round - 1);
 
-			const years = getRookieContractLength(dp.round);
+			let exp = g.get("season");
+			if (g.get("salaryCapType") !== "hard") {
+				// Auto sign in soft/no cap. Otherwise (hard) leave exp set to current season so player will have to manually sign contract, in case it would go over the cap
+				exp += getRookieContractLength(dp.round);
+			}
 
 			player.setContract(
 				p,
 				{
 					amount: rookieSalaries[i],
-					exp: g.get("season") + years,
+					exp,
 					rookie: true,
 				},
 				true,

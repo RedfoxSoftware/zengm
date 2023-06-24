@@ -1,11 +1,17 @@
-import PropTypes from "prop-types";
-import { memo, Fragment, MouseEvent, ReactNode, useState } from "react";
+import {
+	memo,
+	Fragment,
+	type MouseEvent,
+	type ReactNode,
+	useState,
+} from "react";
 import ResponsiveTableWrapper from "./ResponsiveTableWrapper";
 import { getCols, processPlayerStats } from "../util";
 import { filterPlayerStats, getPeriodName, helpers } from "../../common";
 import { PLAYER_GAME_STATS } from "../../common/constants.football";
 import type { Col, SortBy } from "./DataTable";
 import updateSortBys from "./DataTable/updateSortBys";
+import { getSortClassName } from "./DataTable/Header";
 
 type Quarter = `Q${number}` | "OT";
 
@@ -23,6 +29,7 @@ type Team = {
 	name: string;
 	region: string;
 	players: any[];
+	season?: number;
 };
 
 type BoxScore = {
@@ -30,6 +37,7 @@ type BoxScore = {
 	scoringSummary: ScoringSummaryEvent[];
 	teams: [Team, Team];
 	numPeriods?: number;
+	exhibition?: boolean;
 };
 
 export const StatsHeader = ({
@@ -51,13 +59,7 @@ export const StatsHeader = ({
 				let className: string | undefined;
 
 				if (sortable) {
-					className = "sorting";
-					for (const sortBy of sortBys) {
-						if (sortBy[0] === i) {
-							className = sortBy[1] === "asc" ? "sorting_asc" : "sorting_desc";
-							break;
-						}
-					}
+					className = getSortClassName(sortBys, i);
 				}
 
 				return (
@@ -79,15 +81,21 @@ export const StatsHeader = ({
 
 export const sortByStats = (
 	stats: string[],
+	seasonStats: string[] | undefined,
 	sortBys: SortBy[],
 	getValue?: (p: any, stat: string) => number,
 ) => {
 	return (a: any, b: any) => {
 		for (const [index, order] of sortBys) {
-			const stat = stats[index];
+			let stat = stats[index];
+			let statsObject = "processed";
+			if (stat === undefined && seasonStats) {
+				stat = seasonStats[index - stats.length];
+				statsObject = "seasonStats";
+			}
 
-			const aValue = getValue?.(a, stat) ?? a.processed[stat];
-			const bValue = getValue?.(b, stat) ?? b.processed[stat];
+			const aValue = getValue?.(a, stat) ?? a[statsObject][stat];
+			const bValue = getValue?.(b, stat) ?? b[statsObject][stat];
 
 			if (bValue !== aValue) {
 				const diff = bValue - aValue;
@@ -103,10 +111,12 @@ export const sortByStats = (
 
 const StatsTableIndividual = ({
 	Row,
+	exhibition,
 	t,
 	type,
 }: {
 	Row: any;
+	exhibition?: boolean;
 	t: BoxScore["teams"][number];
 	type: keyof typeof PLAYER_GAME_STATS;
 }) => {
@@ -139,28 +149,39 @@ const StatsTableIndividual = ({
 			};
 		})
 		.filter(p => filterPlayerStats(p, stats, type))
-		.sort(sortByStats(stats, sortBys));
+		.sort(sortByStats(stats, undefined, sortBys));
+
+	const sortable = players.length > 1;
+	const highlightCols = sortable ? sortBys.map(sortBy => sortBy[0]) : undefined;
 
 	return (
 		<div className="mb-3">
 			<ResponsiveTableWrapper>
-				<table className="table table-striped table-bordered table-sm table-hover">
+				<table className="table table-striped table-borderless table-sm table-hover">
 					<thead>
 						<tr>
 							<th colSpan={2}>
+								{t.season !== undefined ? `${t.season} ` : null}
 								{t.region} {t.name}
 							</th>
 							<StatsHeader
 								cols={cols}
 								onClick={onClick}
 								sortBys={sortBys}
-								sortable={players.length > 1}
+								sortable={sortable}
 							/>
 						</tr>
 					</thead>
 					<tbody>
 						{players.map((p, i) => (
-							<Row key={p.pid} i={i} p={p} stats={stats} />
+							<Row
+								key={p.pid}
+								exhibition={exhibition}
+								i={i}
+								p={p}
+								stats={stats}
+								highlightCols={highlightCols}
+							/>
 						))}
 					</tbody>
 				</table>
@@ -181,15 +202,16 @@ const StatsTable = ({
 	return (
 		<>
 			{boxScore.teams.map((t, i) => (
-				<StatsTableIndividual key={i} Row={Row} t={t} type={type} />
+				<StatsTableIndividual
+					key={i}
+					Row={Row}
+					exhibition={boxScore.exhibition}
+					t={t}
+					type={type}
+				/>
 			))}
 		</>
 	);
-};
-StatsTable.propTypes = {
-	boxScore: PropTypes.object.isRequired,
-	Row: PropTypes.any,
-	type: PropTypes.string.isRequired,
 };
 
 // Condenses TD + XP/2P into one event rather than two
@@ -315,7 +337,7 @@ const ScoringSummary = memo(
 							prevQuarter = event.quarter;
 							quarterHeader = (
 								<tr>
-									<td className="text-muted" colSpan={5}>
+									<td className="text-body-secondary" colSpan={5}>
 										{quarterText}
 									</td>
 								</tr>
@@ -332,12 +354,16 @@ const ScoringSummary = memo(
 										{event.t === 0 ? (
 											<>
 												<b>{event.score[0]}</b>-
-												<span className="text-muted">{event.score[1]}</span>
+												<span className="text-body-secondary">
+													{event.score[1]}
+												</span>
 											</>
 										) : (
 											<>
-												<span className="text-muted">{event.score[0]}</span>-
-												<b>{event.score[1]}</b>
+												<span className="text-body-secondary">
+													{event.score[0]}
+												</span>
+												-<b>{event.score[1]}</b>
 											</>
 										)}
 									</td>
@@ -355,12 +381,6 @@ const ScoringSummary = memo(
 		return prevProps.count === nextProps.count;
 	},
 );
-
-// @ts-ignore
-ScoringSummary.propTypes = {
-	events: PropTypes.array.isRequired,
-	teams: PropTypes.array.isRequired,
-};
 
 const BoxScore = ({ boxScore, Row }: { boxScore: BoxScore; Row: any }) => {
 	return (
@@ -393,11 +413,6 @@ const BoxScore = ({ boxScore, Row }: { boxScore: BoxScore; Row: any }) => {
 			))}
 		</div>
 	);
-};
-
-BoxScore.propTypes = {
-	boxScore: PropTypes.object.isRequired,
-	Row: PropTypes.any,
 };
 
 export default BoxScore;

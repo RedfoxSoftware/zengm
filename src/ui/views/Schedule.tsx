@@ -1,9 +1,8 @@
-import PropTypes from "prop-types";
 import { Fragment, useState } from "react";
 import { ForceWin, MoreLinks, ScoreBox } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import type { View } from "../../common/types";
-import { toWorker, useLocalShallow } from "../util";
+import { toWorker, useLocalPartial } from "../util";
 import allowForceTie from "../../common/allowForceTie";
 import { Dropdown } from "react-bootstrap";
 
@@ -25,10 +24,10 @@ const Schedule = ({
 		dropdownFields: { teams: abbrev },
 	});
 
-	const { gameSimInProgress, godMode } = useLocalShallow(state => ({
-		gameSimInProgress: state.gameSimInProgress,
-		godMode: state.godMode,
-	}));
+	const { gameSimInProgress, godMode } = useLocalPartial([
+		"gameSimInProgress",
+		"godMode",
+	]);
 
 	const [forcingAll, setForcingAll] = useState(false);
 	const [forceWinKey, setForceWinKey] = useState(0);
@@ -36,7 +35,7 @@ const Schedule = ({
 	const handleForceAll =
 		(type: "win" | "lose" | "tie" | "none") => async () => {
 			setForcingAll(true);
-			await toWorker("main", "setForceWinAll", tid, type);
+			await toWorker("main", "setForceWinAll", { tid, type });
 			setForceWinKey(key => key + 1);
 			setForcingAll(false);
 		};
@@ -79,35 +78,44 @@ const Schedule = ({
 					<h2>Upcoming Games</h2>
 					<ul className="list-group">
 						{upcoming.map((game, i) => {
-							const actions = [
-								game.teams[0].playoffs || (canLiveSimFirstGame && i === 0)
-									? {
-											disabled: gameSimInProgress,
-											text: (
-												<>
-													Watch
-													<br />
-													game
-												</>
-											),
-											onClick: () => toWorker("actions", "liveGame", game.gid),
-									  }
-									: {
-											disabled: gameSimInProgress,
-											text: (
-												<>
-													Sim
-													<br />
-													to
-													<br />
-													game
-												</>
-											),
-											onClick: () => {
-												toWorker("actions", "simToGame", game.gid);
-											},
-									  },
-							];
+							const tradeDeadline =
+								game.teams[0].tid === -3 && game.teams[1].tid === -3;
+							const canWatch =
+								game.teams[0].playoffs || (canLiveSimFirstGame && i === 0);
+
+							const actions =
+								canWatch && tradeDeadline
+									? undefined
+									: [
+											canWatch
+												? {
+														disabled: gameSimInProgress,
+														text: (
+															<>
+																Watch
+																<br />
+																game
+															</>
+														),
+														onClick: () =>
+															toWorker("actions", "liveGame", game.gid),
+												  }
+												: {
+														disabled: gameSimInProgress,
+														text: (
+															<>
+																Sim
+																<br />
+																to
+																<br />
+																game
+															</>
+														),
+														onClick: () => {
+															toWorker("actions", "simToGame", game.gid);
+														},
+												  },
+									  ];
 
 							const allowTie = allowForceTie({
 								homeTid: game.teams[0].tid,
@@ -150,18 +158,17 @@ const Schedule = ({
 				<div style={{ maxWidth: 510 }} className="flex-grow-1">
 					<h2>Completed Games</h2>
 					{completed.map(game => (
-						<ScoreBox className="mb-3" key={game.gid} game={game} />
+						<ScoreBox
+							boxScoreTeamOverride={`${abbrev}_${tid}`}
+							className="mb-3"
+							key={game.gid}
+							game={game}
+						/>
 					))}
 				</div>
 			</div>
 		</>
 	);
-};
-
-Schedule.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	completed: PropTypes.arrayOf(PropTypes.object).isRequired,
-	upcoming: PropTypes.arrayOf(PropTypes.object).isRequired,
 };
 
 export default Schedule;

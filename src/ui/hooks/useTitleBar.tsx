@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect } from "react";
 import { getSortedTeams, getDropdownValue } from "./useDropdownOptions";
-import { localActions, useLocalShallow } from "../util";
+import { localActions, useLocalPartial } from "../util";
 import type { LocalStateUI, MenuItemHeader } from "../../common/types";
 import { GAME_NAME } from "../../common";
 import { getResponsiveValue } from "../components/Dropdown";
 
 const useTitleBar = <DropdownFields extends Record<string, number | string>>({
 	title,
+	titleLong,
 	customMenu,
 	hideNewWindow,
 	jumpTo,
@@ -20,6 +21,7 @@ const useTitleBar = <DropdownFields extends Record<string, number | string>>({
 	moreInfoTid,
 }: {
 	title?: string;
+	titleLong?: string;
 	customMenu?: MenuItemHeader;
 	hideNewWindow?: boolean;
 	jumpTo?: boolean;
@@ -32,15 +34,14 @@ const useTitleBar = <DropdownFields extends Record<string, number | string>>({
 	moreInfoSeason?: number;
 	moreInfoTid?: number;
 } = {}) => {
-	const state = useLocalShallow(state2 => ({
-		hideDisabledTeams: state2.hideDisabledTeams,
-		teamInfoCache: state2.teamInfoCache,
-	}));
+	const state = useLocalPartial(["hideDisabledTeams", "teamInfoCache"]);
 
 	useEffect(() => {
 		const parts: string[] = [];
 
-		if (title) {
+		if (titleLong) {
+			parts.push(titleLong);
+		} else if (title) {
 			parts.push(title);
 		} else {
 			parts.push(GAME_NAME);
@@ -49,13 +50,25 @@ const useTitleBar = <DropdownFields extends Record<string, number | string>>({
 		const sortedTeams = getSortedTeams(state);
 
 		if (dropdownFields) {
-			for (const key of Object.values(dropdownFields)) {
+			for (const [dropdownKey, key] of Object.entries(dropdownFields)) {
 				if (key === "all") {
 					// Not much use showing "All X" in the title, and also this saves us from having to dedupe all the "all|||" keys in getDropdownValue
 					continue;
 				}
 
-				const value = getDropdownValue(key, sortedTeams);
+				let value;
+				if (dropdownCustomOptions?.[dropdownKey]) {
+					const option = dropdownCustomOptions[dropdownKey].find(
+						row => row.key === key,
+					);
+					if (option) {
+						value = option.value;
+					}
+				}
+
+				if (value === undefined) {
+					value = getDropdownValue(key, sortedTeams);
+				}
 
 				if (value !== undefined) {
 					parts.push(getResponsiveValue(value, Infinity));
@@ -63,8 +76,8 @@ const useTitleBar = <DropdownFields extends Record<string, number | string>>({
 			}
 		}
 
-		document.title = parts.join(" » ");
-	}, [dropdownFields, state, title]);
+		document.title = parts.filter(part => part !== "???").join(" » ");
+	}, [dropdownCustomOptions, dropdownFields, state, title, titleLong]);
 
 	// Without useLayoutEffect, weird shit happens in Safari! State inappropriately bleeds over from one load of a view to the next. Not sure why!
 	useLayoutEffect(() => {

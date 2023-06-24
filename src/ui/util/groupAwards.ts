@@ -1,3 +1,4 @@
+import { bySport } from "../../common";
 import { groupBy } from "../../common/groupBy";
 import type { Player } from "../../common/types";
 import helpers from "./helpers";
@@ -7,6 +8,7 @@ const awardsOrder = [
 	"Most Valuable Player",
 	"Won Championship",
 	"Finals MVP",
+	"Semifinals MVP",
 	"Defensive Player of the Year",
 	"Goalie of the Year",
 	"Sixth Man of the Year",
@@ -25,17 +27,36 @@ const awardsOrder = [
 	"All-Star",
 	"Slam Dunk Contest Winner",
 	"Three-Point Contest Winner",
-	"League Scoring Leader",
-	"League Rebounding Leader",
-	"League Assists Leader",
-	"League Steals Leader",
-	"League Blocks Leader",
-	"League Passing Leader",
-	"League Rushing Leader",
-	"League Receiving Leader",
-	"League Scrimmage Yards Leader",
-	"League Points Leader",
-	"League Goals Leader",
+	...bySport({
+		baseball: [
+			"League HR Leader",
+			"League RBI Leader",
+			"League Runs Leader",
+			"League Stolen Bases Leader",
+			"League Walks Leader",
+			"League Wins Leader",
+			"League Strikeouts Leader",
+			"League WAR Leader",
+		],
+		basketball: [
+			"League Scoring Leader",
+			"League Rebounding Leader",
+			"League Assists Leader",
+			"League Steals Leader",
+			"League Blocks Leader",
+		],
+		football: [
+			"League Passing Leader",
+			"League Rushing Leader",
+			"League Receiving Leader",
+			"League Scrimmage Yards Leader",
+		],
+		hockey: [
+			"League Points Leader",
+			"League Goals Leader",
+			"League Assists Leader",
+		],
+	}),
 ];
 
 const groupAwards = (awards: Player["awards"], shortNames?: boolean) => {
@@ -56,6 +77,8 @@ const groupAwards = (awards: Player["awards"], shortNames?: boolean) => {
 			type = "FMVP";
 		} else if (type === "Playoffs MVP") {
 			type = "PMVP";
+		} else if (type === "Semifinals MVP") {
+			type = "SFMVP";
 		} else if (type === "Defensive Player of the Year") {
 			type = "DPOY";
 		} else if (type === "Defensive Forward of the Year") {
@@ -78,6 +101,8 @@ const groupAwards = (awards: Player["awards"], shortNames?: boolean) => {
 			type = "Three-Point Contest";
 		} else if (type.includes("All-League")) {
 			type = "All-League";
+		} else if (type.includes("All-Offensive")) {
+			type = "All-Offensive";
 		} else if (type.includes("All-Defensive")) {
 			type = "All-Defensive";
 		} else if (type.includes("All-Rookie")) {
@@ -89,16 +114,27 @@ const groupAwards = (awards: Player["awards"], shortNames?: boolean) => {
 		return type;
 	};
 
+	// Don't return First Team All-League when the group represents all All-League awards
+	const getLong = (type: string, originalType: string) => {
+		if (type.startsWith("All-")) {
+			return type;
+		}
+
+		return originalType;
+	};
+
 	const seen = new Set();
 	const awardsGrouped = [];
 	const awardsGroupedTemp = groupBy(awards, award => getType(award.type));
 
 	for (const originalType of awardsOrder) {
 		const type = getType(originalType);
+		const long = getLong(type, originalType);
 
 		if (awardsGroupedTemp[type] && !seen.has(type)) {
 			awardsGrouped.push({
 				type,
+				long,
 				count: awardsGroupedTemp[type].length,
 				seasons: helpers.yearRanges(awardsGroupedTemp[type].map(a => a.season)),
 			});
@@ -112,6 +148,7 @@ const groupAwards = (awards: Player["awards"], shortNames?: boolean) => {
 		if (!seen.has(type)) {
 			awardsGrouped.push({
 				type,
+				long: originalType,
 				count: awardsGroupedTemp[type].length,
 				seasons: helpers.yearRanges(awardsGroupedTemp[type].map(a => a.season)),
 			});

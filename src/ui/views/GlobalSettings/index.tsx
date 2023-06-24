@@ -1,11 +1,16 @@
-import { useState, ChangeEvent, FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import useTitleBar from "../../hooks/useTitleBar";
-import { logEvent, safeLocalStorage, toWorker } from "../../util";
+import { helpers, logEvent, safeLocalStorage, toWorker } from "../../util";
 import RealData from "./RealData";
 import Storage from "./Storage";
 import type { View } from "../../../common/types";
-import { isSport } from "../../../common";
-import { MoreLinks } from "../../components";
+import {
+	DEFAULT_PHASE_CHANGE_REDIRECTS,
+	isSport,
+	PHASE,
+	PHASE_TEXT,
+} from "../../../common";
+import { HelpPopover, MoreLinks } from "../../components";
 
 const GlobalSettings = (props: View<"globalSettings">) => {
 	const [state, setState] = useState(() => {
@@ -28,7 +33,11 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 			units = "default";
 		}
 
+		const fullNames = props.fullNames ? "always" : ("abbrev-small" as const);
+
 		return {
+			fullNames,
+			phaseChangeRedirects: props.phaseChangeRedirects,
 			realPlayerPhotos: props.realPlayerPhotos,
 			realTeamInfo: props.realTeamInfo,
 			theme,
@@ -61,13 +70,15 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 		const units = state.units === "default" ? undefined : state.units;
 		try {
 			await toWorker("main", "updateOptions", {
+				fullNames: state.fullNames === "always",
+				phaseChangeRedirects: state.phaseChangeRedirects,
 				realPlayerPhotos: state.realPlayerPhotos,
 				realTeamInfo: state.realTeamInfo,
 				units,
 			});
 			logEvent({
 				type: "success",
-				text: "Options successfully updated.",
+				text: "Settings successfully updated.",
 				saveToDb: false,
 			});
 		} catch (error) {
@@ -81,6 +92,23 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 	};
 
 	useTitleBar({ title: "Global Settings" });
+
+	const phaseChangeRedirects = DEFAULT_PHASE_CHANGE_REDIRECTS.map(phase => {
+		let label;
+		if (phase === PHASE.REGULAR_SEASON) {
+			label = "Season preview, before regular season";
+		} else if (phase === PHASE.DRAFT_LOTTERY) {
+			label = "Season summary, after playoffs";
+		} else {
+			label = helpers.upperCaseFirstLetter(PHASE_TEXT[phase]);
+		}
+
+		return {
+			phase,
+			label,
+			checked: state.phaseChangeRedirects.includes(phase),
+		};
+	});
 
 	return (
 		<>
@@ -117,6 +145,96 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 							<option value="us">US</option>
 							<option value="metric">Metric</option>
 						</select>
+					</div>
+					<div className="col-sm-3 col-6 mb-3">
+						<label className="form-label" htmlFor="options-fullNames">
+							Player Name Display
+						</label>
+						<select
+							id="options-fullNames"
+							className="form-select"
+							onChange={handleChange("fullNames")}
+							value={state.fullNames}
+						>
+							<option value="abbrev-small">
+								Abbreviate first names and skills on small screens
+							</option>
+							<option value="always">Always show full names and skills</option>
+						</select>
+					</div>
+					<div className="col-sm-3 col-6 mb-3">
+						<label className="form-label">
+							Auto UI Redirect{" "}
+							<HelpPopover title="Auto UI Redirect">
+								<p>
+									At different points in the game, the UI automatically
+									redirects to a page. For example, when the regular season
+									ends, it automatically redirects to the playoff bracket. If
+									you find that behavior annoying, you can disable it here.
+								</p>
+							</HelpPopover>
+						</label>
+						{phaseChangeRedirects.map(({ checked, label, phase }) => (
+							<div key={phase} className="form-check">
+								<input
+									className="form-check-input"
+									type="checkbox"
+									id={`options-phaseChangeRedirects-${phase}`}
+									checked={checked}
+									onChange={() => {
+										let phaseChangeRedirects;
+										if (checked) {
+											phaseChangeRedirects = state.phaseChangeRedirects.filter(
+												phase2 => phase2 !== phase,
+											);
+										} else {
+											phaseChangeRedirects = [
+												...state.phaseChangeRedirects,
+												phase,
+											];
+										}
+
+										setState({
+											...state,
+											phaseChangeRedirects,
+										});
+									}}
+								/>
+								<label
+									className="form-check-label"
+									htmlFor={`options-phaseChangeRedirects-${phase}`}
+								>
+									{label}
+								</label>
+							</div>
+						))}
+						<div className="mt-1">
+							<button
+								className="btn btn-link p-0"
+								type="button"
+								onClick={() => {
+									setState({
+										...state,
+										phaseChangeRedirects: DEFAULT_PHASE_CHANGE_REDIRECTS,
+									});
+								}}
+							>
+								All
+							</button>{" "}
+							|{" "}
+							<button
+								className="btn btn-link p-0"
+								type="button"
+								onClick={() => {
+									setState({
+										...state,
+										phaseChangeRedirects: [],
+									});
+								}}
+							>
+								None
+							</button>
+						</div>
 					</div>
 					<div className="col-sm-3 col-6 mb-3">
 						<label className="form-label">Persistent Storage</label>

@@ -1,8 +1,6 @@
-import PropTypes from "prop-types";
-import { Modal } from "react-bootstrap";
 import { GAME_NAME, WEBSITE_ROOT } from "../../common";
-import { animation } from "../views/Settings/RowsEditor";
 import GameLinks from "./GameLinks";
+import Modal from "./Modal";
 
 type Props = {
 	close: () => void;
@@ -15,7 +13,7 @@ const NagModal = ({ close, show }: Props) => {
 		!window.googletag ||
 		!window.googletag.pubads;
 	return (
-		<Modal show={show} onHide={close} animation={animation}>
+		<Modal show={show} onHide={close}>
 			<Modal.Header closeButton>
 				{adBlock
 					? "Are you using an ad blocker?"
@@ -113,11 +111,6 @@ const NagModal = ({ close, show }: Props) => {
 			)}
 		</Modal>
 	);
-};
-
-NagModal.propTypes = {
-	close: PropTypes.func.isRequired,
-	show: PropTypes.bool.isRequired,
 };
 
 export default NagModal;

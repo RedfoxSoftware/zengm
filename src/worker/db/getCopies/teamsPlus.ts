@@ -27,19 +27,9 @@ const processAttrs = <
 ) => {
 	for (const attr of attrs) {
 		if (attr === "budget") {
-			// Always copy, because we mutate below to convert units
 			output.budget = helpers.deepCopy(t.budget);
-
-			// @ts-ignore
-			for (const [key, value] of Object.entries(output.budget)) {
-				if (key !== "ticketPrice") {
-					// ticketPrice is the only thing in dollars always
-					// @ts-ignore
-					value.amount /= 1000;
-				}
-			}
 		} else {
-			// @ts-ignore
+			// @ts-expect-error
 			output[attr] = t[attr];
 		}
 	}
@@ -109,33 +99,24 @@ const processSeasonAttrs = async <
 		"colors",
 	];
 
-	// @ts-ignore
+	// @ts-expect-error
 	output.seasonAttrs = await Promise.all(
 		seasons.map(async ts => {
 			const row: any = {}; // Revenue and expenses calculation
 
 			const revenue = helpers
 				.keys(ts.revenues)
-				.reduce((memo, rev) => memo + ts.revenues[rev].amount, 0);
+				.reduce((memo, rev) => memo + ts.revenues[rev], 0);
 			const expense = helpers
 				.keys(ts.expenses)
-				.reduce((memo, rev) => memo + ts.expenses[rev].amount, 0);
+				.reduce((memo, rev) => memo + ts.expenses[rev], 0);
 
 			for (const temp of seasonAttrs) {
 				const attr: string = temp;
 				if (attr === "winp") {
 					row.winp = helpers.calcWinp(ts);
 				} else if (attr === "att") {
-					row.att = 0;
-
-					if (!ts.hasOwnProperty("gpHome")) {
-						ts.gpHome = Math.round(ts.gp / 2);
-					}
-
-					// See also game.js and teamFinances.js
-					if (ts.gpHome > 0) {
-						row.att = ts.att / ts.gpHome;
-					}
+					row.att = ts.gpHome > 0 ? ts.att / ts.gpHome : 0;
 				} else if (attr === "cash") {
 					row.cash = ts.cash / 1000; // [millions of dollars]
 				} else if (attr === "revenue") {
@@ -143,7 +124,7 @@ const processSeasonAttrs = async <
 				} else if (attr === "profit") {
 					row.profit = (revenue - expense) / 1000; // [millions of dollars]
 				} else if (attr === "salaryPaid") {
-					row.salaryPaid = ts.expenses.salary.amount / 1000; // [millions of dollars]
+					row.salaryPaid = ts.expenses.salary / 1000; // [millions of dollars]
 				} else if (attr === "payroll") {
 					if (season === g.get("season")) {
 						row.payroll = (await team.getPayroll(t.tid)) / 1000;
@@ -188,13 +169,40 @@ const processSeasonAttrs = async <
 				} else if (attr === "avgAge") {
 					// Will be undefined if not cached, in which case will need to be dynamically computed elsewhere
 					row.avgAge = ts[attr];
+				} else if (attr === "expenseLevels") {
+					if (ts.season === g.get("season")) {
+						// For current season, we want the current values, not what we spent this season. That's what we want on League Finances at least, which is the only place this is used for now.
+						row.expenseLevels = {
+							coaching: t.budget.coaching,
+							facilities: t.budget.facilities,
+							health: t.budget.health,
+							scouting: t.budget.scouting,
+						};
+					} else {
+						const gp = helpers.getTeamSeasonGp(ts);
+						if (gp > 0) {
+							row.expenseLevels = {
+								coaching: Math.round(ts.expenseLevels.coaching / gp),
+								facilities: Math.round(ts.expenseLevels.facilities / gp),
+								health: Math.round(ts.expenseLevels.health / gp),
+								scouting: Math.round(ts.expenseLevels.scouting / gp),
+							};
+						} else {
+							row.expenseLevels = {
+								coaching: 0,
+								facilities: 0,
+								health: 0,
+								scouting: 0,
+							};
+						}
+					}
 				} else {
-					// @ts-ignore
+					// @ts-expect-error
 					row[attr] = ts[attr];
 				}
 
 				if (row[attr] === undefined && copyFromTeamIfUndefined.includes(attr)) {
-					// @ts-ignore
+					// @ts-expect-error
 					row[attr] = t[attr];
 				}
 			}
@@ -204,7 +212,7 @@ const processSeasonAttrs = async <
 	);
 
 	if (season !== undefined) {
-		// @ts-ignore
+		// @ts-expect-error
 		output.seasonAttrs = output.seasonAttrs[0];
 	}
 };
@@ -307,7 +315,7 @@ const processStats = async <
 		teamStats.push({});
 	}
 
-	// @ts-ignore
+	// @ts-expect-error
 	output.stats = teamStats.map(ts => {
 		return team.processStats(ts, stats, playoffs, statType);
 	});
@@ -316,7 +324,7 @@ const processStats = async <
 		season !== undefined &&
 		((playoffs && !regularSeason) || (!playoffs && regularSeason))
 	) {
-		// @ts-ignore
+		// @ts-expect-error
 		output.stats = output.stats[0];
 	}
 };
@@ -352,11 +360,11 @@ const processTeam = async <
 		type: GetCopyType | undefined;
 	},
 ) => {
-	// @ts-ignore
+	// @ts-expect-error
 	const output: TeamFiltered<Attrs, SeasonAttrs, StatAttrs, Season> = {};
 
 	if (attrs) {
-		// @ts-ignore
+		// @ts-expect-error
 		processAttrs(output, t, attrs);
 	}
 
@@ -364,7 +372,7 @@ const processTeam = async <
 
 	if (seasonAttrs) {
 		promises.push(
-			// @ts-ignore
+			// @ts-expect-error
 			processSeasonAttrs(output, t, seasonAttrs, addDummySeason, season, type),
 		);
 	}
@@ -372,7 +380,7 @@ const processTeam = async <
 	if (stats) {
 		promises.push(
 			processStats(
-				// @ts-ignore
+				// @ts-expect-error
 				output,
 				t,
 				stats,
@@ -477,7 +485,7 @@ async function getCopies<
 			teams = teams.filter(t => !t.disabled);
 		}
 
-		// @ts-ignore
+		// @ts-expect-error
 		return (await Promise.all(teams.map(t => processTeam(t, options)))).filter(
 			x => x !== undefined,
 		);
@@ -487,7 +495,7 @@ async function getCopies<
 	if (t) {
 		const val = await processTeam(t, options);
 		if (val) {
-			// @ts-ignore
+			// @ts-expect-error
 			return [val];
 		}
 	}

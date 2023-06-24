@@ -2,13 +2,14 @@ import { idb } from "../db";
 import g from "./g";
 import helpers from "./helpers";
 import logEvent from "./logEvent";
-import { league, expansionDraft, phase, team } from "../core";
+import { league, expansionDraft, phase, team, player, finances } from "../core";
 import type {
 	ScheduledEvent,
 	Conditions,
 	RealTeamInfo,
 } from "../../common/types";
 import { PHASE, applyRealTeamInfo } from "../../common";
+import local from "./local";
 
 const processTeamInfo = async (
 	info: Extract<ScheduledEvent, { type: "teamInfo" }>["info"],
@@ -160,9 +161,37 @@ const processGameAttributes = async (
 				: "Removed the three point line.",
 		);
 	}
-
+	const prevSalaryCapType = g.get("salaryCapType");
+	const newSalaryCapType = info.salaryCapType ?? prevSalaryCapType;
 	const prevSalaryCap = g.get("salaryCap");
-	if (info.salaryCap !== undefined && info.salaryCap !== prevSalaryCap) {
+	const newSalaryCap = info.salaryCap ?? prevSalaryCap;
+	if (
+		info.salaryCapType !== undefined &&
+		info.salaryCapType !== prevSalaryCapType
+	) {
+		if (info.salaryCapType === "none") {
+			texts.push("Salary cap was eliminated.");
+		} else if (prevSalaryCapType === "none") {
+			texts.push(
+				`${helpers.upperCaseFirstLetter(
+					info.salaryCapType,
+				)} salary cap added at ${helpers.formatCurrency(
+					newSalaryCap / 1000,
+					"M",
+				)}.`,
+			);
+		} else {
+			texts.push(
+				`Salary cap switched to a ${
+					info.salaryCapType
+				} cap of ${helpers.formatCurrency(newSalaryCap / 1000, "M")}.`,
+			);
+		}
+	} else if (
+		info.salaryCap !== undefined &&
+		info.salaryCap !== prevSalaryCap &&
+		newSalaryCapType !== "none"
+	) {
 		const increased =
 			info.salaryCap > prevSalaryCap ? "increased" : "decreased";
 		texts.push(
@@ -230,6 +259,42 @@ const processGameAttributes = async (
 				"draft_lottery",
 			])}">draft lottery</a> format.`,
 		);
+	}
+
+	const prevAllStarType = g.get("allStarType");
+	if (info.draftType !== undefined && info.allStarType !== prevAllStarType) {
+		if (info.allStarType === "draft") {
+			texts.push("All-Star teams will now be selected by a draft.");
+		} else if (info.allStarType === "byConf") {
+			texts.push("All-Star teams will now be selected by conference.");
+		} else if (info.allStarType === "top") {
+			texts.push(
+				"All-Star teams will now be made up of the top players in the league, regardless of conference.",
+			);
+		}
+	}
+
+	const prevAllStarDunk = g.get("allStarDunk");
+	if (info.allStarDunk !== undefined && info.allStarDunk !== prevAllStarDunk) {
+		if (info.allStarDunk) {
+			texts.push("A slam dunk contest has been added to the All-Star events.");
+		} else {
+			texts.push("The slam dunk contest has been removed.");
+		}
+	}
+
+	const prevAllStarThree = g.get("allStarThree");
+	if (
+		info.allStarThree !== undefined &&
+		info.allStarThree !== prevAllStarThree
+	) {
+		if (info.allStarDunk) {
+			texts.push(
+				"A three-point contest has been added to the All-Star events.",
+			);
+		} else {
+			texts.push("The three-point contest has been removed.");
+		}
 	}
 
 	const prevFoulsUntilBonus = g.get("foulsUntilBonus");
@@ -355,6 +420,50 @@ const processContraction = async (
 	return [text];
 };
 
+const processUnretirePlayer = async (pid: number) => {
+	const p = await idb.getCopy.players({ pid }, "noCopyCache");
+	if (!p) {
+		throw new Error(`No player found for scheduled event: ${pid}`);
+	}
+
+	// Player might need some new ratings rows added
+	const lastRatingsSeason = p.ratings.at(-1)!.season;
+	const diff = g.get("season") - lastRatingsSeason;
+	if (diff > 0) {
+		const scoutingLevel = await finances.getLevelLastThree("scouting", {
+			tid: g.get("userTid"),
+		});
+
+		// Add rows one at a time, since we want to store full ratings history
+		for (let i = 0; i < diff; i++) {
+			player.addRatingsRow(p, scoutingLevel);
+
+			// Adjust season, since addRatingsRow always adds in current season
+			p.ratings.at(-1)!.season -= diff - i - 1;
+
+			await player.develop(p, 1);
+		}
+	}
+
+	p.retiredYear = Infinity;
+	player.addToFreeAgents(p);
+	await idb.cache.players.put(p);
+
+	const ratings = p.ratings.at(-1)!;
+	const ovr = player.fuzzRating(ratings.ovr, ratings.fuzz);
+
+	// Only show notification if it's an above average player
+	if (ovr > local.playerOvrMean) {
+		const text = `<a href="${helpers.leagueUrl(["player", p.pid])}">${
+			p.firstName
+		} ${p.lastName}</a> has come out of retirement and is now a free agent.`;
+
+		return [text];
+	}
+
+	return [];
+};
+
 const processScheduledEvents = async (
 	season: number,
 	phase: number,
@@ -400,6 +509,10 @@ const processScheduledEvents = async (
 			);
 		} else if (scheduledEvent.type === "contraction") {
 			eventLogTexts.push(...(await processContraction(scheduledEvent.info)));
+		} else if (scheduledEvent.type === "unretirePlayer") {
+			eventLogTexts.push(
+				...(await processUnretirePlayer(scheduledEvent.info.pid)),
+			);
 		} else {
 			throw new Error(
 				`Unknown scheduled event type: ${(scheduledEvent as any).type}`,

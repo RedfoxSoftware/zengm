@@ -2,6 +2,7 @@ import { idb } from "../db";
 import { g, helpers } from "../util";
 import type { UpdateEvents, ViewInput } from "../../common/types";
 import { bySport } from "../../common";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updateUserRoster = async (
 	inputs: ViewInput<"tradingBlock">,
@@ -14,6 +15,7 @@ const updateUserRoster = async (
 		updateEvents.includes("newPhase")
 	) {
 		const stats = bySport({
+			baseball: ["gp", "keyStats", "war"],
 			basketball: ["gp", "min", "pts", "trb", "ast", "per"],
 			football: ["gp", "keyStats", "av"],
 			hockey: ["gp", "keyStats", "ops", "dps", "ps"],
@@ -22,25 +24,29 @@ const updateUserRoster = async (
 			"playersByTid",
 			g.get("userTid"),
 		);
-		const userRoster = await idb.getCopies.playersPlus(userRosterAll, {
-			attrs: [
-				"pid",
-				"name",
-				"age",
-				"contract",
-				"injury",
-				"watch",
-				"untradable",
-				"jerseyNumber",
-			],
-			ratings: ["ovr", "pot", "skills", "pos"],
-			stats,
-			season: g.get("season"),
-			tid: g.get("userTid"),
-			showNoStats: true,
-			showRookies: true,
-			fuzz: true,
-		});
+		const userRoster = addFirstNameShort(
+			await idb.getCopies.playersPlus(userRosterAll, {
+				attrs: [
+					"pid",
+					"firstName",
+					"lastName",
+					"age",
+					"contract",
+					"injury",
+					"watch",
+					"untradable",
+					"jerseyNumber",
+					"draft",
+				],
+				ratings: ["ovr", "pot", "skills", "pos"],
+				stats,
+				season: g.get("season"),
+				tid: g.get("userTid"),
+				showNoStats: true,
+				showRookies: true,
+				fuzz: true,
+			}),
+		);
 
 		const userPicks = await idb.getCopies.draftPicks(
 			{
@@ -49,20 +55,25 @@ const updateUserRoster = async (
 			"noCopyCache",
 		);
 
-		const userPicks2 = userPicks.map(dp => {
-			return {
-				...dp,
-				desc: helpers.pickDesc(dp),
-			};
-		});
+		const userPicks2 = await Promise.all(
+			userPicks.map(async dp => {
+				return {
+					...dp,
+					desc: await helpers.pickDesc(dp),
+				};
+			}),
+		);
 
 		return {
 			challengeNoRatings: g.get("challengeNoRatings"),
 			challengeNoTrades: g.get("challengeNoTrades"),
 			gameOver: g.get("gameOver"),
 			initialPid: inputs.pid,
-			spectator: g.get("spectator"),
+			initialDpid: inputs.dpid,
 			phase: g.get("phase"),
+			salaryCap: g.get("salaryCap"),
+			salaryCapType: g.get("salaryCapType"),
+			spectator: g.get("spectator"),
 			stats,
 			userPicks: userPicks2,
 			userRoster,

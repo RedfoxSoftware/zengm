@@ -9,12 +9,10 @@ import { DEFAULT_JERSEY } from "../../../common";
 const genSeasonRow = (
 	t: Team | TeamBasic,
 	prevSeason?: TeamSeasonWithoutKey,
-	numActiveTeams: number = g.get("numActiveTeams"),
 	season: number = g.get("season"),
 	defaultStadiumCapacity: number = g.get("defaultStadiumCapacity"),
-): TeamSeasonWithoutKey => {
-	const defaultRank = (numActiveTeams + 1) / 2;
-	const newSeason = {
+) => {
+	const newSeason: TeamSeasonWithoutKey = {
 		tid: t.tid,
 		cid: t.cid,
 		did: t.did,
@@ -25,7 +23,6 @@ const genSeasonRow = (
 		colors: t.colors,
 		jersey: t.jersey ?? DEFAULT_JERSEY,
 		season,
-		gp: 0,
 		gpHome: 0,
 		att: 0,
 		cash: 10000,
@@ -56,60 +53,27 @@ const genSeasonRow = (
 		pop: 1,
 		stadiumCapacity: defaultStadiumCapacity,
 		revenues: {
-			luxuryTaxShare: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			merch: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			sponsor: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			ticket: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			nationalTv: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			localTv: {
-				amount: 0,
-				rank: defaultRank,
-			},
+			luxuryTaxShare: 0,
+			merch: 0,
+			sponsor: 0,
+			ticket: 0,
+			nationalTv: 0,
+			localTv: 0,
 		},
 		expenses: {
-			salary: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			luxuryTax: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			minTax: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			scouting: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			coaching: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			health: {
-				amount: 0,
-				rank: defaultRank,
-			},
-			facilities: {
-				amount: 0,
-				rank: defaultRank,
-			},
+			salary: 0,
+			luxuryTax: 0,
+			minTax: 0,
+			scouting: 0,
+			coaching: 0,
+			health: 0,
+			facilities: 0,
+		},
+		expenseLevels: {
+			scouting: 0,
+			coaching: 0,
+			health: 0,
+			facilities: 0,
 		},
 		payrollEndOfSeason: -1,
 		ownerMood: {
@@ -125,13 +89,12 @@ const genSeasonRow = (
 	}
 
 	if (typeof t.imgURLSmall === "string") {
-		// @ts-ignore
 		newSeason.imgURLSmall = t.imgURLSmall;
 	}
 
-	// @ts-ignore
+	// @ts-expect-error
 	if (typeof t.stadiumCapacity === "number") {
-		// @ts-ignore
+		// @ts-expect-error
 		newSeason.stadiumCapacity = t.stadiumCapacity;
 	}
 
@@ -142,7 +105,7 @@ const genSeasonRow = (
 		if (t.pop === undefined) {
 			newSeason.pop = prevSeason.pop;
 		}
-		// @ts-ignore
+		// @ts-expect-error
 		if (t.stadiumCapacity === undefined) {
 			newSeason.stadiumCapacity = prevSeason.stadiumCapacity;
 		}

@@ -1,18 +1,30 @@
-import { useLocalShallow } from "../util";
+import { MOBILE_AD_BOTTOM_MARGIN } from "../../common";
+import { useLocalPartial } from "../util";
 
-const StickyBottomButtons = ({ children }: { children: any }) => {
-	const { stickyFooterAd } = useLocalShallow(state => ({
-		stickyFooterAd: state.stickyFooterAd,
-	}));
+const StickyBottomButtons = ({
+	children,
+	isInsideModal,
+}: {
+	children: any;
+	isInsideModal?: boolean;
+}) => {
+	const { stickyFooterAd } = useLocalPartial(["stickyFooterAd"]);
 
-	let bottom = 0;
-	if (stickyFooterAd) {
-		bottom += 52;
+	let bottom;
+	if (isInsideModal) {
+		bottom = -15;
+	} else {
+		bottom = 0;
+		if (stickyFooterAd) {
+			bottom += MOBILE_AD_BOTTOM_MARGIN;
+		}
 	}
 
 	return (
 		<div
-			className="alert-secondary rounded-top p-2 d-flex settings-buttons"
+			className={`alert-bg-color alert-secondary rounded-top ${
+				isInsideModal ? "py-2" : "p-2"
+			} d-flex settings-buttons`}
 			style={{ bottom }}
 		>
 			{children}

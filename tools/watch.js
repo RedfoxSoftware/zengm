@@ -1,3 +1,2 @@
-const importJsx = require("import-jsx");
-const renderWatchProgress = importJsx("./lib/renderWatchProgress");
+import renderWatchProgress from "./lib/renderWatchProgress.js";
 renderWatchProgress();

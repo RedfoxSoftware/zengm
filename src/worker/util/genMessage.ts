@@ -65,15 +65,15 @@ const genMessage = async (deltas: OwnerMood, cappedDeltas: OwnerMood) => {
 
 	// Check for some challenge modes that can result in being fired
 	if (g.get("challengeFiredLuxuryTax")) {
-		const latestSeason = teamSeasons.at(-1);
-		if (latestSeason.expenses.luxuryTax.amount > 0) {
+		const latestSeason = teamSeasons.at(-1)!;
+		if (latestSeason.expenses.luxuryTax > 0) {
 			m +=
 				'<p>You paid the luxury tax with the "You\'re fired if you pay the luxury tax" challenge mode enabled!</p>';
 			fired = true;
 		}
 	}
 	if (g.get("challengeFiredMissPlayoffs")) {
-		const latestSeason = teamSeasons.at(-1);
+		const latestSeason = teamSeasons.at(-1)!;
 		if (latestSeason.playoffRoundsWon < 0) {
 			m +=
 				'<p>You missed the playoffs with the "You\'re fired if you miss the playoffs" challenge mode enabled!</p>';
@@ -83,14 +83,11 @@ const genMessage = async (deltas: OwnerMood, cappedDeltas: OwnerMood) => {
 
 	// If challenge mode didn't trigger a firing, do normal stuff
 	if (!fired) {
-		const currentMood =
-			moods.length > 0
-				? moods.at(-1)
-				: {
-						money: 0,
-						playoffs: 0,
-						wins: 0,
-				  };
+		const currentMood = moods.at(-1) ?? {
+			money: 0,
+			playoffs: 0,
+			wins: 0,
+		};
 		const currentTotal =
 			currentMood.wins + currentMood.playoffs + currentMood.money;
 		fired =

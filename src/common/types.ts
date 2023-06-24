@@ -12,14 +12,12 @@ export type Env = {
 
 declare global {
 	interface Window {
-		TriggerPrompt: (a: string, b: string | number | undefined) => void;
 		bbgm: any; // Just for debugging
 		bbgmVersion: string;
 		bugsnagKey: string;
 		enableLogging: boolean;
 		freestar: any;
 		getTheme: () => string;
-		googleAnalyticsID: string;
 		googletag: any;
 		heartbeatID: string;
 		mobile: boolean;
@@ -35,16 +33,8 @@ declare global {
 	namespace NodeJS {
 		interface ProcessEnv {
 			NODE_ENV: "development" | "production" | "test";
-			SPORT: "basketball" | "football" | "hockey";
+			SPORT: "basketball" | "football" | "baseball" | "hockey";
 		}
-	}
-
-	// Hopefully these can be removed with a newer version of TypeScript
-	interface Array<T> {
-		at: (i: number) => T;
-	}
-	interface String {
-		at: (i: number) => string;
 	}
 }
 
@@ -53,14 +43,14 @@ type ViewsKeys = keyof typeof views;
 export type View<Name extends ViewsKeys> = Exclude<
 	Awaited<
 		Name extends ViewsKeys
-			? ReturnType<typeof views[Name]>
+			? ReturnType<(typeof views)[Name]>
 			: Record<string, unknown>
 	>,
 	void | { redirectUrl: string } | { errorMessage: string }
 >;
 
 export type ViewInput<T extends keyof typeof processInputs> = Exclude<
-	ReturnType<typeof processInputs[T]>,
+	ReturnType<(typeof processInputs)[T]>,
 	{ redirectUrl: string }
 >;
 
@@ -119,6 +109,7 @@ export type AllStars = {
 	teams: [AllStarPlayer[], AllStarPlayer[]];
 	remaining: AllStarPlayer[];
 	finalized: boolean; // Refers to if draft is complete or not
+	type: GameAttributesLeague["allStarType"];
 
 	// After game is complete
 	gid?: number;
@@ -235,7 +226,10 @@ export type DraftType =
 	| "randomLotteryFirst3"
 	| "nba1990"
 	| "freeAgents"
-	| "nhl2017";
+	| "nhl2017"
+	| "nhl2021"
+	| "mlb2022"
+	| "custom";
 
 // Key is team ID receiving this asset
 // Why store name and extra draft pick info? For performance a bit, but mostly in case old players are deleted in a league, the trade event will still show something reasonable
@@ -266,7 +260,7 @@ export type DiscriminateUnion<
 
 export type EventBBGMWithoutKey =
 	| {
-			type: Exclude<LogEventType, "trade">;
+			type: Exclude<LogEventType, "sisyphus" | "trade">;
 			text: string;
 			pids?: number[];
 			dpids?: number[];
@@ -277,6 +271,18 @@ export type EventBBGMWithoutKey =
 			// < 20: somewhat important
 			// >= 20: very important
 			score?: number;
+	  }
+	| {
+			type: "sisyphus";
+			pids: number[];
+			tids: number[];
+			season: number;
+			wonTitle: boolean;
+
+			// For TypeScript, never actually used
+			score?: undefined;
+			text?: undefined;
+			dpids?: undefined;
 	  }
 	| {
 			type: "trade";
@@ -395,6 +401,14 @@ export type ScheduledEventWithoutKey =
 			info: {
 				tid: number;
 			};
+	  }
+	| {
+			type: "unretirePlayer";
+			season: number;
+			phase: Phase;
+			info: {
+				pid: number;
+			};
 	  };
 
 export type ScheduledEvent = ScheduledEventWithoutKey & { id: number };
@@ -448,6 +462,10 @@ export type GameAttributesLeague = {
 	aiJerseyRetirement: boolean;
 	aiTradesFactor: number;
 	allStarGame: number | null;
+	allStarNum: number;
+	allStarType: "draft" | "byConf" | "top";
+	allStarDunk: boolean;
+	allStarThree: boolean;
 	autoDeleteOldBoxScores: boolean;
 	brotherRate: number;
 	budget: boolean;
@@ -458,18 +476,26 @@ export type GameAttributesLeague = {
 	challengeLoseBestPlayer: boolean;
 	challengeFiredLuxuryTax: boolean;
 	challengeFiredMissPlayoffs: boolean;
-	challengeThanosMode: boolean;
+	challengeSisyphusMode: boolean;
+	challengeThanosMode: number;
 	thanosCooldownEnd: number | undefined;
 	confs: Conf[];
 	daysLeft: number;
 	defaultStadiumCapacity: number;
+	dh: "all" | "none" | number[];
 	difficulty: number;
 	divs: Div[];
-	draftType: DraftType;
 	draftAges: [number, number];
+	draftPickAutoContract: boolean;
+	draftPickAutoContractPercent: number;
+	draftPickAutoContractRounds: number;
+	draftType: DraftType;
+	draftLotteryCustomChances: number[];
+	draftLotteryCustomNumPicks: number;
 	elam: boolean;
 	elamASG: boolean;
 	elamMinutes: number;
+	elamOvertime: boolean;
 	elamPoints: number;
 	equalizeRegions: boolean;
 	fantasyPoints?: "standard" | "ppr" | "halfPpr";
@@ -478,11 +504,14 @@ export type GameAttributesLeague = {
 	foulsUntilBonus: number[];
 	foulRateFactor: number;
 	gameOver: boolean;
+	gender: "female" | "male";
 	goatFormula?: string;
+	goatSeasonFormula?: string;
 	godMode: boolean;
 	godModeInPast: boolean;
 	gracePeriodEnd: number;
-	hardCap: boolean;
+	groupScheduleSeries: boolean;
+	heightFactor: number;
 	hideDisabledTeams: boolean;
 	hofFactor: number;
 	homeCourtAdvantage: number;
@@ -502,6 +531,7 @@ export type GameAttributesLeague = {
 	minContract: number;
 	minContractLength: number;
 	minPayroll: number;
+	minRetireAge: number;
 	minRosterSize: number;
 	names?: NamesLegacy;
 	nextPhase?: Phase;
@@ -519,6 +549,7 @@ export type GameAttributesLeague = {
 	numPlayoffByes: number;
 	numSeasonsFutureDraftPicks: number;
 	numTeams: number;
+	numWatchColors: number;
 	playIn: boolean;
 	playerMoodTraits: boolean;
 	pointsFormula: string;
@@ -552,7 +583,9 @@ export type GameAttributesLeague = {
 	rookieContractLengths: number[];
 	rookiesCanRefuse: boolean;
 	salaryCap: number;
+	salaryCapType: "hard" | "none" | "soft";
 	season: number;
+	softCapTradeSalaryMatch: number;
 	sonRate: number;
 	startingSeason: number;
 	stopOnInjury: boolean;
@@ -572,6 +605,7 @@ export type GameAttributesLeague = {
 	tragicDeaths?: TragicDeaths;
 	userTid: number;
 	userTids: number[];
+	weightFactor: number;
 
 	threePointers: boolean;
 	threePointTendencyFactor: number;
@@ -604,6 +638,38 @@ export type GameAttributesLeague = {
 				expansionTids: number[];
 				availablePids: number[];
 		  };
+
+	passFactor: number;
+	rushYdsFactor: number;
+	passYdsFactor: number;
+	completionFactor: number;
+	scrambleFactor: number;
+	sackFactor: number;
+	fumbleFactor: number;
+	intFactor: number;
+	fgAccuracyFactor: number;
+	fourthDownFactor: number;
+	onsideFactor: number;
+	onsideRecoveryFactor: number;
+	hitFactor: number;
+	giveawayFactor: number;
+	takeawayFactor: number;
+	deflectionFactor: number;
+	saveFactor: number;
+	assistFactor: number;
+	foulFactor: number;
+	groundFactor: number;
+	lineFactor: number;
+	flyFactor: number;
+	powerFactor: number;
+	throwOutFactor: number;
+	strikeFactor: number;
+	balkFactor: number;
+	wildPitchFactor: number;
+	passedBallFactor: number;
+	hitByPitchFactor: number;
+	swingFactor: number;
+	contactFactor: number;
 };
 
 export type GameAttributesLeagueWithHistory = Omit<
@@ -645,9 +711,9 @@ export type GameAttributes =
 
 export type GameAttributeKey = keyof GameAttributesLeague;
 
-export type GameAttribute = {
-	key: GameAttributeKey;
-	value: any;
+export type GameAttribute<T extends GameAttributeKey> = {
+	key: T;
+	value: GameAttributesLeagueWithHistory[T];
 };
 
 export type GameProcessed = {
@@ -728,6 +794,8 @@ export type LogEventType =
 	| "retiredList"
 	| "retiredJersey"
 	| "screenshot"
+	| "sisyphus"
+	| "sisyphusTeam"
 	| "success"
 	| "teamContraction"
 	| "teamExpansion"
@@ -782,11 +850,15 @@ export type Message = {
 
 export type MenuItemLink = {
 	type: "link";
-	active?: (a?: string) => boolean;
+	active?: (pageID?: string, pathname?: string) => boolean;
 	league?: true;
 	godMode?: true;
 	nonLeague?: true;
-	onClick?: (a: MouseEvent<any>) => void | false | Promise<void | false>; // Return false to leave sidebar open
+	commandPalette?: true;
+	commandPaletteOnly?: true;
+	onClick?: (
+		a: MouseEvent<any>,
+	) => undefined | void | false | Promise<undefined | void | false>; // Return false to leave sidebar open
 	path?: string | (number | string)[];
 	text:
 		| Exclude<ReactNode, null | undefined | number | boolean>
@@ -802,6 +874,8 @@ export type MenuItemHeader = {
 	short: string;
 	league?: true;
 	nonLeague?: true;
+	commandPalette?: true;
+	commandPaletteOnly?: true;
 	children: (MenuItemLink | MenuItemText)[];
 };
 
@@ -838,6 +912,8 @@ export type Option = {
 };
 
 export type Options = {
+	fullNames?: boolean;
+	phaseChangeRedirects: Phase[];
 	units?: "metric" | "us";
 };
 
@@ -850,6 +926,7 @@ export type LocalStateUI = {
 	games: {
 		forceWin?: number; // Number of iterations - defined means result was forced
 		gid: number;
+		numPeriods?: number;
 		overtimes?: number;
 		teams: [
 			{
@@ -874,7 +951,9 @@ export type LocalStateUI = {
 			},
 		];
 	}[];
+	gender: GameAttributesLeague["gender"];
 	fantasyPoints: GameAttributesLeague["fantasyPoints"];
+	fullNames: boolean;
 	gold?: boolean;
 	godMode: boolean;
 	hasViewedALeague: boolean;
@@ -891,6 +970,7 @@ export type LocalStateUI = {
 	lid?: number;
 	liveGameInProgress: boolean;
 	numPeriods: number;
+	numWatchColors: number;
 	phase: number;
 	phaseText: string;
 	playMenuOptions: Option[];
@@ -918,13 +998,7 @@ export type LocalStateUI = {
 	hideNewWindow: boolean;
 	jumpTo: boolean;
 	jumpToSeason?: number | "all" | "career";
-	dropdownCustomOptions?: Record<
-		string,
-		{
-			key: number | string;
-			value: string;
-		}[]
-	>;
+	dropdownCustomOptions?: Record<string, DropdownOption[]>;
 	dropdownCustomURL?: (fields: Record<string, number | string>) => string;
 	dropdownView?: string;
 	dropdownFields?: {
@@ -935,7 +1009,6 @@ export type LocalStateUI = {
 	moreInfoTid?: number;
 	stickyFooterAd: boolean;
 	stickyFormButtons: boolean;
-	stickyMultiTeamMenu: boolean;
 };
 
 export type PartialTopMenu = {
@@ -949,14 +1022,17 @@ export type PartialTopMenu = {
 export type Phase = -2 | -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export type PhaseReturn = {
-	url?: string;
+	redirect?: {
+		url: string;
+		text: string;
+	};
 	updateEvents?: UpdateEvents;
 };
 
 export type PlayerContract = {
 	amount: number;
 	exp: number;
-	rookie?: true;
+	rookie?: true; // If present, this is a rookie contract. Could be either a rookie scale auto sign, or negotiated.
 	rookieResign?: true; // Should only be present during re-signing phase for guys re-signing after rookie contracts, otherwise can't identify if previous contract was a rookie contract cause it's overwritten!
 };
 
@@ -974,6 +1050,7 @@ export type PlayerFeatWithoutKey = {
 	won: boolean;
 	score: string;
 	overtimes: number;
+	numPeriods: number;
 };
 
 export type PlayerFeat = PlayerFeatWithoutKey & {
@@ -1016,7 +1093,6 @@ export type MinimalPlayerRatings = {
 	pots?: any;
 	injuryIndex?: number;
 	hgt: number;
-	stre: number;
 	spd: number;
 	endu: number;
 	locked?: boolean;
@@ -1114,17 +1190,27 @@ export type PlayerWithoutKey<PlayerRatings = any> = {
 				tid: number;
 				type: "import";
 		  }
+		| {
+				season: number;
+				phase: number;
+				tid: number;
+				type: "sisyphus";
+				fromTid: number;
+		  }
 	)[]; // Only optional cause I'm worried about upgrades
 	value: number;
 	valueNoPot: number;
 	valueFuzz: number;
 	valueNoPotFuzz: number;
-	watch?: 1; // Would rather be boolean, but can't index boolean
+	watch?: number;
 	weight: number;
 	yearsFreeAgent: number;
 
 	// Only for hockey goalies
 	numConsecutiveGamesG?: number;
+
+	// Only for baseball pitchers
+	pFatigue?: number;
 };
 
 export type Player<PlayerRatings = any> = {
@@ -1149,7 +1235,7 @@ export type PlayersPlusOptions = {
 	oldStats?: boolean;
 	numGamesRemaining?: number;
 	statType?: PlayerStatType;
-	mergeStats?: boolean;
+	mergeStats?: "none" | "totOnly" | "totAndTeams";
 };
 
 export type Race = "asian" | "black" | "brown" | "white";
@@ -1215,6 +1301,7 @@ export type Local = {
 		start: number;
 	};
 	autoSave: boolean;
+	exhibitionGamePlayers?: Record<number, Player>;
 	fantasyDraftResults: (Player<any> & {
 		prevAbbrev: string;
 		prevTid: number;
@@ -1237,6 +1324,7 @@ export type Local = {
 	playerOvrMean: number;
 	playerOvrStd: number;
 	playerOvrMeanStdStale: boolean;
+	seasonLeaders: SeasonLeaders | undefined;
 	playingUntilEndOfRound: boolean;
 	statusText: string;
 	unviewedSeasonSummary: boolean;
@@ -1298,7 +1386,7 @@ export type ContractInfo = {
 	amount: number;
 	exp: number;
 	released: boolean;
-	watch: boolean;
+	watch: number;
 };
 
 export type ReleasedPlayerWithoutKey = {
@@ -1337,11 +1425,6 @@ export type SortType =
 	| "record"
 	| "string";
 
-export type BudgetItem = {
-	amount: number;
-	rank: number;
-};
-
 export type Team = {
 	tid: number;
 	cid: number;
@@ -1354,8 +1437,14 @@ export type Team = {
 	colors: [string, string, string];
 	jersey?: string;
 	budget: Record<
+		// ticketPrice is in dollars, others are levels
 		"ticketPrice" | "scouting" | "coaching" | "health" | "facilities",
-		BudgetItem
+		number
+	>;
+	// initialBudget is for when starting a new league, it can use initialBudget as values for the past 2 seasons when no data exists
+	initialBudget: Record<
+		"scouting" | "coaching" | "health" | "facilities",
+		number
 	>;
 	strategy: "contending" | "rebuilding";
 	depth?:
@@ -1378,6 +1467,13 @@ export type Team = {
 				F: number[];
 				D: number[];
 				G: number[];
+		  }
+		| {
+				L: number[]; // Lineup
+				LP: number[]; // Lineup (no DH)
+				D: number[]; // Defense
+				DP: number[]; // Defense (no DH)
+				P: number[]; // Pitching
 		  };
 	firstSeasonAfterExpansion?: number;
 	srID?: string;
@@ -1425,11 +1521,18 @@ type TeamSeasonPlus = TeamSeason & {
 };
 export type TeamSeasonAttr = keyof TeamSeasonPlus;
 
+import type {
+	TeamStatAttr as TeamStatAttrBaseball,
+	TeamStatAttrByPos as TeamStatAttrByPosBaseball,
+} from "./types.baseball";
 import type { TeamStatAttr as TeamStatAttrBasketball } from "./types.basketball";
 import type { TeamStatAttr as TeamStatAttrFootball } from "./types.football";
 import type { TeamStatAttr as TeamStatAttrHockey } from "./types.hockey";
 import type { TIEBREAKERS } from "./constants";
-type TeamStatsPlus = Record<TeamStatAttrBasketball, number> &
+import type { DropdownOption } from "../ui/hooks/useDropdownOptions";
+type TeamStatsPlus = Record<TeamStatAttrBaseball, number> &
+	Record<TeamStatAttrByPosBaseball, number[]> &
+	Record<TeamStatAttrBasketball, number> &
 	Record<TeamStatAttrFootball, number> &
 	Record<TeamStatAttrHockey, number> & {
 		season: number;
@@ -1480,8 +1583,7 @@ export type TeamSeasonWithoutKey = {
 	rid?: number;
 	tid: number;
 	season: number;
-	gp: number;
-	gpHome: number;
+	gpHome: number; // Includes playoff games! Used for attendance average
 	att: number;
 	cash: number;
 	won: number;
@@ -1512,21 +1614,28 @@ export type TeamSeasonWithoutKey = {
 	pop: number;
 	stadiumCapacity: number;
 	revenues: {
-		luxuryTaxShare: BudgetItem;
-		merch: BudgetItem;
-		sponsor: BudgetItem;
-		ticket: BudgetItem;
-		nationalTv: BudgetItem;
-		localTv: BudgetItem;
+		luxuryTaxShare: number;
+		merch: number;
+		sponsor: number;
+		ticket: number;
+		nationalTv: number;
+		localTv: number;
 	};
 	expenses: {
-		salary: BudgetItem;
-		luxuryTax: BudgetItem;
-		minTax: BudgetItem;
-		scouting: BudgetItem;
-		coaching: BudgetItem;
-		health: BudgetItem;
-		facilities: BudgetItem;
+		luxuryTax: number;
+		minTax: number;
+		salary: number;
+		coaching: number;
+		health: number;
+		facilities: number;
+		scouting: number;
+	};
+	// These are cumsums per game, divide by gp for the average
+	expenseLevels: {
+		coaching: number;
+		facilities: number;
+		health: number;
+		scouting: number;
 	};
 	payrollEndOfSeason: number;
 	ownerMood?: OwnerMood;
@@ -1535,7 +1644,7 @@ export type TeamSeasonWithoutKey = {
 	// w - clinched play-in tournament
 	// x - clinched playoffs
 	// y - if byes exist - clinched bye
-	// z - clinched home court advantage
+	// z - clinched #1 seed advantage
 	// o - eliminated
 	clinchedPlayoffs?: "w" | "x" | "y" | "z" | "o";
 
@@ -1578,6 +1687,8 @@ export type TradePickValues = {
 };
 type TradeSummaryTeam = {
 	name: string;
+	ovrAfter: number;
+	ovrBefore: number;
 	payrollAfterTrade: number;
 	payrollBeforeTrade: number;
 	picks: {
@@ -1591,6 +1702,7 @@ type TradeSummaryTeam = {
 export type TradeSummary = {
 	teams: [TradeSummaryTeam, TradeSummaryTeam];
 	warning: null | string;
+	warningAmount?: number;
 };
 
 export type TradeTeam = {
@@ -1600,6 +1712,7 @@ export type TradeTeam = {
 	pidsExcluded: number[];
 	tid: number;
 	warning?: string | null;
+	warningAmount?: number;
 };
 
 export type TradeTeams = [TradeTeam, TradeTeam];
@@ -1615,7 +1728,7 @@ export type UpdateEvents = (
 	| "allStarThree"
 	| "firstRun"
 	| "g.goatFormula"
-	| "g.userTids"
+	| "g.goatSeasonFormula"
 	| "gameAttributes"
 	| "gameSim"
 	| "leagues"
@@ -1656,6 +1769,10 @@ export type GetLeagueOptionsReal = {
 	randomDebuts: boolean;
 	realDraftRatings: "draft" | "rookie";
 	realStats: "none" | "lastSeason" | "allActive" | "allActiveHOF" | "all";
+
+	// For exhibition game only
+	includeSeasonInfo?: boolean;
+	pidOffset?: number;
 };
 
 export type GetLeagueOptions =
@@ -1714,3 +1831,12 @@ export type HeadToHead = {
 };
 
 export type GetCopyType = "noCopyCache";
+
+export type SeasonLeaders = {
+	season: number;
+	age: number;
+	regularSeason: Record<string, unknown>;
+	playoffs: Record<string, unknown>;
+	ratings: Record<string, unknown>;
+	ratingsFuzz: Record<string, unknown>;
+};

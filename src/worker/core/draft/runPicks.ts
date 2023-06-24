@@ -21,11 +21,12 @@ export const getTeamOvrDiffs = (
 	}
 
 	const teamPlayers2 = teamPlayers.map(p => ({
+		pid: p.pid,
 		value: p.value,
 		ratings: {
-			ovr: player.fuzzRating(p.ratings.at(-1).ovr, p.ratings.at(-1).fuzz),
-			ovrs: player.fuzzOvrs(p.ratings.at(-1).ovrs, p.ratings.at(-1).fuzz),
-			pos: p.ratings.at(-1).pos,
+			ovr: player.fuzzRating(p.ratings.at(-1)!.ovr, p.ratings.at(-1)!.fuzz),
+			ovrs: player.fuzzOvrs(p.ratings.at(-1)!.ovrs, p.ratings.at(-1)!.fuzz),
+			pos: p.ratings.at(-1)!.pos,
 		},
 	}));
 
@@ -34,11 +35,12 @@ export const getTeamOvrDiffs = (
 	});
 
 	return players.map(p => {
-		const ratings = p.ratings.at(-1);
+		const ratings = p.ratings.at(-1)!;
 		const newOvr = team.ovr(
 			[
 				...teamPlayers2,
 				{
+					pid: p.pid,
 					value: p.value,
 					ratings: {
 						ovr: ratings.ovr,

@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import type { CSSProperties } from "react";
 
 const quartile = (data: number[], quart: 1 | 2 | 3) => {
@@ -19,7 +18,7 @@ const calculateValues = (data: number[]) => {
 		q1: quartile(data, 1),
 		median: quartile(data, 2),
 		q3: quartile(data, 3),
-		max: data.at(-1),
+		max: data.at(-1)!,
 	};
 };
 
@@ -281,14 +280,6 @@ const BoxPlot = ({
 			{labelDivs}
 		</div>
 	);
-};
-
-BoxPlot.propTypes = {
-	color: PropTypes.string,
-	data: PropTypes.arrayOf(PropTypes.number),
-	labels: PropTypes.bool,
-	quartiles: PropTypes.arrayOf(PropTypes.number),
-	scale: PropTypes.arrayOf(PropTypes.number),
 };
 
 export default BoxPlot;

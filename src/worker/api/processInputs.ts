@@ -1,7 +1,8 @@
-import { bySport, PHASE, POSITIONS } from "../../common";
+import { bySport, PHASE } from "../../common";
 import { g, helpers } from "../util";
 import type { PlayerStatType } from "../../common/types";
 import type { Params } from "../../ui/router";
+import type { boxScoreToLiveSim } from "../views/liveGame";
 
 /**
  * Validate that a given abbreviation corresponds to a team.
@@ -33,7 +34,7 @@ export const validateAbbrev = (
 
 		{
 			const parts = abbrev.split("_");
-			const int = parseInt(parts.at(-1));
+			const int = parseInt(parts.at(-1)!);
 			if (!Number.isNaN(int) && int < g.get("teamInfoCache").length) {
 				return [int, g.get("teamInfoCache")[int]?.abbrev];
 			}
@@ -132,14 +133,13 @@ const depth = (params: Params) => {
 	const [tid, abbrev] = validateAbbrev(params.abbrev);
 
 	const DEFAULT_POS = bySport({
+		baseball: "L",
 		basketball: "G",
 		football: "QB",
 		hockey: "F",
 	});
 
-	// https://github.com/microsoft/TypeScript/issues/21732
-	// @ts-ignore
-	const pos: string = POSITIONS.includes(params.pos) ? params.pos : DEFAULT_POS;
+	const pos = params.pos ?? DEFAULT_POS;
 
 	const playoffs =
 		params.playoffs === "playoffs" ? "playoffs" : "regularSeason";
@@ -350,12 +350,70 @@ const injuries = (params: Params) => {
 };
 
 const leaders = (params: Params) => {
-	const playoffs =
+	const playoffs: "playoffs" | "regularSeason" =
 		params.playoffs === "playoffs" ? "playoffs" : "regularSeason";
 
+	let season: "career" | "all" | number;
+	if (params.season === "career" || params.season === "all") {
+		season = params.season;
+	} else {
+		season = validateSeason(params.season);
+	}
+
+	let statType: PlayerStatType;
+	if (params.statType === "perGame") {
+		statType = "perGame";
+	} else if (params.statType === "per36") {
+		statType = "per36";
+	} else if (params.statType === "totals") {
+		statType = "totals";
+	} else {
+		statType = bySport({
+			baseball: "totals",
+			basketball: "perGame",
+			football: "totals",
+			hockey: "totals",
+		});
+	}
+
 	return {
-		season: validateSeason(params.season),
+		season,
 		playoffs,
+		statType,
+	};
+};
+
+const leadersYears = (params: Params) => {
+	const playoffs: "playoffs" | "regularSeason" =
+		params.playoffs === "playoffs" ? "playoffs" : "regularSeason";
+
+	let statType: PlayerStatType;
+	if (params.statType === "perGame") {
+		statType = "perGame";
+	} else if (params.statType === "per36") {
+		statType = "per36";
+	} else if (params.statType === "totals") {
+		statType = "totals";
+	} else {
+		statType = bySport({
+			baseball: "totals",
+			basketball: "perGame",
+			football: "totals",
+			hockey: "totals",
+		});
+	}
+
+	const defaultStat = bySport({
+		baseball: "ba",
+		basketball: "pts",
+		football: "pssYds",
+		hockey: "g",
+	});
+
+	return {
+		stat: params.stat ?? defaultStat,
+		playoffs,
+		statType,
 	};
 };
 
@@ -378,6 +436,14 @@ const dailySchedule = (params: Params) => {
 	return {
 		day,
 		season,
+	};
+};
+
+const exhibitionGame = (params: Params, ctxBBGM: any) => {
+	return {
+		liveSim: ctxBBGM.liveSim as
+			| Awaited<ReturnType<typeof boxScoreToLiveSim>>
+			| undefined,
 	};
 };
 
@@ -572,6 +638,7 @@ const playerStats = (params: Params) => {
 		params.playoffs === "playoffs" ? "playoffs" : "regularSeason";
 
 	const defaultStatType = bySport({
+		baseball: "batting",
 		basketball: "perGame",
 		football: "passing",
 		hockey: "skater",
@@ -592,8 +659,40 @@ const playerStats = (params: Params) => {
 	};
 };
 
+const playerGraphs = (params: Params) => {
+	const playoffsX: "playoffs" | "regularSeason" =
+		params.playoffsX === "playoffs" ? "playoffs" : "regularSeason";
+	const playoffsY: "playoffs" | "regularSeason" =
+		params.playoffsY === "playoffs" ? "playoffs" : "regularSeason";
+
+	const seasonX: number | "career" =
+		params.seasonX === "career" ? "career" : validateSeason(params.seasonX);
+	const seasonY: number | "career" =
+		params.seasonY === "career" ? "career" : validateSeason(params.seasonY);
+
+	// String because we're storing the state of the form input field here
+	const minGames =
+		params.minGames?.replace(/g$/, "") ??
+		String(Math.round(g.get("numGames") * 0.2));
+
+	return {
+		seasonX,
+		seasonY,
+		playoffsX,
+		playoffsY,
+		minGames,
+
+		// Defaults to random stat if undefined
+		statTypeX: params.statTypeX,
+		statTypeY: params.statTypeY,
+		statX: params.statX,
+		statY: params.statY,
+	};
+};
+
 const playerStatDists = (params: Params) => {
 	const defaultStatType = bySport({
+		baseball: "batting",
 		basketball: "perGame",
 		football: "passing",
 		hockey: "skater",
@@ -667,9 +766,16 @@ const teamStats = (params: Params) => {
 	const playoffs =
 		params.playoffs === "playoffs" ? "playoffs" : "regularSeason";
 
+	const defaultStatType = bySport({
+		baseball: "batting",
+		basketball: "team",
+		football: "team",
+		hockey: "team",
+	});
+
 	return {
 		season: validateSeason(params.season),
-		teamOpponent: params.teamOpponent ?? "team",
+		teamOpponent: params.teamOpponent ?? defaultStatType,
 		playoffs,
 	};
 };
@@ -689,10 +795,17 @@ const leagueStats = (params: Params) => {
 	const playoffs =
 		params.playoffs === "playoffs" ? "playoffs" : "regularSeason";
 
+	const defaultStatType = bySport({
+		baseball: "batting",
+		basketball: "team",
+		football: "team",
+		hockey: "team",
+	});
+
 	return {
 		tid,
 		abbrev,
-		teamOpponent: params.teamOpponent ?? "team",
+		teamOpponent: params.teamOpponent ?? defaultStatType,
 		playoffs,
 	};
 };
@@ -702,6 +815,7 @@ const standings = (params: Params) => {
 		g.get("numGamesPlayoffSeries").length === 0
 			? "league"
 			: bySport({
+					baseball: "div",
 					basketball: "conf",
 					football: "div",
 					hockey: "div",
@@ -728,8 +842,10 @@ const tradeSummary = (params: Params) => {
 
 const tradingBlock = (params: Params, ctxBBGM: any) => {
 	const pid = ctxBBGM.pid;
+	const dpid = ctxBBGM.dpid;
 	return {
 		pid: typeof pid === "number" ? pid : undefined,
+		dpid: typeof dpid === "number" ? dpid : undefined,
 	};
 };
 
@@ -829,8 +945,8 @@ const validateSeasonOnly = (params: Params) => {
 
 export default {
 	account,
-	allStarDraft: validateSeasonOnly,
 	allStarDunk: validateSeasonOnly,
+	allStarTeams: validateSeasonOnly,
 	allStarThree: validateSeasonOnly,
 	awardRaces: validateSeasonOnly,
 	awardsRecords,
@@ -842,6 +958,7 @@ export default {
 	draftHistory,
 	draftTeamHistory,
 	editAwards: validateSeasonOnly,
+	exhibitionGame,
 	exportPlayers: validateSeasonOnly,
 	fantasyDraft,
 	freeAgents,
@@ -853,6 +970,8 @@ export default {
 	history,
 	injuries,
 	leaders,
+	leadersProgressive: leadersYears,
+	leadersYears,
 	leagueFinances: validateSeasonOnly,
 	leagueStats,
 	liveGame,
@@ -869,6 +988,7 @@ export default {
 	playerRatingDists: validateSeasonOnly,
 	playerRatings,
 	playerStatDists,
+	playerGraphs,
 	playerStats,
 	playoffs: validateSeasonOnly,
 	powerRankings,

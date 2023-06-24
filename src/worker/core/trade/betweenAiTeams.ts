@@ -6,6 +6,7 @@ import makeItWork from "./makeItWork";
 import processTrade from "./processTrade";
 import summary from "./summary";
 import type { TradeTeams } from "../../../common/types";
+import { isSport } from "../../../common";
 
 const getAITids = async () => {
 	const teams = await idb.cache.teams.getAll();
@@ -122,7 +123,7 @@ const attempt = async (valueChangeKey: number) => {
 	const finalTids: [number, number] = [teams[0].tid, teams[1].tid];
 	const finalPids: [number[], number[]] = [teams[0].pids, teams[1].pids];
 	const finalDpids: [number[], number[]] = [teams[0].dpids, teams[1].dpids];
-	await processTrade(tradeSummary, finalTids, finalPids, finalDpids);
+	await processTrade(finalTids, finalPids, finalDpids);
 
 	return true;
 };
@@ -138,6 +139,9 @@ const betweenAiTeams = async () => {
 	// If aiTradesFactor is not an integer, use the fractional part as a probability. Like for 3.5, 50% of the times it will be 3, and 50% will be 4.
 	// Also scale so there are fewer trade attempts if there are fewer teams.
 	let float = g.get("aiTradesFactor");
+	if (isSport("baseball")) {
+		float *= 0.25;
+	}
 	if (g.get("numActiveTeams") < DEFAULT_NUM_TEAMS) {
 		float *= g.get("numActiveTeams") / DEFAULT_NUM_TEAMS;
 	}

@@ -50,7 +50,8 @@ const updateAllStarThree = async (
 		const players = await idb.getCopies.playersPlus(playersRaw, {
 			attrs: [
 				"pid",
-				"name",
+				"firstName",
+				"lastName",
 				"age",
 				"watch",
 				"face",
@@ -63,17 +64,22 @@ const updateAllStarThree = async (
 			stats: ["gp", "pts", "tpa", "tpp", "jerseyNumber"],
 			season,
 			fuzz: true,
-			mergeStats: true,
+			mergeStats: "totOnly",
 			showNoStats: true,
 		});
 
 		for (const p of three.players) {
 			const p2 = players.find(p2 => p2.pid === p.pid);
-			const ts = await getTeamInfoBySeason(p.tid, season);
-			if (ts) {
-				p2.colors = ts.colors;
-				p2.jersey = ts.jersey;
-				p2.abbrev = ts.abbrev;
+
+			// p2 could be undefined if player was deleted before contest
+			if (p2) {
+				const ts = await getTeamInfoBySeason(p.tid, season);
+
+				if (ts) {
+					p2.colors = ts.colors;
+					p2.jersey = ts.jersey;
+					p2.abbrev = ts.abbrev;
+				}
 			}
 		}
 

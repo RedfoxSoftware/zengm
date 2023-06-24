@@ -3,7 +3,8 @@ import { useState } from "react";
 import { timeBetweenGames } from "../../../common";
 import playThroughInjuriesFactor from "../../../common/playThroughInjuriesFactor";
 import { HelpPopover } from "../../components";
-import { toWorker } from "../../util";
+import CollapseArrow from "../../components/CollapseArrow";
+import { helpers, toWorker, useLocalPartial } from "../../util";
 
 const Slider = ({
 	className,
@@ -43,13 +44,11 @@ const Slider = ({
 					const parsed = parseInt(event.target.value);
 					if (!Number.isNaN(parsed)) {
 						setValue(parsed);
-						await toWorker(
-							"main",
-							"updatePlayThroughInjuries",
+						await toWorker("main", "updatePlayThroughInjuries", {
 							tid,
-							parsed,
+							value: parsed,
 							playoffs,
-						);
+						});
 					}
 				}}
 			/>
@@ -59,7 +58,9 @@ const Slider = ({
 				) : (
 					<>
 						{value} {timeBetweenGames(value)}{" "}
-						<span className="text-muted">({rounded}% performance)</span>
+						<span className="text-body-secondary">
+							({rounded}% performance)
+						</span>
 					</>
 				)}
 			</div>
@@ -79,6 +80,8 @@ const PlayThroughInjuriesSliders = ({
 }) => {
 	const [expanded, setExpanded] = useState(!window.mobile);
 
+	const { gender } = useLocalPartial(["gender"]);
+
 	return (
 		<div className="play-through-injuries">
 			<div className="d-flex align-items-center">
@@ -88,21 +91,7 @@ const PlayThroughInjuriesSliders = ({
 						type="button"
 						onClick={() => setExpanded(prev => !prev)}
 					>
-						<AnimatePresence initial={false}>
-							<m.span
-								animate={expanded ? "open" : "collapsed"}
-								variants={{
-									open: { rotate: 90 },
-									collapsed: { rotate: 0 },
-								}}
-								transition={{
-									duration: 0.3,
-									type: "tween",
-								}}
-								className="glyphicon glyphicon-triangle-right"
-							/>
-						</AnimatePresence>{" "}
-						{titleText}
+						<CollapseArrow open={expanded} /> {titleText}
 					</button>
 				) : (
 					<b>{titleText}</b>
@@ -115,15 +104,18 @@ const PlayThroughInjuriesSliders = ({
 							season and playoffs.
 						</p>
 						<p>
-							The more games remaining on a player's injury, the worse he will
-							play. So if a player comes back at 90% performance and plays every
-							day until he's healthy, he will gradually improve each game until
-							he reaches 100%.
+							The more games remaining on a player's injury, the worse{" "}
+							{helpers.pronoun(gender, "he")} will play. So if a player comes
+							back at 90% performance and plays every day until{" "}
+							{helpers.pronoun(gender, "he")}'s healthy,{" "}
+							{helpers.pronoun(gender, "he")} will gradually improve each game
+							until {helpers.pronoun(gender, "he")} reaches 100%.
 						</p>
 						<p>
 							Additionally, the injury rate is 50% higher when playing through
 							an injury, which includes the possibility of a player either
-							reaggravating his current injury or getting a new injury.
+							reaggravating {helpers.pronoun(gender, "his")} current injury or
+							getting a new injury.
 						</p>
 					</HelpPopover>
 				) : null}

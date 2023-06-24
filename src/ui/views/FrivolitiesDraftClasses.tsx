@@ -1,9 +1,10 @@
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
-import { DataTable, PlayerNameLabels } from "../components";
+import { DataTable } from "../components";
 import type { View } from "../../common/types";
 import { frivolitiesMenu } from "./Frivolities";
 import { bySport } from "../../common";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const FrivolitiesDraftClasses = ({
 	challengeNoRatings,
@@ -27,13 +28,14 @@ const FrivolitiesDraftClasses = ({
 	const cols = getCols([
 		"#",
 		"Season",
-		bySport({ basketball: "stat:ws", football: "stat:av", hockey: "stat:ps" }),
-		"Active",
 		bySport({
-			basketball: "count:allStar",
-			football: "count:allLeague",
-			hockey: "count:allLeague",
+			baseball: "stat:war",
+			basketball: "stat:ws",
+			football: "stat:av",
+			hockey: "stat:ps",
 		}),
+		"Active",
+		"count:allStar",
 		"count:mvp",
 		"HoF",
 		"Name",
@@ -56,7 +58,12 @@ const FrivolitiesDraftClasses = ({
 				</a>,
 				helpers.roundStat(
 					draftClass.value,
-					bySport({ basketball: "ws", football: "av", hockey: "ps" }),
+					bySport({
+						baseball: "war",
+						basketball: "ws",
+						football: "av",
+						hockey: "ps",
+					}),
 					true,
 				),
 				draftClass.numActive,
@@ -64,15 +71,14 @@ const FrivolitiesDraftClasses = ({
 				draftClass.numMVP,
 				draftClass.numHOF,
 				{
-					value: (
-						<PlayerNameLabels
-							jerseyNumber={p.jerseyNumber}
-							pid={p.pid}
-							season={p.draft.year}
-						>
-							{p.name}
-						</PlayerNameLabels>
-					),
+					...wrappedPlayerNameLabels({
+						jerseyNumber: p.jerseyNumber,
+						pid: p.pid,
+						season: p.draft.year,
+						firstName: p.firstName,
+						firstNameShort: p.firstNameShort,
+						lastName: p.lastName,
+					}),
 					classNames: {
 						"table-success": p.retiredYear === Infinity,
 						"table-info": p.statsTids.includes(userTid),
@@ -99,6 +105,7 @@ const FrivolitiesDraftClasses = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[0, "asc"]}
+				defaultStickyCols={2}
 				name="FrivolitiesDraftClasses"
 				pagination={pagination}
 				rows={rows}

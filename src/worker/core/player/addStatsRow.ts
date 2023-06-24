@@ -2,6 +2,8 @@ import stats from "./stats";
 import { g, helpers } from "../../util";
 import type { Player, PlayerWithoutKey } from "../../../common/types";
 import genJerseyNumber from "./genJerseyNumber";
+import { isSport } from "../../../common";
+import statsRowIsCurrent from "./statsRowIsCurrent";
 
 /**
  * Add a new row of stats to the playerStats database.
@@ -23,6 +25,13 @@ const addStatsRow = async (
 		retired?: string[];
 	} = {},
 ) => {
+	// Never add duplicate row, such as player beign signed as FA by team who released him
+	const ps = p.stats.at(-1);
+	const hasStats = statsRowIsCurrent(ps, p.tid, playoffs);
+	if (hasStats) {
+		return;
+	}
+
 	const statsRow: any = {
 		playoffs,
 		season: g.get("season"),
@@ -41,6 +50,16 @@ const addStatsRow = async (
 	for (const key of stats.max) {
 		// Will be set to [max, gid] later. Needs to be null rather than undefined so it persists in JSON, otherwise playersPlus career totals will not know about these fields.
 		statsRow[key] = null;
+	}
+
+	if (stats.byPos) {
+		for (const key of stats.byPos) {
+			// Will get one entry per position
+			statsRow[key] = [];
+		}
+	}
+	if (isSport("baseball")) {
+		statsRow.rfld = [];
 	}
 
 	p.statsTids.push(p.tid);

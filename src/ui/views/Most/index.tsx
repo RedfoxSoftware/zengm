@@ -1,11 +1,10 @@
-import PropTypes from "prop-types";
 import useTitleBar from "../../hooks/useTitleBar";
 import { getCols, helpers } from "../../util";
-import { DataTable, PlayerNameLabels, SafeHtml } from "../../components";
+import { DataTable, SafeHtml } from "../../components";
 import type { View } from "../../../common/types";
 import { frivolitiesMenu } from "../Frivolities";
 import GOATFormula from "./GOATFormula";
-import SeasonIcons from "../Player/SeasonIcons";
+import { wrappedPlayerNameLabels } from "../../components/PlayerNameLabels";
 
 export const getValue = (
 	obj: any,
@@ -31,13 +30,17 @@ const Most = ({
 }: View<"most">) => {
 	useTitleBar({ title, customMenu: frivolitiesMenu });
 
+	const hasBestSeasonOverride = players.some(
+		p => p.most?.extra?.bestSeasonOverride !== undefined,
+	);
+
 	const superCols = [
 		{
 			title: "",
 			colspan: 7 + extraCols.length,
 		},
 		{
-			title: "Best Season",
+			title: hasBestSeasonOverride ? "Season Stats" : "Best Season",
 			colspan: 2 + stats.length,
 		},
 		{
@@ -61,31 +64,24 @@ const Most = ({
 		...stats.map(stat => `stat:${stat}`),
 	]);
 
-	const rows = players.map(p => {
+	const rows = players.map((p, i) => {
 		const showRatings = !challengeNoRatings || p.retiredYear !== Infinity;
 
 		const draftPick =
 			p.draft.round > 0 ? `${p.draft.round}-${p.draft.pick}` : "";
 
 		return {
-			key: p.pid,
+			key: i,
 			data: [
 				p.rank,
-				{
-					value: (
-						<div className="d-flex">
-							<PlayerNameLabels jerseyNumber={p.jerseyNumber} pid={p.pid}>
-								{p.name}
-							</PlayerNameLabels>
-							<div className="ms-auto">
-								<SeasonIcons className="ms-1" awards={p.awards} playoffs />
-								<SeasonIcons className="ms-1" awards={p.awards} />
-							</div>
-						</div>
-					),
-					sortValue: p.name,
-					searchValue: p.name,
-				},
+				wrappedPlayerNameLabels({
+					awards: p.awards,
+					jerseyNumber: p.jerseyNumber,
+					pid: p.pid,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				...extraCols.map(x => {
 					const value = getValue(p, x.key);
 					if (x.colName === "Amount") {
@@ -152,11 +148,13 @@ const Most = ({
 				</p>
 			) : null}
 
-			{type === "goat" ? (
+			{type === "goat" || type === "goat_season" ? (
 				<GOATFormula
+					key={type}
 					awards={extraProps.awards}
-					formula={extraProps.goatFormula}
+					formula={extraProps.formula}
 					stats={extraProps.stats}
+					type={type === "goat_season" ? "season" : "career"}
 				/>
 			) : null}
 
@@ -170,18 +168,13 @@ const Most = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[0, "asc"]}
+				defaultStickyCols={window.mobile ? 0 : 2}
 				name={`Most_${type}`}
 				rows={rows}
 				superCols={superCols}
 			/>
 		</>
 	);
-};
-
-Most.propTypes = {
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default Most;

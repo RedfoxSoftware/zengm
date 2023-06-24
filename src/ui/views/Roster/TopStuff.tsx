@@ -1,5 +1,4 @@
-import PropTypes from "prop-types";
-import { useState, CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import {
 	RecordAndPlayoffs,
 	RosterComposition,
@@ -9,7 +8,7 @@ import { helpers } from "../../util";
 import InstructionsAndSortButtons from "./InstructionsAndSortButtons";
 import PlayThroughInjurySliders from "./PlayThroughInjuriesSliders";
 import type { View } from "../../../common/types";
-import { isSport } from "../../../common";
+import { bySport } from "../../../common";
 
 const fontSizeLarger = { fontSize: "larger" };
 
@@ -23,8 +22,7 @@ const TeamRating = ({
 	const [showCurrent, setShowCurrent] = useState(true);
 
 	if (ovr === ovrCurrent) {
-		// https://github.com/DefinitelyTyped/DefinitelyTyped/issues/20544
-		return <>{`${ovr}/100`}</>;
+		return `${ovr}/100`;
 	}
 
 	const title = showCurrent
@@ -46,11 +44,6 @@ const TeamRating = ({
 	);
 };
 
-TeamRating.propTypes = {
-	ovr: PropTypes.number.isRequired,
-	ovrCurrent: PropTypes.number.isRequired,
-};
-
 const TopStuff = ({
 	abbrev,
 	budget,
@@ -65,6 +58,7 @@ const TopStuff = ({
 	players,
 	profit,
 	salaryCap,
+	salaryCapType,
 	season,
 	showTradeFor,
 	showTradingBlock,
@@ -83,6 +77,7 @@ const TopStuff = ({
 	| "payroll"
 	| "players"
 	| "salaryCap"
+	| "salaryCapType"
 	| "season"
 	| "showTradeFor"
 	| "showTradingBlock"
@@ -123,7 +118,14 @@ const TopStuff = ({
 		);
 
 	let marginOfVictory = 0;
-	if (isSport("football") || isSport("hockey")) {
+	if (
+		bySport({
+			baseball: true,
+			basketball: false,
+			football: true,
+			hockey: true,
+		})
+	) {
 		if (t.stats.gp !== 0) {
 			marginOfVictory = (t.stats.pts - t.stats.oppPts) / t.stats.gp;
 		}
@@ -165,10 +167,14 @@ const TopStuff = ({
 							<div className="mt-3">
 								{openRosterSpots} open roster spots
 								<br />
-								Payroll: {helpers.formatCurrency(payroll || 0, "M")}
+								Payroll: {helpers.formatCurrency(payroll ?? 0, "M")}
 								<br />
-								Salary cap: {helpers.formatCurrency(salaryCap, "M")}
-								<br />
+								{salaryCapType !== "none" ? (
+									<>
+										Salary cap: {helpers.formatCurrency(salaryCap, "M")}
+										<br />
+									</>
+								) : null}
 								{budget ? (
 									<>
 										Profit: {helpers.formatCurrency(profit, "M")}
@@ -210,24 +216,6 @@ const TopStuff = ({
 			) : null}
 		</>
 	);
-};
-
-TopStuff.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	budget: PropTypes.bool.isRequired,
-	currentSeason: PropTypes.number.isRequired,
-	editable: PropTypes.bool.isRequired,
-	numConfs: PropTypes.number.isRequired,
-	numPlayoffRounds: PropTypes.number.isRequired,
-	openRosterSpots: PropTypes.number.isRequired,
-	payroll: PropTypes.number,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	profit: PropTypes.number.isRequired,
-	salaryCap: PropTypes.number.isRequired,
-	season: PropTypes.number.isRequired,
-	showTradeFor: PropTypes.bool.isRequired,
-	t: PropTypes.object.isRequired,
-	tid: PropTypes.number.isRequired,
 };
 
 export default TopStuff;

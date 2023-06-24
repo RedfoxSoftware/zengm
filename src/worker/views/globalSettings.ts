@@ -1,15 +1,14 @@
 import { idb } from "../db";
 import type {
 	UpdateEvents,
-	Options,
 	RealPlayerPhotos,
 	RealTeamInfo,
 } from "../../common/types";
+import { getGlobalSettings } from "../util";
 
 const updateOptions = async (inputs: unknown, updateEvents: UpdateEvents) => {
 	if (updateEvents.includes("firstRun") || updateEvents.includes("options")) {
-		const options = ((await idb.meta.get("attributes", "options")) ||
-			{}) as unknown as Options;
+		const options = await getGlobalSettings();
 
 		const realPlayerPhotos = (await idb.meta.get(
 			"attributes",
@@ -28,6 +27,8 @@ const updateOptions = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			realTeamInfo:
 				realTeamInfo === undefined ? "" : JSON.stringify(realTeamInfo, null, 2),
 			units: options.units,
+			fullNames: !!options.fullNames,
+			phaseChangeRedirects: options.phaseChangeRedirects,
 		};
 	}
 };

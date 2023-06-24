@@ -1,16 +1,17 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import { PLAYER } from "../../../common";
 import testHelpers from "../../../test/helpers";
 import { idb } from "../../db";
 import { g } from "../../util";
 import { draft } from "..";
+import { DEFAULT_LEVEL } from "../../../common/budgetLevels";
 
 describe("worker/core/draft/genPlayers", () => {
 	test("generate 70 players for the draft", async () => {
 		testHelpers.resetG();
 		await testHelpers.resetCache();
 		idb.league = testHelpers.mockIDBLeague();
-		await draft.genPlayers(g.get("season"), 15.5);
+		await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
 		const players = await idb.cache.players.indexGetAll(
 			"playersByDraftYearRetiredYear",
 			[[g.get("season")], [g.get("season"), Infinity]],
@@ -21,7 +22,7 @@ describe("worker/core/draft/genPlayers", () => {
 			assert.strictEqual(p.tid, PLAYER.UNDRAFTED);
 		}
 
-		// @ts-ignore
+		// @ts-expect-error
 		idb.league = undefined;
 	});
 });

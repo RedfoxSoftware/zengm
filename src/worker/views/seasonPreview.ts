@@ -30,14 +30,12 @@ const updateSeasonPreview = async (
 				"pid",
 				"tid",
 				"abbrev",
-				"name",
+				"firstName",
+				"lastName",
 				"age",
 				"watch",
-				"face",
-				"imgURL",
-				"hgt",
-				"weight",
 				"value",
+				"draft",
 			],
 			ratings: ["ovr", "pot", "dovr", "dpot", "pos", "skills", "ovrs"],
 			season,
@@ -57,6 +55,11 @@ const updateSeasonPreview = async (
 		const playersDeclining = orderBy(
 			players.filter(p => p.ratings.dovr < 0),
 			p => p.ratings.ovr - 3 * p.ratings.dovr,
+			"desc",
+		).slice(0, NUM_PLAYERS_TO_SHOW);
+		const playersTopRookies = orderBy(
+			players.filter(p => p.draft.year === season - 1),
+			p => p.ratings.ovr,
 			"desc",
 		).slice(0, NUM_PLAYERS_TO_SHOW);
 
@@ -140,6 +143,7 @@ const updateSeasonPreview = async (
 			playersDeclining,
 			playersImproving,
 			playersTop,
+			playersTopRookies,
 			season,
 			teamsDeclining,
 			teamsImproving,

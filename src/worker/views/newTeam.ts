@@ -4,10 +4,10 @@ import { PHASE } from "../../common";
 import orderBy from "lodash-es/orderBy";
 import { team } from "../core";
 
-const getTeamOvr = async (tid: number) => {
+export const getTeamOvr = async (tid: number) => {
 	const playersAll = await idb.cache.players.indexGetAll("playersByTid", tid);
 	const players = await idb.getCopies.playersPlus(playersAll, {
-		attrs: ["value"],
+		attrs: ["value", "pid"],
 		ratings: ["ovr", "pot", "ovrs", "pos"],
 		season: g.get("season"),
 		tid,
@@ -89,6 +89,7 @@ const updateTeamSelect = async () => {
 	}
 
 	return {
+		challengeNoRatings: g.get("challengeNoRatings"),
 		confs: g.get("confs", "current"),
 		disabled,
 		expansion,

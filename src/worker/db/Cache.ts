@@ -33,11 +33,14 @@ import type {
 	Team,
 	Trade,
 	EventBBGMWithoutKey,
+	SeasonLeaders,
 } from "../../common/types";
 import type { IDBPTransaction } from "idb";
 import type { LeagueDB } from "./connectLeague";
 import getAll from "./getAll";
 import { league } from "../core";
+
+export const NUM_SEASON_LEADERS_CACHE = 50;
 
 type Status = "empty" | "error" | "filling" | "full";
 
@@ -59,6 +62,7 @@ export type Store =
 	| "releasedPlayers"
 	| "schedule"
 	| "scheduledEvents"
+	| "seasonLeaders"
 	| "teamSeasons"
 	| "teamStats"
 	| "teams"
@@ -92,6 +96,7 @@ export const STORES: Store[] = [
 	"releasedPlayers",
 	"schedule",
 	"scheduledEvents",
+	"seasonLeaders",
 	"teamSeasons",
 	"teamStats",
 	"teams",
@@ -240,7 +245,7 @@ class Cache {
 
 	events: StoreAPI<EventBBGMWithoutKey, EventBBGM, number>;
 
-	gameAttributes: StoreAPI<GameAttribute, GameAttribute, string>;
+	gameAttributes: StoreAPI<GameAttribute<any>, GameAttribute<any>, string>;
 
 	games: StoreAPI<Game, Game, number>;
 
@@ -266,6 +271,8 @@ class Cache {
 
 	scheduledEvents: StoreAPI<ScheduledEventWithoutKey, ScheduledEvent, number>;
 
+	seasonLeaders: StoreAPI<SeasonLeaders, SeasonLeaders, number>;
+
 	teamSeasons: StoreAPI<TeamSeasonWithoutKey, TeamSeason, number>;
 
 	teamStats: StoreAPI<TeamStatsWithoutKey, TeamStats, number>;
@@ -276,17 +283,17 @@ class Cache {
 
 	constructor() {
 		this._status = "empty";
-		// @ts-ignore
+		// @ts-expect-error
 		this._data = {};
-		// @ts-ignore
+		// @ts-expect-error
 		this._deletes = {};
 		this._dirty = false;
 		this._dirtyIndexes = new Set();
-		// @ts-ignore
+		// @ts-expect-error
 		this._dirtyRecords = {};
-		// @ts-ignore
+		// @ts-expect-error
 		this._indexes = {};
-		// @ts-ignore
+		// @ts-expect-error
 		this._maxIds = {};
 		this.newLeague = false;
 		this._requestQueue = new Map();
@@ -444,6 +451,25 @@ class Cache {
 						.getAll(this._season);
 				},
 			},
+			seasonLeaders: {
+				pk: "season",
+				pkType: "number",
+				autoIncrement: false,
+				// Get enough for any non-retired player
+				getData: (tx: IDBPTransaction<LeagueDB>) => {
+					if (this._season === undefined) {
+						throw new Error("this._season is undefined");
+					}
+					return tx
+						.objectStore("seasonLeaders")
+						.getAll(
+							IDBKeyRange.bound(
+								this._season - NUM_SEASON_LEADERS_CACHE,
+								Infinity,
+							),
+						);
+				},
+			},
 			teamSeasons: {
 				pk: "rid",
 				pkType: "number",
@@ -506,7 +532,7 @@ class Cache {
 			},
 		};
 
-		// @ts-ignore
+		// @ts-expect-error
 		this._index2store = {};
 
 		for (const store of helpers.keys(this.storeInfos)) {
@@ -534,6 +560,7 @@ class Cache {
 		this.releasedPlayers = new StoreAPI(this, "releasedPlayers");
 		this.schedule = new StoreAPI(this, "schedule");
 		this.scheduledEvents = new StoreAPI(this, "scheduledEvents");
+		this.seasonLeaders = new StoreAPI(this, "seasonLeaders");
 		this.teamSeasons = new StoreAPI(this, "teamSeasons");
 		this.teamStats = new StoreAPI(this, "teamStats");
 		this.teams = new StoreAPI(this, "teams");
@@ -598,7 +625,7 @@ class Cache {
 
 				if (!index.unique) {
 					if (
-						!this._indexes[index.name].hasOwnProperty(key) ||
+						!Object.hasOwn(this._indexes[index.name], key) ||
 						!this._indexes[index.name][key].includes(row)
 					) {
 						this._dirtyIndexes.add(store);
@@ -631,7 +658,7 @@ class Cache {
 					const key = getIndexKey(index, row);
 
 					if (!index.unique) {
-						if (!this._indexes[index.name].hasOwnProperty(key)) {
+						if (!Object.hasOwn(this._indexes[index.name], key)) {
 							this._indexes[index.name][key] = [row];
 						} else {
 							this._indexes[index.name][key].push(row);
@@ -695,7 +722,7 @@ class Cache {
 
 		this._setStatus("filling");
 
-		// @ts-ignore
+		// @ts-expect-error
 		this._data = {};
 
 		// This is crap and should be fixed ASAP
@@ -861,7 +888,7 @@ class Cache {
 		this._checkIndexFreshness(index);
 
 		if (typeof key === "number" || typeof key === "string") {
-			if (this._indexes[index].hasOwnProperty(key)) {
+			if (Object.hasOwn(this._indexes[index], key)) {
 				const val = this._indexes[index][key];
 
 				if (!Array.isArray(val)) {
@@ -911,14 +938,14 @@ class Cache {
 		await this._waitForStatus("full");
 		const pk = this.storeInfos[store].pk;
 
-		if (obj.hasOwnProperty(pk)) {
+		if (Object.hasOwn(obj, pk)) {
 			if (type === "add" && this._data[store][obj[pk]]) {
 				throw new Error(
 					`Primary key "${obj[pk]}" already exists in "${store}"`,
 				);
 			}
 
-			if (this._maxIds.hasOwnProperty(store) && obj[pk] > this._maxIds[store]) {
+			if (Object.hasOwn(this._maxIds, store) && obj[pk] > this._maxIds[store]) {
 				this._maxIds[store] = obj[pk];
 			}
 		} else {
@@ -963,7 +990,7 @@ class Cache {
 	async _delete(store: Store, id: number | string) {
 		await this._waitForStatus("full");
 
-		if (this._data[store].hasOwnProperty(id)) {
+		if (Object.hasOwn(this._data[store], id)) {
 			delete this._data[store][id];
 		}
 

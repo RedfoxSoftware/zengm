@@ -5,6 +5,7 @@ import BoxScoreRowFootball from "./BoxScoreRow.football";
 
 const BoxScoreRow = (props: {
 	className?: string;
+	exhibition?: boolean;
 	lastStarter?: boolean;
 	liveGameInProgress?: boolean;
 	onClick?: (event: MouseEvent) => void;
@@ -12,6 +13,7 @@ const BoxScoreRow = (props: {
 	stats?: string[];
 }) => {
 	return bySport({
+		baseball: BoxScoreRowFootball(props as any),
 		basketball: BoxScoreRowBasketball(props),
 		football: BoxScoreRowFootball(props as any),
 		hockey: BoxScoreRowFootball(props as any),

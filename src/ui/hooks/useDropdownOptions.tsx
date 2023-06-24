@@ -5,8 +5,9 @@ import {
 	POSITIONS,
 	bySport,
 	isSport,
+	PLAYER_STATS_TABLES,
 } from "../../common";
-import { useLocalShallow } from "../util";
+import { useLocalPartial } from "../util";
 import type { LocalStateUI } from "../../common/types";
 
 export type ResponsiveOption = {
@@ -14,7 +15,12 @@ export type ResponsiveOption = {
 	text: string;
 };
 
-const makeNormalResponsive = (short: string, long: string) => [
+export type DropdownOption = {
+	key: number | string;
+	value: string | ResponsiveOption[];
+};
+
+export const makeNormalResponsive = (short: string, long: string) => [
 	{
 		minWidth: -Infinity,
 		text: short,
@@ -64,7 +70,7 @@ const dropdownValues: Record<string, string | ResponsiveOption[]> = {
 	special: "All-Star Game",
 	"all|||teams": makeNormalResponsive("All", "All Teams"),
 	watch: makeNormalResponsive("Watch", "Watch List"),
-	career: makeNormalResponsive("Totals", "Career Totals"),
+	career: "Career",
 	regularSeason: makeNormalResponsive("Reg Seas", "Regular Season"),
 	playoffs: "Playoffs",
 	"10": "Past 10 Seasons",
@@ -83,12 +89,15 @@ const dropdownValues: Record<string, string | ResponsiveOption[]> = {
 	champion: "Won Championship",
 	mvp: "Most Valuable Player",
 	finals_mvp: isSport("hockey") ? "Playoffs MVP" : "Finals MVP",
+	sfmvp: "Semifinals MVP",
 	dpoy: "Defensive Player of the Year",
 	dfoy: "Defensive Forward of the Year",
 	goy: "Goalie of the Year",
 	smoy: "Sixth Man of the Year",
 	mip: "Most Improved Player",
 	roy: "Rookie of the Year",
+	poy: "Pitcher of the Year",
+	rpoy: "Relief Pitcher of the Year",
 	first_team: "First Team All-League",
 	second_team: "Second Team All-League",
 	third_team: "Third Team All-League",
@@ -96,6 +105,7 @@ const dropdownValues: Record<string, string | ResponsiveOption[]> = {
 	first_def: "First Team All-Defensive",
 	second_def: "Second Team All-Defensive",
 	third_def: "Third Team All-Defensive",
+	all_off: "All-Offensive",
 	all_def: "All-Defensive",
 	all_star: "All-Star",
 	all_star_mvp: "All-Star MVP",
@@ -113,6 +123,14 @@ const dropdownValues: Record<string, string | ResponsiveOption[]> = {
 	pts_leader: "League Points Leader",
 	g_leader: "League Goals Leader",
 	ast_leader: "League Assists Leader",
+	hr_leader: "League HR Leader",
+	rbi_leader: "League RBI Leader",
+	r_leader: "League Runs Leader",
+	sb_leader: "League Stolen Bases Leader",
+	bb_leader: "League Walks Leader",
+	w_leader: "League Wins Leader",
+	soPit_leader: "League Strikeouts Leader",
+	war_leader: "League WAR Leader",
 	oroy: "Offensive Rookie of the Year",
 	droy: "Defensive Rookie of the Year",
 	"all|||types": makeNormalResponsive("All", "All Types"),
@@ -123,6 +141,9 @@ const dropdownValues: Record<string, string | ResponsiveOption[]> = {
 	trade: "Trades",
 	team: "Team",
 	opponent: makeNormalResponsive("Opp", "Opponent"),
+	oppBatting: makeNormalResponsive("Opp Batting", "Opponent Batting"),
+	oppPitching: makeNormalResponsive("Opp Pitching", "Opponent Pitching"),
+	oppFielding: makeNormalResponsive("Opp Fielding", "Opponent Fielding"),
 	by_team: "By Team",
 	by_conf: makeNormalResponsive("By Conf", "By Conference"),
 	by_div: makeNormalResponsive("By Div", "By Division"),
@@ -146,10 +167,18 @@ const dropdownValues: Record<string, string | ResponsiveOption[]> = {
 	gameLog: "Game Log",
 };
 
+if (isSport("baseball")) {
+	Object.assign(dropdownValues, {
+		batting: PLAYER_STATS_TABLES.batting.name,
+		pitching: PLAYER_STATS_TABLES.pitching.name,
+		fielding: PLAYER_STATS_TABLES.fielding.name,
+	});
+}
+
 if (isSport("hockey")) {
 	Object.assign(dropdownValues, {
 		F: "Forwards",
-		D: "Defensemen",
+		D: "Defense",
 		G: "Goalies",
 	});
 }
@@ -162,11 +191,11 @@ export const getDropdownValue = (
 		return String(key);
 	}
 
-	if (sortedTeams[key]) {
+	if (sortedTeams[key] !== undefined) {
 		return sortedTeams[key];
 	}
 
-	if (dropdownValues[key]) {
+	if (dropdownValues[key] !== undefined) {
 		return dropdownValues[key];
 	}
 
@@ -184,15 +213,15 @@ export const getDropdownValue = (
 
 const useDropdownOptions = (
 	field: string,
-	customOptions?: NonNullable<LocalStateUI["dropdownCustomOptions"]>[string],
+	customOptions?: DropdownOption[],
 ) => {
-	const state = useLocalShallow(state2 => ({
-		hideDisabledTeams: state2.hideDisabledTeams,
-		phase: state2.phase,
-		season: state2.season,
-		startingSeason: state2.startingSeason,
-		teamInfoCache: state2.teamInfoCache,
-	}));
+	const state = useLocalPartial([
+		"hideDisabledTeams",
+		"phase",
+		"season",
+		"startingSeason",
+		"teamInfoCache",
+	]);
 
 	const sortedTeams = getSortedTeams(state);
 
@@ -202,10 +231,7 @@ const useDropdownOptions = (
 		if (customOptions.length === 0) {
 			return [];
 		} else {
-			return customOptions.map(({ key, value }) => ({
-				key,
-				val: value,
-			}));
+			return customOptions;
 		}
 	} else if (field === "teams") {
 		keys = Object.keys(sortedTeams);
@@ -282,6 +308,12 @@ const useDropdownOptions = (
 		keys = ["10", "all|||seasons"];
 	} else if (field === "statTypes" || field === "statTypesAdv") {
 		keys = bySport({
+			baseball: [
+				"batting",
+				"pitching",
+				"fielding",
+				...(field === "statTypesAdv" ? ["advanced", "gameHighs"] : []),
+			],
 			basketball: [
 				"perGame",
 				"per36",
@@ -297,12 +329,41 @@ const useDropdownOptions = (
 				...(field === "statTypesAdv" ? ["advanced", "gameHighs"] : []),
 			],
 		});
-	} else if (field === "awardType") {
+	} else if (field === "statTypesStrict") {
 		keys = bySport({
+			baseball: ["totals"],
+			basketball: ["perGame", "per36", "totals"],
+			football: ["totals"],
+			hockey: ["totals"],
+		});
+	} else if (field === "awardType") {
+		// Sync wtih optionsTmp
+		keys = bySport({
+			baseball: [
+				"champion",
+				"mvp",
+				"finals_mvp",
+				"poy",
+				"rpoy",
+				"roy",
+				"all_off",
+				"all_def",
+				"all_star",
+				"all_star_mvp",
+				"hr_leader",
+				"rbi_leader",
+				"r_leader",
+				"sb_leader",
+				"bb_leader",
+				"w_leader",
+				"soPit_leader",
+				"war_leader",
+			],
 			basketball: [
 				"champion",
 				"mvp",
 				"finals_mvp",
+				"sfmvp",
 				"dpoy",
 				"smoy",
 				"mip",
@@ -335,6 +396,8 @@ const useDropdownOptions = (
 				"first_team",
 				"second_team",
 				"all_league",
+				"all_star",
+				"all_star_mvp",
 				"pss_leader",
 				"rush_leader",
 				"rcv_leader",
@@ -351,6 +414,8 @@ const useDropdownOptions = (
 				"first_team",
 				"second_team",
 				"all_league",
+				"all_star",
+				"all_star_mvp",
 				"pts_leader",
 				"g_leader",
 				"ast_leader",
@@ -371,14 +436,18 @@ const useDropdownOptions = (
 		keys = Object.keys(TEAM_STATS_TABLES);
 	} else if (field === "teamAdvanced") {
 		keys = Object.keys(TEAM_STATS_TABLES).filter(
-			key => !key.includes("pponent"),
+			key => !key.includes("pponent") && !key.includes("opp"),
 		);
 	} else if (field === "teamRecordType") {
 		keys = ["by_team", "by_conf", "by_div"];
 	} else if (field === "teamRecordsFilter") {
 		keys = ["all|||teams", "your_teams"];
 	} else if (field === "depth") {
-		keys = isSport("hockey") ? ["F", "D", "G"] : POSITIONS;
+		keys = bySport({
+			baseball: [],
+			hockey: ["F", "D", "G"],
+			default: POSITIONS,
+		});
 	} else if (field === "newsLevels") {
 		keys = ["big", "normal", "all|||news"];
 	} else if (field === "newestOldestFirst") {
@@ -393,17 +462,14 @@ const useDropdownOptions = (
 		throw new Error(`Unknown Dropdown field: ${field}`);
 	}
 
-	const newOptions: {
-		key: number | string;
-		val: string | ResponsiveOption[];
-	}[] = keys.map(rawKey => {
+	const newOptions: DropdownOption[] = keys.map(rawKey => {
 		const key =
 			typeof rawKey === "string" && rawKey.includes("|||")
 				? rawKey.split("|||")[0]
 				: rawKey;
 		return {
 			key,
-			val: getDropdownValue(rawKey, sortedTeams),
+			value: getDropdownValue(rawKey, sortedTeams),
 		};
 	});
 

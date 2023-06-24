@@ -1,16 +1,14 @@
 import range from "lodash-es/range";
-import PropTypes from "prop-types";
-import { DataTable, PlayerNameLabels } from "../../components";
+import { DataTable, SafeHtml } from "../../components";
 import { getCols, helpers } from "../../util";
 import type { View } from "../../../common/types";
 import { Dropdown } from "react-bootstrap";
-
-type HandleToggle = (
-	userOrOther: "other" | "user",
-	playerOrPick: "pick" | "player",
-	includeOrExclude: "include" | "exclude",
-	id: number,
-) => Promise<void>;
+import {
+	wrappedContractAmount,
+	wrappedContractExp,
+} from "../../components/contract";
+import { wrappedPlayerNameLabels } from "../../components/PlayerNameLabels";
+import type { HandleToggle } from ".";
 
 type HandleBulk = (
 	type: "check" | "clear",
@@ -38,6 +36,7 @@ const genPlayerRows = (
 			key: p.pid,
 			data: [
 				<input
+					className="form-check-input"
 					type="checkbox"
 					title={p.untradableMsg}
 					checked={p.included}
@@ -47,6 +46,7 @@ const genPlayerRows = (
 					}}
 				/>,
 				<input
+					className="form-check-input"
 					type="checkbox"
 					title={p.untradableMsg ?? "Exclude this player from counter offers"}
 					checked={p.excluded || p.untradable}
@@ -55,21 +55,22 @@ const genPlayerRows = (
 						handleToggle(userOrOther, "player", "exclude", p.pid);
 					}}
 				/>,
-				<PlayerNameLabels
-					injury={p.injury}
-					jerseyNumber={p.jerseyNumber}
-					pid={p.pid}
-					skills={p.ratings.skills}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					jerseyNumber: p.jerseyNumber,
+					skills: p.ratings.skills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.ratings.pos,
 				p.age,
 				!challengeNoRatings ? p.ratings.ovr : null,
 				!challengeNoRatings ? p.ratings.pot : null,
-				helpers.formatCurrency(p.contract.amount, "M"),
-				p.contract.exp,
+				wrappedContractAmount(p),
+				wrappedContractExp(p),
 				...stats.map(stat => helpers.roundStat(p.stats[stat], stat)),
 			],
 			classNames: {
@@ -90,6 +91,7 @@ const genPickRows = (
 			key: pick.dpid,
 			data: [
 				<input
+					className="form-check-input"
 					name="other-dpids"
 					type="checkbox"
 					checked={pick.included}
@@ -98,6 +100,7 @@ const genPickRows = (
 					}}
 				/>,
 				<input
+					className="form-check-input"
 					type="checkbox"
 					title="Exclude this pick from counter offers"
 					checked={pick.excluded}
@@ -105,7 +108,11 @@ const genPickRows = (
 						handleToggle(userOrOther, "pick", "exclude", pick.dpid);
 					}}
 				/>,
-				pick.desc,
+				{
+					value: <SafeHtml dirty={pick.desc} />,
+					searchValue: pick.desc,
+					sortValue: pick.desc,
+				},
 			],
 			classNames: {
 				"table-danger": pick.excluded && !pick.included,
@@ -212,6 +219,7 @@ const AssetList = ({
 					className="datatable-negative-margin-top"
 					cols={playerCols}
 					defaultSort={[5, "desc"]}
+					defaultStickyCols={window.mobile ? 2 : 3}
 					name={`Trade:${userOrOtherKey}`}
 					rows={playerRows}
 				/>
@@ -262,14 +270,6 @@ const AssetList = ({
 			</div>
 		</div>
 	);
-};
-
-AssetList.propTypes = {
-	handleToggle: PropTypes.func.isRequired,
-	picks: PropTypes.array.isRequired,
-	roster: PropTypes.array.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userOrOther: PropTypes.oneOf(["other", "user"]).isRequired,
 };
 
 export default AssetList;

@@ -1,8 +1,8 @@
-import PropTypes from "prop-types";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
-import { DataTable, PlayerNameLabels } from "../components";
+import { DataTable } from "../components";
 import type { View } from "../../common/types";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const HallOfFame = ({ players, stats, userTid }: View<"hallOfFame">) => {
 	useTitleBar({ title: "Hall of Fame" });
@@ -39,7 +39,12 @@ const HallOfFame = ({ players, stats, userTid }: View<"hallOfFame">) => {
 		return {
 			key: p.pid,
 			data: [
-				<PlayerNameLabels pid={p.pid}>{p.name}</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.ratings.at(-1).pos,
 				p.draft.year,
 				p.retiredYear,
@@ -88,6 +93,7 @@ const HallOfFame = ({ players, stats, userTid }: View<"hallOfFame">) => {
 			<DataTable
 				cols={cols}
 				defaultSort={[cols.length - 2, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="HallOfFame"
 				pagination
 				rows={rows}
@@ -95,12 +101,6 @@ const HallOfFame = ({ players, stats, userTid }: View<"hallOfFame">) => {
 			/>
 		</>
 	);
-};
-
-HallOfFame.propTypes = {
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default HallOfFame;

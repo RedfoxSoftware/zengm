@@ -1,10 +1,11 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import { PLAYER } from "../../../common";
 import testHelpers from "../../../test/helpers";
 import { draft } from "..";
 import { idb } from "../../db";
 import { g } from "../../util";
 import { getDraftTids, loadTeamSeasons } from "./testHelpers";
+import { DEFAULT_LEVEL } from "../../../common/budgetLevels";
 
 const testRunPicks = async (numNow: number, numTotal: number) => {
 	const pids = await draft.runPicks({ type: "untilYourNextPick" });
@@ -52,13 +53,13 @@ describe("worker/core/draft/runPicks", () => {
 	beforeAll(async () => {
 		await loadTeamSeasons();
 		idb.league = testHelpers.mockIDBLeague();
-		await draft.genPlayers(g.get("season"), 15.5);
+		await draft.genPlayers(g.get("season"), DEFAULT_LEVEL);
 		const draftTids = await getDraftTids();
 		userPick1 = draftTids.indexOf(g.get("userTid")) + 1;
 		userPick2 = draftTids.lastIndexOf(g.get("userTid")) + 1;
 	});
 	afterAll(() => {
-		// @ts-ignore
+		// @ts-expect-error
 		idb.league = undefined;
 	});
 

@@ -1,8 +1,8 @@
-const fs = require("fs/promises");
-const babel = require("@babel/core");
-const babelPluginSyntaxTypescript = require("@babel/plugin-syntax-typescript");
-const babelPluginSportFunctions = require("../babel-plugin-sport-functions");
-const getSport = require("./getSport");
+import fs from "fs/promises";
+import babel from "@babel/core";
+import babelPluginSyntaxTypescript from "@babel/plugin-syntax-typescript";
+import babelPluginSportFunctions from "../babel-plugin-sport-functions/index.cjs";
+import { getSport } from "./buildFuncs.js";
 
 const babelCache = {};
 
@@ -16,7 +16,9 @@ const pluginSportFunctions = nodeEnv => ({
 				return babelCache[args.path].result;
 			}
 
-			const loader = args.path.endsWith("tsx") ? "tsx" : "ts";
+			const isTSX = args.path.endsWith("tsx");
+
+			const loader = isTSX ? "tsx" : "ts";
 
 			const text = await fs.readFile(args.path, "utf8");
 
@@ -32,7 +34,7 @@ const pluginSportFunctions = nodeEnv => ({
 						configFile: false,
 						sourceMaps: "inline",
 						plugins: [
-							[babelPluginSyntaxTypescript, { isTSX: true }],
+							[babelPluginSyntaxTypescript, { isTSX }],
 							babelPluginSportFunctions,
 						],
 					})
@@ -67,7 +69,8 @@ const esbuildConfig = ({ nodeEnv, name }) => {
 		outfile,
 		bundle: true,
 		sourcemap: true,
-		inject: ["tools/lib/react-shim.mjs"],
+		jsx: "automatic",
+		jsxDev: nodeEnv === "development",
 		define: {
 			"process.env.NODE_ENV": JSON.stringify(nodeEnv),
 			"process.env.SPORT": JSON.stringify(sport),
@@ -75,8 +78,8 @@ const esbuildConfig = ({ nodeEnv, name }) => {
 		plugins: [pluginSportFunctions(nodeEnv)],
 
 		// This is needed because dropbox conditionally requries various node builtins, and esbuild chokes on that even though it never actually makes it to the browser
-		platform: "node",
+		external: name === "ui" ? ["crypto", "util"] : undefined,
 	};
 };
 
-module.exports = esbuildConfig;
+export default esbuildConfig;

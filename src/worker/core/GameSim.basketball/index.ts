@@ -3,7 +3,7 @@ import { getPeriodName, PHASE } from "../../../common";
 import range from "lodash-es/range";
 import jumpBallWinnerStartsThisPeriodWithPossession from "./jumpBallWinnerStartsThisPeriodWithPossession";
 import getInjuryRate from "./getInjuryRate";
-import type { PlayerInjury } from "../../../common/types";
+import type { GameAttributesLeague, PlayerInjury } from "../../../common/types";
 
 type PlayType =
 	| "ast"
@@ -239,6 +239,9 @@ class GameSim {
 	fatigueFactor: number;
 
 	numPlayersOnCourt: number;
+	baseInjuryRate: number;
+
+	gender: GameAttributesLeague["gender"];
 
 	/**
 	 * Initialize the two teams that are playing this game.
@@ -251,12 +254,18 @@ class GameSim {
 		teams,
 		doPlayByPlay = false,
 		homeCourtFactor = 1,
+		allStarGame = false,
+		baseInjuryRate,
+		disableHomeCourtAdvantage = false,
 	}: {
 		gid: number;
 		day?: number;
 		teams: [TeamGameSim, TeamGameSim];
 		doPlayByPlay?: boolean;
 		homeCourtFactor?: number;
+		allStarGame?: boolean;
+		baseInjuryRate: number;
+		disableHomeCourtAdvantage?: boolean;
 	}) {
 		if (doPlayByPlay) {
 			this.playByPlay = [];
@@ -265,6 +274,7 @@ class GameSim {
 		this.id = gid;
 		this.day = day;
 		this.team = teams; // If a team plays twice in a day, this needs to be a deep copy
+		this.baseInjuryRate = baseInjuryRate;
 
 		// Starting lineups, which will be reset by updatePlayersOnCourt. This must be done because of injured players in the top 5.
 		this.numPlayersOnCourt = g.get("numPlayersOnCourt");
@@ -282,6 +292,7 @@ class GameSim {
 
 		this.t = g.get("quarterLength"); // Game clock, in minutes
 		this.numPeriods = g.get("numPeriods");
+		this.gender = g.get("gender");
 
 		// Needed because relationship between averagePossessionLength and number of actual possessions is not perfect
 		let paceFactor = g.get("pace") / 100;
@@ -298,7 +309,7 @@ class GameSim {
 
 		this.lastScoringPlay = [];
 		this.clutchPlays = [];
-		this.allStarGame = this.team[0].id === -1 && this.team[1].id === -2;
+		this.allStarGame = allStarGame;
 		this.elam = this.allStarGame ? g.get("elamASG") : g.get("elam");
 		this.elamActive = false;
 		this.elamDone = false;
@@ -311,7 +322,7 @@ class GameSim {
 			this.synergyFactor *= 2.5;
 		}
 
-		if (!this.allStarGame) {
+		if (!disableHomeCourtAdvantage) {
 			this.homeCourtAdvantage(homeCourtFactor);
 		}
 
@@ -405,18 +416,18 @@ class GameSim {
 		for (const t of teamNums) {
 			delete this.team[t].compositeRating;
 
-			// @ts-ignore
+			// @ts-expect-error
 			delete this.team[t].pace;
 
 			for (let p = 0; p < this.team[t].player.length; p++) {
-				// @ts-ignore
+				// @ts-expect-error
 				delete this.team[t].player[p].age;
 
-				// @ts-ignore
+				// @ts-expect-error
 				delete this.team[t].player[p].valueNoPot;
 				delete this.team[t].player[p].compositeRating;
 
-				// @ts-ignore
+				// @ts-expect-error
 				delete this.team[t].player[p].ptModifier;
 				delete this.team[t].player[p].stat.benchTime;
 				delete this.team[t].player[p].stat.courtTime;
@@ -473,8 +484,11 @@ class GameSim {
 		if (
 			this.elam &&
 			!this.elamActive &&
-			this.team[0].stat.ptsQtrs.length >= this.numPeriods &&
-			this.t <= g.get("elamMinutes")
+			((g.get("elamOvertime") &&
+				this.team[0].stat.ptsQtrs.length > this.numPeriods) ||
+				(!g.get("elamOvertime") &&
+					this.team[0].stat.ptsQtrs.length >= this.numPeriods &&
+					this.t <= g.get("elamMinutes")))
 		) {
 			const maxPts = Math.max(
 				this.team[this.d].stat.pts,
@@ -522,8 +536,8 @@ class GameSim {
 			this.team[1].stat.ptsQtrs.push(0);
 			this.foulsThisQuarter = [0, 0];
 			this.foulsLastTwoMinutes = [0, 0];
-			this.t = g.get("quarterLength");
 			this.lastScoringPlay = [];
+			this.t = g.get("quarterLength");
 			this.recordPlay("quarter");
 		}
 	}
@@ -539,15 +553,22 @@ class GameSim {
 		this.overtimes += 1;
 		this.team[0].stat.ptsQtrs.push(0);
 		this.team[1].stat.ptsQtrs.push(0);
+		this.foulsThisQuarter = [0, 0];
+		this.foulsLastTwoMinutes = [0, 0];
+		this.lastScoringPlay = [];
 		this.recordPlay("overtime");
+
+		// Check for elamOvertime
+		this.checkElamEnding();
+
 		this.jumpBall();
 
-		while (this.t > 0.5 / 60) {
+		while ((this.t > 0.5 / 60 || this.elamActive) && !this.elamDone) {
 			this.simPossession();
 		}
 	}
 
-	getPossessionLength() {
+	getPossessionLength(intentionalFoul: boolean) {
 		const quarter = this.team[this.o].stat.ptsQtrs.length;
 		const pointDifferential =
 			this.team[this.o].stat.pts - this.team[this.d].stat.pts;
@@ -557,7 +578,8 @@ class GameSim {
 			quarter >= this.numPeriods &&
 			!this.elamActive &&
 			this.t <= 24 / 60 &&
-			pointDifferential > 0
+			pointDifferential > 0 &&
+			!intentionalFoul
 		) {
 			return this.t;
 		}
@@ -594,7 +616,11 @@ class GameSim {
 
 		let possessionLength; // [min]
 
-		if (holdForLastShot) {
+		if (intentionalFoul) {
+			possessionLength = (Math.random() * 3) / 60;
+			lowerBound = 0;
+			upperBound = this.t;
+		} else if (holdForLastShot) {
 			possessionLength = random.gauss(this.t, 5 / 60);
 		} else if (catchUp) {
 			possessionLength = random.gauss(
@@ -602,7 +628,7 @@ class GameSim {
 				5 / 60,
 			);
 			if (this.t < 48 / 60 && this.t > 4 / 60) {
-				upperBound = Math.sqrt(this.t);
+				upperBound = this.t / 2;
 			}
 		} else if (maintainLead) {
 			possessionLength = random.gauss(
@@ -641,6 +667,20 @@ class GameSim {
 		return helpers.bound(bounded1, 0, finalUpperBound);
 	}
 
+	// Call this before running clock for possession
+	shouldIntentionalFoul() {
+		const diff = this.team[this.o].stat.pts - this.team[this.d].stat.pts;
+		const offenseWinningByABit = diff > 0 && diff <= 6;
+		const intentionalFoul =
+			offenseWinningByABit &&
+			this.team[0].stat.ptsQtrs.length >= this.numPeriods &&
+			this.t < 27 / 60 &&
+			!this.elamActive &&
+			this.getNumFoulsUntilBonus() <= 10;
+
+		return intentionalFoul;
+	}
+
 	simPossession() {
 		// Possession change
 		this.o = this.o === 1 ? 0 : 1;
@@ -648,10 +688,13 @@ class GameSim {
 		this.updateTeamCompositeRatings();
 
 		// Clock
-		const possessionLength = this.getPossessionLength();
+		const intentionalFoul = this.shouldIntentionalFoul();
+		const possessionLength = this.getPossessionLength(intentionalFoul);
 		this.t -= possessionLength;
-
-		const outcome = this.getPossessionOutcome(possessionLength);
+		const outcome = this.getPossessionOutcome(
+			possessionLength,
+			intentionalFoul,
+		);
 
 		// Swap o and d so that o will get another possession when they are swapped again at the beginning of the loop.
 		if (outcome === "orb" || outcome === "nonShootingFoul") {
@@ -1231,9 +1274,7 @@ class GameSim {
 		}
 
 		let newInjury = false;
-		let baseRate = this.allStarGame
-			? g.get("injuryRate") / 4
-			: g.get("injuryRate");
+		let baseRate = this.baseInjuryRate;
 
 		// Modulate by pace - since injuries are evaluated per possession, but really probably happen per minute played
 		baseRate *= 100 / g.get("pace");
@@ -1266,30 +1307,32 @@ class GameSim {
 		}
 	}
 
+	getNumFoulsUntilBonus() {
+		const foulsUntilBonus = g.get("foulsUntilBonus");
+
+		// Different cutoff for OT/regulation
+		const normal =
+			foulsUntilBonus[this.overtimes >= 1 ? 1 : 0] -
+			this.foulsThisQuarter[this.d];
+
+		// Also check last 2 minutes limit, when appropriate;
+		if (this.t <= 2) {
+			return Math.min(
+				normal,
+				foulsUntilBonus[2] - this.foulsLastTwoMinutes[this.d],
+			);
+		}
+
+		// Not in last 2 minutes
+		return normal;
+	}
+
 	/**
 	 * Simulate a single possession.
 	 *
 	 * @return {string} Outcome of the possession, such as "tov", "drb", "orb", "fg", etc.
 	 */
-	getPossessionOutcome(possessionLength: number) {
-		const timeBeforePossession = this.t + possessionLength;
-		const diff = this.team[this.o].stat.pts - this.team[this.d].stat.pts;
-		const offenseWinningByABit = diff > 0 && diff <= 6;
-		const intentionalFoul =
-			offenseWinningByABit &&
-			this.team[0].stat.ptsQtrs.length >= this.numPeriods &&
-			timeBeforePossession < 25 / 60 &&
-			!this.elamActive;
-
-		if (intentionalFoul) {
-			// HACK! Add some time back on the clock. Would be better if this was like football and time ticked off during the play, not predefined. BE CAREFUL ABOUT CHANGING STUFF BELOW THIS IN THIS FUNCTION, IT MAY DEPEND ON THIS. Like anything reading this.t or intentionalFoul.
-			const possessionLength2 = (Math.random() * 3) / 60;
-
-			if (possessionLength2 < timeBeforePossession) {
-				this.t = timeBeforePossession - possessionLength2;
-			}
-		}
-
+	getPossessionOutcome(possessionLength: number, intentionalFoul: boolean) {
 		// If winning at end of game, just run out the clock
 		if (
 			this.t <= 0 &&
@@ -1318,13 +1361,8 @@ class GameSim {
 		// Non-shooting foul?
 		if (Math.random() < 0.08 * g.get("foulRateFactor") || intentionalFoul) {
 			// In the bonus? Checks offset by 1, because the foul counter won't increment until doPf is called below
-			const foulsUntilBonus = g.get("foulsUntilBonus");
-			const inBonus =
-				(this.t <= 2 &&
-					this.foulsLastTwoMinutes[this.d] >= foulsUntilBonus[2] - 1) ||
-				(this.overtimes >= 1 &&
-					this.foulsThisQuarter[this.d] >= foulsUntilBonus[1] - 1) ||
-				this.foulsThisQuarter[this.d] >= foulsUntilBonus[0] - 1;
+			const numFoulsUntilBonus = this.getNumFoulsUntilBonus();
+			const inBonus = numFoulsUntilBonus <= 1;
 
 			if (inBonus) {
 				this.doPf(this.d, "pfBonus", shooter);
@@ -1753,16 +1791,17 @@ class GameSim {
 
 		return "fg";
 	}
+
 	/**
 	 * Probability that a shot taken this possession is assisted.
 	 *
 	 * @return {number} Probability from 0 to 1.
 	 */
-
 	probAst() {
 		return (
-			(0.6 * (2 + this.team[this.o].compositeRating.passing)) /
-			(2 + this.team[this.d].compositeRating.defense)
+			((0.6 * (2 + this.team[this.o].compositeRating.passing)) /
+				(2 + this.team[this.d].compositeRating.defense)) *
+			g.get("assistFactor")
 		);
 	}
 
@@ -2213,11 +2252,13 @@ class GameSim {
 	}
 
 	recordPlay(type: PlayType, t?: TeamNum, names?: string[], extra?: any) {
-		let texts;
 		if (this.playByPlay !== undefined) {
 			const threePointerText = g.get("threePointers")
 				? "three pointer"
 				: "deep shot";
+
+			let texts;
+			let weights;
 
 			let showScore = false;
 			if (type === "injury") {
@@ -2241,21 +2282,25 @@ class GameSim {
 				const dunkedOnName = this.team[this.d].player[p].name;
 
 				texts = [
-					`He throws it down on ${dunkedOnName}!`,
-					"He slams it home",
-					"He slams it home",
-					"The layup is good",
+					`${helpers.pronoun(
+						this.gender,
+						"He",
+					)} throws it down on ${dunkedOnName}!`,
+					`${helpers.pronoun(this.gender, "He")} slams it home`,
 					"The layup is good",
 				];
+				weights = this.gender === "male" ? [1, 2, 2] : [1, 10, 1000];
 				showScore = true;
 			} else if (type === "fgAtRimAndOne") {
 				texts = [
-					"He throws it down on {1}, and a foul!",
-					"He slams it home, and a foul!",
-					"He slams it home, and a foul!",
-					"The layup is good, and a foul!",
+					`${helpers.pronoun(
+						this.gender,
+						"He",
+					)} throws it down on {1}, and a foul!`,
+					`${helpers.pronoun(this.gender, "He")} slams it home, and a foul!`,
 					"The layup is good, and a foul!",
 				];
+				weights = this.gender === "male" ? [1, 2, 2] : [1, 10, 1000];
 				showScore = true;
 			} else if (
 				type === "fgLowPost" ||
@@ -2276,6 +2321,9 @@ class GameSim {
 					"{0} blocked the layup attempt",
 					"{0} blocked the dunk attempt",
 				];
+				if (this.gender === "female") {
+					weights = [1, 0];
+				}
 			} else if (
 				type === "blkLowPost" ||
 				type === "blkMidRange" ||
@@ -2284,12 +2332,11 @@ class GameSim {
 				texts = ["Blocked by {0}!"];
 			} else if (type === "missAtRim") {
 				texts = [
-					"He missed the layup",
+					`${helpers.pronoun(this.gender, "He")} missed the layup`,
 					"The layup attempt rolls out",
 					"No good",
-					"No good",
-					"No good",
 				];
+				weights = [1, 1, 3];
 			} else if (
 				type === "missLowPost" ||
 				type === "missMidRange" ||
@@ -2298,11 +2345,9 @@ class GameSim {
 				texts = [
 					"The shot rims out",
 					"No good",
-					"No good",
-					"No good",
-					"No good",
-					"He bricks it",
+					`${helpers.pronoun(this.gender, "He")} bricks it`,
 				];
+				weights = [1, 4, 1];
 			} else if (type === "orb") {
 				texts = ["{0} grabbed the offensive rebound"];
 			} else if (type === "drb") {
@@ -2352,7 +2397,7 @@ class GameSim {
 			}
 
 			if (texts) {
-				let text = random.choice(texts);
+				let text = random.choice(texts, weights);
 
 				if (names) {
 					for (let i = 0; i < names.length; i++) {

@@ -1,6 +1,13 @@
 import classNames from "classnames";
-import { isSport } from "../../../common";
 import type { Player } from "../../../common/types";
+
+const prefixCount = (text: string, count: number) => {
+	if (count <= 1) {
+		return text;
+	}
+
+	return `${count}x ${text}`;
+};
 
 // If no season, then check whole career
 const SeasonIcons = ({
@@ -17,9 +24,7 @@ const SeasonIcons = ({
 	let countChamp = 0;
 	let countMVP = 0;
 	let countAllStar = 0;
-	let countAllLeague = 0;
 
-	let type;
 	for (const award of awards) {
 		if (season !== undefined && award.season !== season) {
 			continue;
@@ -27,7 +32,6 @@ const SeasonIcons = ({
 
 		if (playoffs) {
 			if (award.type === "Won Championship") {
-				type = award.type;
 				countChamp += 1;
 				if (season !== undefined) {
 					break;
@@ -35,7 +39,6 @@ const SeasonIcons = ({
 			}
 		} else {
 			if (award.type === "Most Valuable Player") {
-				type = award.type;
 				countMVP += 1;
 				if (season !== undefined) {
 					break;
@@ -43,13 +46,8 @@ const SeasonIcons = ({
 			}
 
 			// Only show these if not MVP, so no "break" statement inside
-			if (isSport("basketball") && award.type === "All-Star") {
-				type = award.type;
+			if (award.type === "All-Star") {
 				countAllStar += 1;
-			}
-			if (!isSport("basketball") && award.type.includes("All-League")) {
-				type = award.type;
-				countAllLeague += 1;
 			}
 		}
 	}
@@ -68,29 +66,22 @@ const SeasonIcons = ({
 				classNameIcon = "glyphicon glyphicon-star text-yellow";
 			} else if (countAllStar > 0) {
 				title = "All-Star";
-				classNameIcon = "glyphicon glyphicon-star text-muted";
-			} else if (countAllLeague > 0) {
-				// So it gets First Team or Second Team included
-				title = type;
-				classNameIcon = "glyphicon glyphicon-star text-muted";
+				classNameIcon = "glyphicon glyphicon-star text-body-secondary";
 			}
 		}
 	} else {
 		if (playoffs) {
 			if (countChamp > 0) {
-				title = `${countChamp}x Won Championship`;
+				title = prefixCount("Won Championship", countChamp);
 				classNameIcon = "ring";
 			}
 		} else {
 			const titles = [];
 			if (countMVP > 0) {
-				titles.push(`${countMVP}x Most Valuable Player`);
+				titles.push(prefixCount("Most Valuable Player", countMVP));
 			}
 			if (countAllStar > 0) {
-				titles.push(`${countAllStar}x All-Star`);
-			}
-			if (countAllLeague > 0) {
-				titles.push(`${countAllLeague}x All-League`);
+				titles.push(prefixCount("All-Star", countAllStar));
 			}
 
 			if (titles.length > 0) {
@@ -99,7 +90,7 @@ const SeasonIcons = ({
 				if (countMVP > 0) {
 					classNameIcon = "glyphicon glyphicon-star text-yellow";
 				} else {
-					classNameIcon = "glyphicon glyphicon-star text-muted";
+					classNameIcon = "glyphicon glyphicon-star text-body-secondary";
 				}
 			}
 		}

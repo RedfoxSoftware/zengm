@@ -1,16 +1,19 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import testHelpers from "../../test/helpers";
 import { player } from "../core";
 import { g } from "../util";
 import { idb } from ".";
 import type { Player } from "../../common/types";
+import { DEFAULT_LEVEL } from "../../common/budgetLevels";
 
 describe("worker/db/Cache", () => {
 	beforeAll(async () => {
 		testHelpers.resetG();
 
 		await testHelpers.resetCache({
-			players: [player.generate(g.get("userTid"), 30, 2017, true, 15.5)],
+			players: [
+				player.generate(g.get("userTid"), 30, 2017, true, DEFAULT_LEVEL),
+			],
 		});
 	});
 	beforeEach(() => {

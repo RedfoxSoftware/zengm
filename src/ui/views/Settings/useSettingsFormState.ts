@@ -1,14 +1,14 @@
-import { ChangeEvent, useState } from "react";
+import { type ChangeEvent, useState } from "react";
 import type { Settings } from "../../../worker/views/settings";
 import gameSimPresets from "./gameSimPresets";
 import { settings } from "./settings";
 import {
 	encodeDecodeFunctions,
-	SpecialStateOthers,
+	type SpecialStateOthers,
 	SPECIAL_STATE_ALL,
 	SPECIAL_STATE_BOOLEANS,
 	SPECIAL_STATE_OTHERS,
-	State,
+	type State,
 } from "./SettingsForm";
 import type { FieldType, Key } from "./types";
 
@@ -22,9 +22,11 @@ const useSettingsFormState = ({
 	const [gameSimPreset, setGameSimPresetRaw] = useState("default");
 
 	const [state, setStateRaw] = useState<State>(() => {
-		// @ts-ignore
+		// @ts-expect-error
 		const initialState: State = {};
-		for (const { key, type, values } of settings) {
+		for (const setting of settings) {
+			const { key, type, values } = setting;
+
 			if (SPECIAL_STATE_ALL.includes(key as any)) {
 				continue;
 			}
@@ -32,7 +34,8 @@ const useSettingsFormState = ({
 			const value = initialSettings[key];
 
 			// https://github.com/microsoft/TypeScript/issues/21732
-			const stringify = (encodeDecodeFunctions[type] as any).stringify;
+			const stringify =
+				setting.stringify ?? (encodeDecodeFunctions[type] as any).stringify;
 
 			initialState[key] = stringify ? stringify(value, values) : value;
 		}
@@ -91,7 +94,7 @@ const useSettingsFormState = ({
 		};
 
 	const setGameSimPreset = (newPreset: string) => {
-		// @ts-ignore
+		// @ts-expect-error
 		const presets = gameSimPresets[newPreset];
 		if (!presets) {
 			return;

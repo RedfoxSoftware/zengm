@@ -1,6 +1,6 @@
-import { isSport, PHASE, PLAYER } from "../../../common";
+import { bySport, isSport, PHASE, PLAYER } from "../../../common";
 import addStatsRow from "./addStatsRow";
-import develop, { bootstrapPot } from "./develop";
+import develop, { monteCarloPot } from "./develop";
 import generate from "./generate";
 import heightToRating from "./heightToRating";
 import name from "./name";
@@ -35,7 +35,7 @@ const addStatsRowWrapped = async (
  */
 const augmentPartialPlayer = async (
 	p: any,
-	scoutingRank: number,
+	scoutingLevel: number,
 	version: number | undefined,
 	ignoreJerseyNumberConflicts?: boolean,
 ): Promise<Player<MinimalPlayerRatings>> => {
@@ -65,7 +65,7 @@ const augmentPartialPlayer = async (
 		age,
 		g.get("startingSeason") - (age - 18),
 		true,
-		scoutingRank,
+		scoutingLevel,
 		await name(),
 	);
 
@@ -74,7 +74,6 @@ const augmentPartialPlayer = async (
 		"awards",
 		"born",
 		"college",
-		"face",
 		"firstName",
 		"gamesUntilTradable",
 		"hgt",
@@ -97,6 +96,10 @@ const augmentPartialPlayer = async (
 		if (p[key] === undefined) {
 			p[key] = pg[key];
 		}
+	}
+
+	if (!p.face || !p.face.accessories) {
+		p.face = pg.face;
 	}
 
 	if (p.retiredYear === null) {
@@ -214,7 +217,12 @@ const augmentPartialPlayer = async (
 	const r2 = p.ratings.at(-1);
 
 	if (
-		(isSport("football") || isSport("hockey")) &&
+		bySport({
+			baseball: true,
+			basketball: false,
+			football: true,
+			hockey: true,
+		}) &&
 		(!r2.ovrs || !r2.pots || !r2.pos)
 	) {
 		// Kind of hacky... impose ovrs/pots, but only for latest season. This will also overwrite ovr, pot, and skills
@@ -276,7 +284,7 @@ const augmentPartialPlayer = async (
 
 			r.ovr = ovr(r);
 			r.skills = skills(r);
-			r.pot = await bootstrapPot({
+			r.pot = await monteCarloPot({
 				ratings: r,
 				age: r.season - p.born.year,
 				srID: p.srID,
@@ -314,7 +322,7 @@ const augmentPartialPlayer = async (
 
 		if (isSport("basketball") && (r.pot === undefined || r.pot < r.ovr)) {
 			// Only basketball, in case position is not known at this point
-			r.pot = await bootstrapPot({
+			r.pot = await monteCarloPot({
 				ratings: r,
 				age: r.season - p.born.year,
 				srID: p.srID,
@@ -407,15 +415,6 @@ const augmentPartialPlayer = async (
 				ps.yearsWithTeam = yearsWithTeam;
 			}
 
-			// If needed, set missing +/-, blocks against to 0
-			if (ps.ba === undefined) {
-				ps.ba = 0;
-			}
-
-			if (ps.pm === undefined) {
-				ps.pm = 0;
-			}
-
 			// Handle any missing stats
 			for (const key of statKeys) {
 				if (ps[key] === undefined) {
@@ -445,9 +444,9 @@ const augmentPartialPlayer = async (
 
 	// Version 49/50
 	for (const key of ["hof", "watch"] as const) {
-		if (p[key]) {
+		if (p[key] === true) {
 			p[key] = 1;
-		} else {
+		} else if (p[key] === false) {
 			delete p[key];
 		}
 	}

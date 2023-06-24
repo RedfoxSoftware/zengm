@@ -1,8 +1,9 @@
 import { PLAYER } from "../../../common";
-import { DataTable, PlayerNameLabels } from "../../components";
+import { DataTable } from "../../components";
 import { helpers, getCols, toWorker } from "../../util";
 import type { View } from "../../../common/types";
 import playerRetireJerseyNumberDialog from "./playerRetireJerseyNumberDialog";
+import { wrappedPlayerNameLabels } from "../../components/PlayerNameLabels";
 
 // The Partial<> ones are only required for TeamHistory, not GmHistory
 const Players = ({
@@ -39,22 +40,34 @@ const Players = ({
 				  ]
 				: season;
 
-		await toWorker("main", "retiredJerseyNumberUpsert", tid, undefined, {
-			number,
-			seasonRetired: season,
-			seasonTeamInfo,
-			pid: p.pid,
-			text: "",
+		await toWorker("main", "retiredJerseyNumberUpsert", {
+			tid,
+			info: {
+				number,
+				// Season can only can be undefined if gmHistory is true, but then there are no jersey retirements
+				seasonRetired: season!,
+				seasonTeamInfo,
+				pid: p.pid,
+				text: "",
+			},
 		});
 	};
 
-	const cols = getCols([
-		"Name",
-		"Pos",
-		...stats.map(stat => `stat:${stat}`),
-		"Last Season",
-		"Actions",
-	]);
+	const cols = getCols(
+		[
+			"Name",
+			"Pos",
+			...stats.map(stat => `stat:${stat}`),
+			"Titles",
+			"Last Season",
+			"Actions",
+		],
+		{
+			Titles: {
+				titleReact: <span className="ring" />,
+			},
+		},
+	);
 	if (!includeRetireJerseyButton) {
 		cols.pop();
 	}
@@ -68,16 +81,18 @@ const Players = ({
 		return {
 			key: p.pid,
 			data: [
-				<PlayerNameLabels
-					injury={p.injury}
-					jerseyNumber={p.jerseyNumber}
-					pid={p.pid}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					injury: p.injury,
+					jerseyNumber: p.jerseyNumber,
+					pid: p.pid,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.pos,
 				...stats.map(stat => helpers.roundStat(p.careerStats[stat], stat)),
+				p.numRings,
 				p.lastYr,
 				...(includeRetireJerseyButton
 					? [
@@ -102,7 +117,6 @@ const Players = ({
 
 	return (
 		<>
-			<h2>Players</h2>
 			<p>
 				Players currently on {gmHistory ? "your" : "this"} team are{" "}
 				<span className="text-success">highlighted in green</span>. Other active

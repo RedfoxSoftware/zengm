@@ -1,9 +1,10 @@
 import { PHASE } from "../../common";
-import { team } from "../core";
+import { finances, team } from "../core";
 import { idb } from "../db";
 import { g, helpers } from "../util";
-import type { UpdateEvents, ViewInput } from "../../common/types";
+import type { TeamSeason, UpdateEvents, ViewInput } from "../../common/types";
 import { getAutoTicketPriceByTid } from "../core/game/attendance";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updateTeamFinances = async (
 	inputs: ViewInput<"teamFinances">,
@@ -47,29 +48,31 @@ const updateTeamFinances = async (
 
 		// Convert contract objects into table rows
 		const contractTotals = Array(numSeasons).fill(0);
-		const contracts = contractsRaw.map(contract => {
-			const amounts: number[] = [];
+		const contracts = addFirstNameShort(
+			contractsRaw.map(contract => {
+				const amounts: number[] = [];
 
-			for (let i = season; i <= contract.exp; i++) {
-				amounts.push(contract.amount / 1000);
-				if (contractTotals[i - season] !== undefined) {
-					contractTotals[i - season] += contract.amount / 1000;
+				for (let i = season; i <= contract.exp; i++) {
+					amounts.push(contract.amount / 1000);
+					if (contractTotals[i - season] !== undefined) {
+						contractTotals[i - season] += contract.amount / 1000;
+					}
 				}
-			}
 
-			return {
-				pid: contract.pid,
-				firstName: contract.firstName,
-				lastName: contract.lastName,
-				skills: contract.skills,
-				pos: contract.pos,
-				injury: contract.injury,
-				jerseyNumber: contract.jerseyNumber,
-				watch: contract.watch,
-				released: contract.released,
-				amounts,
-			};
-		});
+				return {
+					pid: contract.pid,
+					firstName: contract.firstName,
+					lastName: contract.lastName,
+					skills: contract.skills,
+					pos: contract.pos,
+					injury: contract.injury,
+					jerseyNumber: contract.jerseyNumber,
+					watch: contract.watch,
+					released: contract.released,
+					amounts,
+				};
+			}),
+		);
 
 		const salariesSeasons = [];
 		for (let i = 0; i < numSeasons; i++) {
@@ -82,90 +85,71 @@ const updateTeamFinances = async (
 		teamSeasons.reverse(); // Most recent season first
 
 		// Add in luxuryTaxShare if it's missing
-		for (let i = 0; i < teamSeasons.length; i++) {
-			if (!teamSeasons[i].revenues.hasOwnProperty("luxuryTaxShare")) {
-				teamSeasons[i].revenues.luxuryTaxShare = {
-					amount: 0,
-					rank: 15,
-				};
+		for (const teamSeason of teamSeasons) {
+			if (!teamSeason.revenues.luxuryTaxShare) {
+				teamSeason.revenues.luxuryTaxShare = 0;
 			}
 		}
 
-		const keys = [
-			"won",
-			"hype",
-			"pop",
-			"att",
-			"cash",
-			"revenues",
-			"expenses",
-		] as const;
+		const formatRevenueExpenses = (teamSeason: TeamSeason) => {
+			const output = {} as Record<
+				| `expenses${Capitalize<keyof TeamSeason["expenses"]>}`
+				| `revenues${Capitalize<keyof TeamSeason["revenues"]>}`,
+				number
+			>;
+			for (const key of helpers.keys(teamSeason.revenues)) {
+				const outputKey = `revenues${helpers.upperCaseFirstLetter(
+					key,
+				)}` as const;
+				output[outputKey] = teamSeason.revenues[key];
+			}
+			for (const key of helpers.keys(teamSeason.expenses)) {
+				const outputKey = `expenses${helpers.upperCaseFirstLetter(
+					key,
+				)}` as const;
+				output[outputKey] = teamSeason.expenses[key];
+			}
+			return output;
+		};
 
-		// @ts-ignore
-		const barData: Record<"won" | "hype" | "pop" | "att" | "cash", number[]> &
-			Record<"revenues" | "expenses", any> = {};
+		const barData = teamSeasons.slice(0, showInt).map(teamSeason => {
+			const att = teamSeason.att / teamSeason.gpHome;
 
-		for (const key of keys) {
-			if (teamSeasons.length > 0) {
-				if (typeof teamSeasons[0][key] === "number") {
-					barData[key] = helpers.zeroPad(
-						// @ts-ignore
-						teamSeasons.map(ts => ts[key]),
-						showInt,
-					);
-				} else {
-					// Handle an object in the database
-					barData[key] = {};
-					const tempData = teamSeasons.map(ts => ts[key]);
+			const numPlayoffRounds = g.get(
+				"numGamesPlayoffSeries",
+				teamSeason.season,
+			).length;
 
-					for (const key2 of Object.keys(tempData[0])) {
-						barData[key][key2] = helpers.zeroPad(
-							// @ts-ignore
-							tempData.map(x => x[key2]).map(x => x.amount),
-							showInt,
-						);
-					}
+			const champ = teamSeason.playoffRoundsWon === numPlayoffRounds;
+
+			const row = {
+				season: teamSeason.season,
+				champ,
+				att,
+				cash: teamSeason.cash / 1000, // convert to millions
+				won: teamSeason.won,
+				hype: teamSeason.hype,
+				pop: teamSeason.pop,
+				...formatRevenueExpenses(teamSeason),
+			};
+
+			return row;
+		});
+
+		// Pad with 0s
+		while (barData.length > 0 && barData.length < showInt) {
+			const row = helpers.deepCopy(barData.at(-1)!);
+			row.season -= 1;
+			for (const key of helpers.keys(row)) {
+				if (key !== "season" && key !== "champ") {
+					row[key] = 0;
 				}
 			}
-		}
-
-		// Process some values
-		// eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-		if (barData.att) {
-			barData.att = barData.att.map((num, i) => {
-				if (teamSeasons[i] !== undefined) {
-					if (!teamSeasons[i].hasOwnProperty("gpHome")) {
-						teamSeasons[i].gpHome = Math.round(teamSeasons[i].gp / 2);
-					}
-
-					// See also game.js and team.js
-					if (teamSeasons[i].gpHome > 0 && typeof num === "number") {
-						return num / teamSeasons[i].gpHome; // per game
-					}
-				}
-
-				return 0;
-			});
-		}
-
-		const keys2 = ["cash"] as const;
-		for (const key of keys2) {
-			// eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-			if (barData[key]) {
-				// convert to millions
-				barData[key] = barData[key].map(num =>
-					typeof num === "number" ? num / 1000 : num,
-				);
-			}
-		}
-
-		const barSeasons: number[] = [];
-		for (let i = 0; i < showInt; i++) {
-			barSeasons[i] = g.get("season") - i;
+			barData.push(row);
 		}
 
 		// Get stuff for the finances form
-		const t = await idb.getCopy.teamsPlus(
+		const tTemp = await idb.getCopy.teamsPlus(
 			{
 				attrs: ["budget", "adjustForInflation", "autoTicketPrice"],
 				seasonAttrs: ["expenses"],
@@ -176,13 +160,39 @@ const updateTeamFinances = async (
 			"noCopyCache",
 		);
 
-		if (!t) {
+		if (!tTemp) {
 			throw new Error("Team not found");
 		}
+
+		const t = tTemp as typeof tTemp & {
+			autoTicketPrice: boolean;
+			expenseLevelsLastThree: TeamSeason["expenseLevels"];
+		};
 
 		// undefined is true (for upgrades), and AI teams are always true
 		t.autoTicketPrice =
 			t.autoTicketPrice !== false || !g.get("userTids").includes(inputs.tid);
+
+		// Undo reverse from above
+		const teamSeasonsLastThree = teamSeasons.slice(0, 3).reverse();
+		t.expenseLevelsLastThree = {
+			coaching: await finances.getLevelLastThree("coaching", {
+				tid: inputs.tid,
+				teamSeasons: teamSeasonsLastThree,
+			}),
+			facilities: await finances.getLevelLastThree("facilities", {
+				tid: inputs.tid,
+				teamSeasons: teamSeasonsLastThree,
+			}),
+			health: await finances.getLevelLastThree("health", {
+				tid: inputs.tid,
+				teamSeasons: teamSeasonsLastThree,
+			}),
+			scouting: await finances.getLevelLastThree("scouting", {
+				tid: inputs.tid,
+				teamSeasons: teamSeasonsLastThree,
+			}),
+		};
 
 		const maxStadiumCapacity = teamSeasons.reduce((max, teamSeason) => {
 			if (teamSeason.stadiumCapacity > max) {
@@ -194,16 +204,29 @@ const updateTeamFinances = async (
 
 		const autoTicketPrice = await getAutoTicketPriceByTid(inputs.tid);
 
+		const otherTeamTicketPrices = [];
+		const teams = await idb.cache.teams.getAll();
+		for (const t of teams) {
+			if (!t.disabled && t.tid !== inputs.tid) {
+				if (t.autoTicketPrice) {
+					otherTeamTicketPrices.push(await getAutoTicketPriceByTid(t.tid));
+				} else {
+					otherTeamTicketPrices.push(t.budget.ticketPrice);
+				}
+			}
+		}
+		otherTeamTicketPrices.sort((a, b) => b - a);
+
 		return {
 			abbrev: inputs.abbrev,
 			autoTicketPrice,
 			challengeNoRatings: g.get("challengeNoRatings"),
-			hardCap: g.get("hardCap"),
+			salaryCapType: g.get("salaryCapType"),
 			numGames: g.get("numGames"),
 			tid: inputs.tid,
 			show: inputs.show,
 			salaryCap: g.get("salaryCap") / 1000,
-			minContract: g.get("minContract"),
+			minContract: g.get("minContract") / 1000,
 			minPayroll: g.get("minPayroll") / 1000,
 			luxuryPayroll: g.get("luxuryPayroll") / 1000,
 			luxuryTax: g.get("luxuryTax"),
@@ -213,12 +236,13 @@ const updateTeamFinances = async (
 			maxStadiumCapacity,
 			t,
 			barData,
-			barSeasons,
 			payroll,
 			contracts,
 			contractTotals,
 			salariesSeasons,
 			phase: g.get("phase"),
+			godMode: g.get("godMode"),
+			otherTeamTicketPrices,
 		};
 	}
 };

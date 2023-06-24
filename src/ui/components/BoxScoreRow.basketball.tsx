@@ -1,17 +1,18 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import type { MouseEvent } from "react";
 import PlayerNameLabels from "./PlayerNameLabels";
 import { helpers } from "../util";
 
 const BoxScoreRow = ({
 	className,
+	exhibition,
 	lastStarter,
 	liveGameInProgress,
 	onClick,
 	p,
 }: {
 	className?: string;
+	exhibition?: boolean;
 	lastStarter?: boolean;
 	liveGameInProgress?: boolean;
 	onClick?: (event: MouseEvent) => void;
@@ -68,9 +69,9 @@ const BoxScoreRow = ({
 					jerseyNumber={p.jerseyNumber}
 					pid={p.pid}
 					skills={p.skills}
-				>
-					{p.name}
-				</PlayerNameLabels>
+					legacyName={p.name}
+					disableNameLink={exhibition}
+				/>
 			</td>
 			{typeof p.abbrev === "string" ? (
 				<td>
@@ -83,12 +84,6 @@ const BoxScoreRow = ({
 			{statCols}
 		</tr>
 	);
-};
-
-BoxScoreRow.propTypes = {
-	className: PropTypes.string,
-	onClick: PropTypes.func,
-	p: PropTypes.object.isRequired,
 };
 
 export default BoxScoreRow;

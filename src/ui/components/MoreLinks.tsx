@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { bySport, isSport, NO_LOTTERY_DRAFT_TYPES } from "../../common";
-import type { DraftType } from "../../common/types";
-import { helpers, useLocalShallow } from "../util";
+import type { DraftType, PlayerStatType } from "../../common/types";
+import { helpers, useLocalPartial } from "../util";
 
 const MoreLinks = (
 	props: (
@@ -48,6 +48,12 @@ const MoreLinks = (
 		| {
 				type: "globalSettings";
 		  }
+		| {
+				type: "leaders";
+				playoffs: "playoffs" | "regularSeason";
+				season: number | "career" | "all";
+				statType: PlayerStatType;
+		  }
 	) & {
 		page: string;
 		keepSelfLink?: boolean;
@@ -55,13 +61,13 @@ const MoreLinks = (
 ) => {
 	const { keepSelfLink, page } = props;
 
-	const { godMode, season: currentSeason } = useLocalShallow(state2 => ({
-		godMode: state2.godMode,
-		season: state2.season,
-	}));
+	const { godMode, season: currentSeason } = useLocalPartial([
+		"godMode",
+		"season",
+	]);
 
 	let links: {
-		url: (string | number)[] | string;
+		url: (string | number | undefined)[] | string;
 		name: string;
 		className?: string;
 	}[];
@@ -118,11 +124,49 @@ const MoreLinks = (
 			},
 		];
 
-		if (isSport("football") || isSport("hockey")) {
-			links.unshift({
-				url: ["depth", `${abbrev}_${tid}`],
-				name: isSport("hockey") ? "Lines" : "Depth Chart",
-			});
+		if (
+			bySport({
+				baseball: true,
+				basketball: false,
+				football: true,
+				hockey: true,
+			})
+		) {
+			if (isSport("baseball")) {
+				links.unshift(
+					{
+						url: ["depth", "L", `${abbrev}_${tid}`],
+						name: "Batting Order",
+					},
+					{
+						url: ["depth", "D", `${abbrev}_${tid}`],
+						name: "Defense",
+					},
+					{
+						url: ["depth", "P", `${abbrev}_${tid}`],
+						name: "Pitching",
+					},
+				);
+			} else {
+				links.unshift({
+					url: [
+						"depth",
+						bySport({
+							baseball: "",
+							basketball: "",
+							football: "QB",
+							hockey: "F",
+						}),
+						`${abbrev}_${tid}`,
+					],
+					name: bySport({
+						baseball: "",
+						basketball: "",
+						football: "Depth Chart",
+						hockey: "Lines",
+					}),
+				});
+			}
 		}
 
 		if (page === "team_history") {
@@ -132,6 +176,7 @@ const MoreLinks = (
 					`${abbrev}_${tid}`,
 					"career",
 					bySport({
+						baseball: "batting",
 						football: "passing",
 						basketball: "totals",
 						hockey: "skater",
@@ -249,14 +294,10 @@ const MoreLinks = (
 			{ url: ["history_all"], name: "League History" },
 			{ url: ["team_records"], name: "Team Records" },
 			{ url: ["awards_records"], name: "Awards Records" },
-			...(isSport("basketball")
-				? [
-						{
-							url: ["all_star", "history"],
-							name: "All-Star History",
-						},
-				  ]
-				: []),
+			{
+				url: ["all_star", "history"],
+				name: "All-Star History",
+			},
 			{ url: ["season_preview"], name: "Season Previews" },
 		];
 	} else if (props.type === "importExport") {
@@ -271,6 +312,34 @@ const MoreLinks = (
 		links = [
 			{ url: "/settings", name: "Global Settings" },
 			{ url: "/settings/default", name: "Default New League Settings" },
+		];
+	} else if (props.type === "leaders") {
+		const { playoffs, season, statType } = props;
+
+		const defaultStat = bySport({
+			baseball: "ba",
+			basketball: "pts",
+			football: "pssYds",
+			hockey: "g",
+		});
+
+		links = [
+			{
+				url: ["leaders", season, statType, playoffs],
+				name: "League Leaders",
+			},
+			{
+				url: ["leaders_years", defaultStat, statType, playoffs],
+				name: "Yearly Leaders",
+			},
+			{
+				url: ["leaders_progressive", defaultStat, statType, playoffs],
+				name: "Progressive Leaders",
+			},
+			{
+				url: ["player_stats", "all", season, statType, playoffs],
+				name: "Player Stats",
+			},
 		];
 	} else {
 		throw new Error("Invalid MoreLinks type");
@@ -293,7 +362,7 @@ const MoreLinks = (
 				})
 				.map(({ className, url, name }, i) => {
 					return (
-						<Fragment key={url[0]}>
+						<Fragment key={url[0] + String(i)}>
 							{i > 0 ? " | " : null}
 							<a
 								className={className}

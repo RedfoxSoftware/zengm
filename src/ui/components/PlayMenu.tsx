@@ -1,4 +1,4 @@
-import { useEffect, MouseEvent, forwardRef } from "react";
+import { useEffect, type MouseEvent, forwardRef } from "react";
 import { Dropdown, Nav } from "react-bootstrap";
 import { confirm, local, realtimeUpdate, toWorker } from "../util";
 import type { Option } from "../../common/types";
@@ -13,14 +13,14 @@ type Props = {
 const handleOptionClick = (option: Option, event: MouseEvent) => {
 	if (!option.url) {
 		event.preventDefault();
-		toWorker("playMenu", option.id as any);
+		toWorker("playMenu", option.id as any, undefined);
 	}
 };
 
 const PlayMenu = forwardRef(({ lid, spectator, options }: Props, ref) => {
 	useEffect(() => {
 		const handleKeydown = async (event: KeyboardEvent) => {
-			// alt + letter
+			// alt + letter -  CANNOT USE KeyboardEvent.key BECAUSE ALT+P ON MAC IS PI!
 			if (
 				event.altKey &&
 				!event.ctrlKey &&
@@ -53,7 +53,7 @@ const PlayMenu = forwardRef(({ lid, spectator, options }: Props, ref) => {
 				if (option.url) {
 					realtimeUpdate([], option.url);
 				} else {
-					toWorker("playMenu", option.id as any);
+					toWorker("playMenu", option.id as any, undefined);
 				}
 			}
 		};
@@ -99,7 +99,7 @@ const PlayMenu = forwardRef(({ lid, spectator, options }: Props, ref) => {
 						>
 							{option.label}
 							{option.key ? (
-								<span className="text-muted kbd">
+								<span className="text-body-secondary kbd">
 									Alt+{option.key.toUpperCase()}
 								</span>
 							) : null}

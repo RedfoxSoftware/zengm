@@ -1,5 +1,5 @@
 import useTitleBar from "../hooks/useTitleBar";
-import { helpers, toWorker, useLocal } from "../util";
+import { helpers, toWorker, useLocal, useLocalPartial } from "../util";
 import type { DunkAttempt, Player, View } from "../../common/types";
 import {
 	Height,
@@ -63,7 +63,10 @@ export const EditContestants = ({
 					name: p.name,
 				}));
 
-				await toWorker("main", "contestSetPlayers", contest, minimalPlayers);
+				await toWorker("main", "contestSetPlayers", {
+					type: contest,
+					players: minimalPlayers,
+				});
 
 				setShowForm(false);
 			}}
@@ -198,6 +201,8 @@ const Log = ({
 }: Pick<View<"allStarDunk">, "dunk" | "log" | "season">) => {
 	const logReverse = [...log].reverse();
 
+	const { gender } = useLocalPartial(["gender"]);
+
 	return (
 		<ul className="list-unstyled mb-0">
 			{dunk.winner !== undefined ? (
@@ -253,7 +258,7 @@ const Log = ({
 					return (
 						<li key={key} className={classNameTop}>
 							<b>
-								{p.name} attempts his
+								{p.name} attempts {helpers.pronoun(gender, "his")}
 								{event.num === 1
 									? " first"
 									: event.num === 2
@@ -287,9 +292,13 @@ const Log = ({
 								</>
 							) : null}
 							{event.made ? (
-								<p className="text-success">He made it!</p>
+								<p className="text-success">
+									{helpers.pronoun(gender, "He")} made it!
+								</p>
 							) : (
-								<p className="text-danger">He missed it!</p>
+								<p className="text-danger">
+									{helpers.pronoun(gender, "He")} missed it!
+								</p>
 							)}
 						</li>
 					);
@@ -300,13 +309,14 @@ const Log = ({
 						<li key={key} className={classNameTop}>
 							{event.made ? (
 								<p>
-									The judges give him a {event.score}
+									The judges give {helpers.pronoun(gender, "him")} a{" "}
+									{event.score}
 									{event.score === 50 ? "!" : "."}
 								</p>
 							) : (
 								<p>
-									{p.name} failed to make a dunk, so the judges give him a{" "}
-									{event.score}.
+									{p.name} failed to make a dunk, so the judges give{" "}
+									{helpers.pronoun(gender, "him")} a {event.score}.
 								</p>
 							)}
 						</li>
@@ -338,12 +348,10 @@ const UserDunkForm = ({
 
 	useEffect(() => {
 		const updateProjeted = async () => {
-			const newProjected = await toWorker(
-				"main",
-				"dunkGetProjected",
+			const newProjected = await toWorker("main", "dunkGetProjected", {
 				dunkAttempt,
 				index,
-			);
+			});
 			setProjected(newProjected);
 		};
 
@@ -357,7 +365,7 @@ const UserDunkForm = ({
 	const fields: {
 		key: keyof DunkAttempt;
 		label: string;
-		options: typeof dunkInfos["toss"];
+		options: (typeof dunkInfos)["toss"];
 	}[] = [
 		{
 			key: "toss",
@@ -396,7 +404,7 @@ const UserDunkForm = ({
 
 						setSubmitted(true);
 
-						await toWorker("main", "dunkUser", dunkAttempt, index);
+						await toWorker("main", "dunkUser", { dunkAttempt, index });
 
 						setSubmitted(false);
 					}}
@@ -554,9 +562,9 @@ export const ContestantProfiles = ({
 								jerseyNumber={p.stats.jerseyNumber}
 								pos={p.ratings.pos}
 								watch={p.watch}
-							>
-								{contest.players[i].name}
-							</PlayerNameLabels>
+								firstName={p.firstName}
+								lastName={p.lastName}
+							/>
 							<a
 								className="ms-2"
 								href={helpers.leagueUrl([
@@ -648,12 +656,14 @@ export const ContestantProfiles = ({
 };
 
 export const ScoreTable = ({
+	centerResults,
 	contest,
 	players,
 	resultsByRound,
 	season,
 	userTid,
 }: {
+	centerResults?: boolean;
 	contest: View<"allStarDunk">["dunk"] | View<"allStarThree">["three"];
 	players: View<"allStarDunk">["players"];
 	resultsByRound:
@@ -666,16 +676,18 @@ export const ScoreTable = ({
 
 	let maxRoundCurrent = 0;
 
+	const centerClassName = centerResults ? "text-center" : undefined;
+
 	return (
 		<ResponsiveTableWrapper>
-			<table className="table table-striped table-hover table-nonfluid">
+			<table className="table table-striped table-borderless table-hover table-nonfluid">
 				<thead>
 					<tr>
 						<th></th>
 						{contest.rounds.map((round, i) => {
 							if (round.tiebreaker) {
 								return (
-									<th key={i} title="Tiebreaker">
+									<th key={i} className={centerClassName} title="Tiebreaker">
 										T
 									</th>
 								);
@@ -685,7 +697,9 @@ export const ScoreTable = ({
 							return <th key={i}>Round {maxRoundCurrent}</th>;
 						})}
 						{range(maxRoundCurrent + 1, numRounds + 1).map(i => (
-							<th key={i}>Round {i}</th>
+							<th key={i} className={centerClassName}>
+								Round {i}
+							</th>
 						))}
 						{contest.winner !== undefined ? <th></th> : null}
 					</tr>
@@ -700,9 +714,13 @@ export const ScoreTable = ({
 								className={tid === userTid ? "table-info" : undefined}
 							>
 								<td>
-									<PlayerNameLabels pid={p.pid} watch={p.watch} season={season}>
-										{contest.players[i].name}
-									</PlayerNameLabels>
+									<PlayerNameLabels
+										pid={p.pid}
+										watch={p.watch}
+										season={season}
+										firstName={p.firstName}
+										lastName={p.lastName}
+									/>
 								</td>
 								{contest.rounds.map((round, j) => {
 									const roundResult = resultsByRound[j].find(
@@ -712,13 +730,13 @@ export const ScoreTable = ({
 										return <td key={j} />;
 									}
 									return (
-										<td key={j}>
+										<td key={j} className={centerClassName}>
 											{roundResult.score}
 											{(roundResult as any).scores &&
 											(roundResult as any).scores.length > 1 ? (
 												<>
 													{" "}
-													<span className="text-muted">
+													<span className="text-body-secondary">
 														({(roundResult as any).scores.join("+")})
 													</span>
 												</>

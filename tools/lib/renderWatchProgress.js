@@ -1,18 +1,14 @@
-let logSymbols;
-import("log-symbols").then(module => {
-	logSymbols = module.default;
-});
-
-const fs = require("fs");
-const { render, Box, Text } = require("ink");
-const Spinner = require("ink-spinner").default;
-const React = require("react");
-const watchCSS = require("./watchCSS");
-const watchFiles = require("./watchFiles");
-const watchJS = require("./watchJS");
-const watchJSONSchema = require("./watchJSONSchema");
-
-const { useEffect, useReducer } = React;
+import logSymbols from "log-symbols";
+import fs from "node:fs";
+// eslint-disable-next-line import/no-unresolved
+import { render, Box, Text } from "ink";
+// eslint-disable-next-line import/no-unresolved
+import Spinner from "ink-spinner";
+import React, { useEffect, useReducer } from "react";
+import watchCSS from "./watchCSS.js";
+import watchFiles from "./watchFiles.js";
+import watchJS from "./watchJS.js";
+import watchJSONSchema from "./watchJSONSchema.js";
 
 const TIME_CUTOFF_GREEN = 10000; // 10 seconds
 const TIME_CUTOFF_YELLOW = 30000; // 30 seconds
@@ -73,11 +69,13 @@ const reducer = (files, { type, filename, error }) => {
 	}
 };
 
-/* eslint-disable react/prop-types */
 const File = ({ filename, info }) => {
 	if (info.error) {
+		// Would be nice to capture ESBuild errors and show them here better
 		return (
-			<Text>{`${logSymbols?.error} ${filename}: ${info.error.stack}`}</Text>
+			<Text>{`${logSymbols?.error} ${filename}: ${
+				info.error.stack ?? "See error above from ESBuild"
+			}`}</Text>
 		);
 	}
 
@@ -129,7 +127,6 @@ const File = ({ filename, info }) => {
 		</Box>
 	);
 };
-/* eslint-enable react/prop-types */
 
 const Watch = () => {
 	const [files, dispatch] = useReducer(reducer, {});
@@ -198,6 +195,6 @@ const Watch = () => {
 	);
 };
 
-module.exports = () => {
+export default () => {
 	render(<Watch />, { experimental: true });
 };

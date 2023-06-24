@@ -11,6 +11,790 @@ const gp = isSport("hockey") ? "GP" : "G";
 const sportSpecificCols = bySport<{
 	[key: string]: ColTemp;
 }>({
+	baseball: {
+		"pos:SP": {
+			desc: "Starting Pitcher",
+			sortType: "number",
+			title: "SP",
+		},
+		"pos:RP": {
+			desc: "Relief Pitcher",
+			sortType: "number",
+			title: "RP",
+		},
+		"pos:C": {
+			desc: "Catcher",
+			sortType: "number",
+			title: "C",
+		},
+		"pos:1B": {
+			desc: "First Baseman",
+			sortType: "number",
+			title: "1B",
+		},
+		"pos:2B": {
+			desc: "Second Baseman",
+			sortType: "number",
+			title: "2B",
+		},
+		"pos:3B": {
+			desc: "Third Baseman",
+			sortType: "number",
+			title: "3B",
+		},
+		"pos:SS": {
+			desc: "Shortstop",
+			sortType: "number",
+			title: "SS",
+		},
+		"pos:LF": {
+			desc: "Left Fielder",
+			sortType: "number",
+			title: "LF",
+		},
+		"pos:CF": {
+			desc: "Center Fielder",
+			sortType: "number",
+			title: "CF",
+		},
+		"pos:RF": {
+			desc: "Right Fielder",
+			sortType: "number",
+			title: "RF",
+		},
+		"rating:hpw": {
+			desc: "Hitting Power",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Hpw",
+		},
+		"rating:con": {
+			desc: "Contact",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Con",
+		},
+		"rating:eye": {
+			desc: "Eye",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Eye",
+		},
+		"rating:gnd": {
+			desc: "Ground Ball Fielding",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Gnd",
+		},
+		"rating:fly": {
+			desc: "Fly Ball Fielding",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Fly",
+		},
+		"rating:thr": {
+			desc: "Throwing",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Thr",
+		},
+		"rating:cat": {
+			desc: "Catcher Defense",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Cat",
+		},
+		"rating:ppw": {
+			desc: "Pitching Power",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Ppw",
+		},
+		"rating:ctl": {
+			desc: "Control",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Ctl",
+		},
+		"rating:mov": {
+			desc: "Movement",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Mov",
+		},
+		"rating:ovrSP": {
+			desc: "Overall Rating (SP)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrSP",
+		},
+		"rating:ovrRP": {
+			desc: "Overall Rating (RP)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrRP",
+		},
+		"rating:ovrC": {
+			desc: "Overall Rating (C)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrC",
+		},
+		"rating:ovr1B": {
+			desc: "Overall Rating (1B)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Ovr1B",
+		},
+		"rating:ovr2B": {
+			desc: "Overall Rating (2B)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Ovr2B",
+		},
+		"rating:ovr3B": {
+			desc: "Overall Rating (3B)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Ovr3B",
+		},
+		"rating:ovrSS": {
+			desc: "Overall Rating (SS)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrSS",
+		},
+		"rating:ovrLF": {
+			desc: "Overall Rating (LF)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrLF",
+		},
+		"rating:ovrCF": {
+			desc: "Overall Rating (CF)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrCF",
+		},
+		"rating:ovrRF": {
+			desc: "Overall Rating (RF)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrRF",
+		},
+		"rating:ovrDH": {
+			desc: "Overall Rating (DH)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OvrDH",
+		},
+		"rating:potSP": {
+			desc: "Potential Rating (SP)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotSP",
+		},
+		"rating:potRP": {
+			desc: "Potential Rating (RP)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotRP",
+		},
+		"rating:potC": {
+			desc: "Potential Rating (C)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotC",
+		},
+		"rating:pot1B": {
+			desc: "Potential Rating (1B)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Pot1B",
+		},
+		"rating:pot2B": {
+			desc: "Potential Rating (2B)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Pot2B",
+		},
+		"rating:pot3B": {
+			desc: "Potential Rating (3B)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Pot3B",
+		},
+		"rating:potSS": {
+			desc: "Potential Rating (SS)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotSS",
+		},
+		"rating:potLF": {
+			desc: "Potential Rating (LF)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotLF",
+		},
+		"rating:potCF": {
+			desc: "Potential Rating (CF)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotCF",
+		},
+		"rating:potRF": {
+			desc: "Potential Rating (RF)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotRF",
+		},
+		"rating:potDH": {
+			desc: "Potential Rating (DH)",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PotDH",
+		},
+		"stat:keyStats": {
+			desc: "Key Stats",
+			sortSequence: ["desc", "asc"],
+			sortType: "string",
+			title: "Stats",
+		},
+		"stat:pa": {
+			desc: "Plate Appearances",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PA",
+		},
+		"stat:r": {
+			desc: "Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "R",
+		},
+		"stat:pts": {
+			desc: "Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "R",
+		},
+		"stat:h": {
+			desc: "Hits",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "H",
+		},
+		"stat:2b": {
+			desc: "Doubles",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "2B",
+		},
+		"stat:3b": {
+			desc: "Triples",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "3B",
+		},
+		"stat:hr": {
+			desc: "Home Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "HR",
+		},
+		"stat:rbi": {
+			desc: "Runs Batted In",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "RBI",
+		},
+		"stat:sb": {
+			desc: "Stolen Bases",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SB",
+		},
+		"stat:cs": {
+			desc: "Caught Stealing",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "CS",
+		},
+		"stat:bb": {
+			desc: "Walks",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "BB",
+		},
+		"stat:so": {
+			desc: "Strikeouts",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SO",
+		},
+		"stat:gdp": {
+			desc: "Double Plays Grounded Into",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "GDP",
+		},
+		"stat:hbp": {
+			desc: "Times Hit by a Pitch",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "HBP",
+		},
+		"stat:sh": {
+			desc: "Sacrifice Hits/Bunts",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SH",
+		},
+		"stat:sf": {
+			desc: "Sacrifice Flies",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SF",
+		},
+		"stat:ibb": {
+			desc: "Intentional Walks",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "IBB",
+		},
+		"stat:w": {
+			desc: "Wins",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "W",
+		},
+		"stat:l": {
+			desc: "Losses",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "L",
+		},
+		"stat:gpPit": {
+			desc: "Games Played",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "GP",
+		},
+		"stat:gsPit": {
+			desc: "Games Started",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "GS",
+		},
+		"stat:gf": {
+			desc: "Games Finished",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "GF",
+		},
+		"stat:cg": {
+			desc: "Complete Games",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "CG",
+		},
+		"stat:sho": {
+			desc: "Shutouts",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SHO",
+		},
+		"stat:sv": {
+			desc: "Saves",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SV",
+		},
+		"stat:ip": {
+			desc: "Innings Pitched",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "IP",
+		},
+		"stat:outs": {
+			desc: "Outs Pitched",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Outs",
+		},
+		"stat:rPit": {
+			desc: "Runs Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "R",
+		},
+		"stat:er": {
+			desc: "Earned Runs Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "ER",
+		},
+		"stat:hPit": {
+			desc: "Hits Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "H",
+		},
+		"stat:2bPit": {
+			desc: "Doubles Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "2B",
+		},
+		"stat:3bPit": {
+			desc: "Triples Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "3B",
+		},
+		"stat:hrPit": {
+			desc: "Home Runs Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "HR",
+		},
+		"stat:bbPit": {
+			desc: "Walks",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "BB",
+		},
+		"stat:soPit": {
+			desc: "Strikeouts",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SO",
+		},
+		"stat:ibbPit": {
+			desc: "Intentional Walks",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "IBB",
+		},
+		"stat:hbpPit": {
+			desc: "Times Hit by a Pitch",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "HBP",
+		},
+		"stat:shPit": {
+			desc: "Sacrifice Hits/Bunts Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SH",
+		},
+		"stat:sfPit": {
+			desc: "Sacrifice Flies Allowed",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SF",
+		},
+		"stat:bk": {
+			desc: "Balks",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "BK",
+		},
+		"stat:wp": {
+			desc: "Wild Pitches",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "WP",
+		},
+		"stat:bf": {
+			desc: "Batters Faced",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "BF",
+		},
+		"stat:pc": {
+			desc: "Pitch Count",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PC",
+		},
+		"stat:ab": {
+			desc: "At Bats",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "AB",
+		},
+		"stat:ba": {
+			desc: "Batting Average",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "BA",
+		},
+		"stat:obp": {
+			desc: "On-Base Percentage",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OBP",
+		},
+		"stat:slg": {
+			desc: "Slugging Percentage",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SLG",
+		},
+		"stat:ops": {
+			desc: "On-Base + Slugging Percentage",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "OPS",
+		},
+		"stat:tb": {
+			desc: "Total Bases",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "TB",
+		},
+		"stat:winp": {
+			desc: "Win-Loss Percentage",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "W-L%",
+		},
+		"stat:era": {
+			desc: "Earned Run Average",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "ERA",
+		},
+		"stat:fip": {
+			desc: "Fielding Independent Pitching",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "FIP",
+		},
+		"stat:whip": {
+			desc: "Walks And Hits Per Inning Pitched",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "WHIP",
+		},
+		"stat:h9": {
+			desc: "Hits Per 9 Innings",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "H9",
+		},
+		"stat:hr9": {
+			desc: "Home Runs Per 9 Innings",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "HR9",
+		},
+		"stat:bb9": {
+			desc: "Walks Per 9 Innings",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "BB9",
+		},
+		"stat:so9": {
+			desc: "Strikeouts Per 9 Innings",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SO9",
+		},
+		"stat:pc9": {
+			desc: "Pitches Per 9 Innings",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PC9",
+		},
+		"stat:sow": {
+			desc: "Strikeouts Per Walk",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SO/W",
+		},
+		"stat:rbat": {
+			desc: "Batting Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Rbat",
+		},
+		"stat:rbr": {
+			desc: "Baserunning Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Rbr",
+		},
+		"stat:rfldTot": {
+			desc: "Fielding Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Rfld",
+		},
+		"stat:rpos": {
+			desc: "Positional Adjustment Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Rpos",
+		},
+		"stat:rpit": {
+			desc: "Pitching Runs Saved",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Rpit",
+		},
+		"stat:raa": {
+			desc: "Runs Above Average",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "RAA",
+		},
+		"stat:waa": {
+			desc: "Wins Above Average",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "WAA",
+		},
+		"stat:rrep": {
+			desc: "Runs From Replacement Level",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Rrep",
+		},
+		"stat:rar": {
+			desc: "Runs Above Replacement",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "RAR",
+		},
+		"stat:war": {
+			desc: "Wins Above Replacement",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "WAR",
+		},
+		"stat:warPerPlayer": {
+			desc: "WAR Per Player",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "WAR/Player",
+		},
+		"stat:gpF": {
+			desc: "Games Played",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "G",
+		},
+		"stat:gsF": {
+			desc: "Games Started",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "GS",
+		},
+		"stat:cgF": {
+			desc: "Complete Games",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "CG",
+		},
+		"stat:inn": {
+			desc: "Innings Played In Field",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Inn",
+		},
+		"stat:ch": {
+			desc: "Defensive Chances",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Ch",
+		},
+		"stat:po": {
+			desc: "Putouts",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PO",
+		},
+		"stat:a": {
+			desc: "Assists",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "A",
+		},
+		"stat:e": {
+			desc: "Errors",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "E",
+		},
+		"stat:dp": {
+			desc: "Double Plays Turned",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "DP",
+		},
+		"stat:fldp": {
+			desc: "Fielding Percentage",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Fld%",
+		},
+		"stat:rfld": {
+			desc: "Fielding Runs",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "Rfld",
+		},
+		"stat:rf9": {
+			desc: "Range Factor Per 9 Inn",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "RF/9",
+		},
+		"stat:rfg": {
+			desc: "Range Factor Per Game",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "RF/G",
+		},
+		"stat:pb": {
+			desc: "Passed Balls",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "PB",
+		},
+		"stat:sbF": {
+			desc: "Stolen Bases",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "SB",
+		},
+		"stat:csF": {
+			desc: "Caught Stealing",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "CS",
+		},
+		"stat:csp": {
+			desc: "Caught Stealing Percentage",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "CS%",
+		},
+		"stat:babip": {
+			desc: "Batting Average On Balls In Play",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "BAbip",
+		},
+		"stat:iso": {
+			desc: "Isolated Power",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "ISO",
+		},
+	},
 	basketball: {
 		"rating:fg": {
 			desc: "Mid Range",
@@ -101,6 +885,18 @@ const sportSpecificCols = bySport<{
 			sortSequence: ["desc", "asc"],
 			sortType: "number",
 			title: "+/-",
+		},
+		"stat:pm100": {
+			desc: "Plus/Minus Per 100 Possessions",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "+/-",
+		},
+		"stat:onOff100": {
+			desc: "+/- Per 100 Possessions, On Minus Off",
+			sortSequence: ["desc", "asc"],
+			sortType: "number",
+			title: "On-Off",
 		},
 		"stat:tpp": {
 			desc: "Three Point Percentage",
@@ -1042,7 +1838,7 @@ const sportSpecificCols = bySport<{
 			title: "Ast",
 		},
 		"stat:defTckLoss": {
-			desc: "Tackes For Loss",
+			desc: "Tackles For Loss",
 			sortSequence: ["desc", "asc"],
 			sortType: "number",
 			title: "TFL",
@@ -1350,25 +2146,25 @@ const sportSpecificCols = bySport<{
 		"stat:qbW": {
 			desc: "Wins as primary QB",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "QBW",
 		},
 		"stat:qbL": {
 			desc: "Losses as primary QB",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "QBL",
 		},
 		"stat:qbT": {
 			desc: "Ties as primary QB",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "QBT",
 		},
 		"stat:qbOTL": {
 			desc: "Overtime losses as primary QB",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "QBOTL",
 		},
 		"stat:pssTDPct": {
@@ -1900,25 +2696,25 @@ const sportSpecificCols = bySport<{
 		"stat:gW": {
 			desc: "Wins as primary G",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "GW",
 		},
 		"stat:gL": {
 			desc: "Losses as primary G",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "GL",
 		},
 		"stat:gT": {
 			desc: "Ties as primary G",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "GT",
 		},
 		"stat:gOTL": {
 			desc: "Overtime losses as primary G",
 			sortSequence: ["desc", "asc"],
-			sortType: "record",
+			sortType: "number",
 			title: "GOTL",
 		},
 	},
@@ -1948,10 +2744,6 @@ const cols: {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
-	"# Fathers": {
-		sortSequence: ["desc", "asc"],
-		sortType: "number",
-	},
 	HoF: {
 		desc: "Number of Players in the Hall of Fame",
 		sortSequence: ["desc", "asc"],
@@ -1961,12 +2753,28 @@ const cols: {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
+	"# Daughters": {
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
+	"# Fathers": {
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
+	"# Mothers": {
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
 	"# Players": {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
 	"# Seasons": {
 		desc: "Number of Seasons",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
+	"# Sisters": {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
@@ -2016,22 +2824,29 @@ const cols: {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
+	Cap: {
+		desc: "Salary Cap Issue",
+		sortSequence: ["asc", "desc"],
+		sortType: "number",
+		width: "1px",
+	},
 	"Cap Space": {
 		sortSequence: ["desc", "asc"],
 		sortType: "currency",
 	},
-	"Captain 1": {
-		sortType: "name",
-	},
-	"Captain 2": {
-		sortType: "name",
-	},
+	"Captain 1": {},
+	"Captain 2": {},
 	Cash: {
 		sortSequence: ["desc", "asc"],
 		sortType: "currency",
 	},
 	Change: {
 		desc: "Difference between pre-lottery rank and draft lottery result",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
+	Coaching: {
+		desc: "Coaching Level",
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
@@ -2086,6 +2901,9 @@ const cols: {
 		noSearch: true,
 		sortSequence: [],
 	},
+	"Draft Pick": {
+		sortType: "number",
+	},
 	"Draft Picks": {
 		sortSequence: [],
 	},
@@ -2097,7 +2915,6 @@ const cols: {
 	},
 	"Dunk Winner": {
 		desc: "Slam Dunk Contest Winner",
-		sortType: "name",
 	},
 	End: {
 		sortSequence: ["desc", "asc"],
@@ -2105,11 +2922,15 @@ const cols: {
 	},
 	Exp: {
 		desc: "Contract Expiration",
-		sortSequence: ["asc", "desc"],
 		sortType: "number",
 	},
 	Experience: {
 		desc: "Number of Years in the League",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
+	Facilities: {
+		desc: "Facilities Level",
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
@@ -2200,13 +3021,7 @@ const cols: {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
-	MVP: {
-		desc: "Most Valuable Player",
-		sortType: "name",
-	},
-	Name: {
-		sortType: "name",
-	},
+	Name: {},
 	Normal: {
 		desc: "Normal Difficulty",
 		sortSequence: ["desc", "asc"],
@@ -2217,6 +3032,11 @@ const cols: {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
 	},
+	Health: {
+		desc: "Health Level",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
 	Insane: {
 		desc: "Insane Difficulty",
 		sortSequence: ["desc", "asc"],
@@ -2224,6 +3044,7 @@ const cols: {
 	},
 	Negotiate: {
 		sortSequence: [],
+		width: "1px",
 	},
 	Note: {},
 	Odds: {
@@ -2285,6 +3106,7 @@ const cols: {
 		desc: "Draft Pick",
 		sortType: "draftPick",
 	},
+	Players: {},
 	Pop: {
 		desc: "Region Population",
 		sortSequence: ["desc", "asc"],
@@ -2364,6 +3186,15 @@ const cols: {
 		sortType: "number",
 	},
 	"Runner Up": {},
+	Salary: {
+		sortSequence: ["desc", "asc"],
+		sortType: "currency",
+	},
+	Scouting: {
+		desc: "Scouting Level",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+	},
 	Season: {
 		sortSequence: ["desc", "asc"],
 		sortType: "number",
@@ -2399,7 +3230,6 @@ const cols: {
 	Team: {},
 	"Three-Point Winner": {
 		desc: "Three-Point Contest Winner",
-		sortType: "name",
 	},
 	Titles: {
 		desc: "Championships Won",
@@ -2527,6 +3357,12 @@ const cols: {
 		sortType: "number",
 		title: "AS",
 	},
+	"count:allOffense": {
+		desc: "All-Offensive Team",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+		title: "AOT",
+	},
 	"count:allStarMVP": {
 		desc: "All-Star MVP",
 		sortSequence: ["desc", "asc"],
@@ -2599,45 +3435,57 @@ const cols: {
 		sortType: "number",
 		title: "DROY",
 	},
+	"count:poy": {
+		desc: "Pitcher of the Year",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+		title: "POY",
+	},
+	"count:rpoy": {
+		desc: "Relief Pitcher of the Year",
+		sortSequence: ["desc", "asc"],
+		sortType: "number",
+		title: "RPOY",
+	},
 	"award:dpoy": {
 		desc: "Defensive Player of the Year",
-		sortType: "name",
 		title: "DPOY",
 	},
 	"award:dfoy": {
 		desc: "Defensive Forward of the Year",
-		sortType: "name",
 		title: "DFOY",
 	},
 	"award:goy": {
 		desc: "Goalie of the Year",
-		sortType: "name",
 		title: "GOY",
 	},
 	"award:finalsMvp": {
 		desc: `${isSport("hockey") ? "Playoffs" : "Finals"} Most Valuable Player`,
-		sortType: "name",
 		title: `${isSport("hockey") ? "Playoffs" : "Finals"} MVP`,
 	},
 	"award:mip": {
 		desc: "Most Improved Player",
-		sortType: "name",
 		title: "MIP",
 	},
 	"award:mvp": {
 		desc: "Most Valuable Player",
-		sortType: "name",
 		title: "MVP",
 	},
 	"award:roy": {
 		desc: "Rookie of the Year",
-		sortType: "name",
 		title: "ROY",
 	},
 	"award:smoy": {
 		desc: "Sixth Man of the Year",
-		sortType: "name",
 		title: "SMOY",
+	},
+	"award:poy": {
+		desc: "Pitcher of the Year",
+		title: "POY",
+	},
+	"award:rpoy": {
+		desc: "Relief Pitcher of the Year",
+		title: "RPOY",
 	},
 	"award:oroy": {
 		desc: "Offensive Rookie of the Year",
@@ -2654,12 +3502,12 @@ const cols: {
 	...sportSpecificCols,
 };
 
-export default (
+const getCols = (
 	titles: string[],
 	overrides: Record<string, Partial<Col>> = {},
 ): Col[] => {
 	return titles.map(title => {
-		if (!cols.hasOwnProperty(title)) {
+		if (!Object.hasOwn(cols, title)) {
 			throw new Error(`Unknown column: "${title}"`);
 		}
 
@@ -2670,3 +3518,5 @@ export default (
 		};
 	});
 };
+
+export default getCols;

@@ -82,6 +82,10 @@ table.table {
 			position: relative;
 		}
 	}
+
+	.sorting_highlight {
+		background-color: $sorting-highlight-bg !important;
+	}
 }
 
 // Implemented weirdly like https://css-tricks.com/snippets/css/transparent-background-images/ so opacity can be overriden in dark.scss
@@ -94,7 +98,6 @@ table.table thead .sorting::after {
 	bottom: 0;
 	right: 0;
 	position: absolute;
-	z-index: -1;
 }
 
 table.table thead .sorting_asc {

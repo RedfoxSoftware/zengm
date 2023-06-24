@@ -3,7 +3,8 @@
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "project": "./tsconfig.json",
-    "extraFileExtensions": [".mjs"]
+    "extraFileExtensions": [".mjs"],
+    "tsconfigRootDir": "./"
   },
   "ignorePatterns": ["src/worker/ajvHack/esbuild.js"],
   "env": {
@@ -26,10 +27,11 @@
   "settings": {
     "import/resolver": {
       "node": {
-        "extensions": [".mjs", ".js", ".json", ".ts", ".tsx"]
+        "extensions": [".cjs", ".mjs", ".js", ".json", ".ts", ".tsx"]
       }
     },
     "import/extensions": [
+      ".cjs",
       ".js",
       ".mjs",
       ".jsx",
@@ -69,7 +71,6 @@
     "jsx-a11y/no-static-element-interactions": "off",
     "no-constant-condition": ["error", { "checkLoops": false }],
     "no-empty": "off",
-    "no-prototype-builtins": "off",
     "prefer-const": ["error", {
         "destructuring": "all"
     }],
@@ -84,12 +85,12 @@
     "react/react-in-jsx-scope": "off"
   },
   "overrides": [{
-    "files": "**/*.test.{js,ts}",
+    "files": "**/*.test.{cjs,js,ts}",
     "env": {
       "jest": true
     }
   }, {
-    "files": ["*.js", "tools/**/*.{js,ts}"],
+    "files": ["*.js", "tools/**/*.{cjs,js,ts}"],
     "env": {
       "node": true
     },
@@ -104,6 +105,6 @@
     }
   }],
   "globals": {
-      "process": false
+    "process": false
   }
 }

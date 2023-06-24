@@ -4,6 +4,7 @@ import achievements from "./achievements";
 import g from "./g";
 import logEvent from "./logEvent";
 import type { AchievementWhen, Conditions } from "../../common/types";
+import toUI from "./toUI";
 
 type Difficulty = "insane" | "hard" | "normal" | "easy";
 const getDifficulty = (): Difficulty => {
@@ -53,9 +54,20 @@ async function add(
 		logEvent(
 			{
 				type: "achievement",
-				text: `"${achievement.name}" achievement awarded! <a href="/achievements">View all achievements.</a>`,
+				text: `"${achievement.name}" achievement awarded! <a href="/achievements#${achievement.slug}">View all achievements.</a>`,
 				saveToDb: false,
 			},
+			conditions,
+		);
+
+		toUI(
+			"analyticsEvent",
+			[
+				"unlock_achievement",
+				{
+					achievement_id: slug,
+				},
+			],
 			conditions,
 		);
 	};

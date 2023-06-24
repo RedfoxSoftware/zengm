@@ -1,11 +1,12 @@
 import range from "lodash-es/range";
-import assert from "assert";
+import assert from "node:assert/strict";
 import GameSim from ".";
 import { player, team } from "..";
 import loadTeams from "../game/loadTeams";
 import { g, helpers } from "../../util";
 import testHelpers from "../../../test/helpers";
 import Play from "./Play";
+import { DEFAULT_LEVEL } from "../../../common/budgetLevels";
 
 export const genTwoTeams = async () => {
 	testHelpers.resetG();
@@ -13,8 +14,8 @@ export const genTwoTeams = async () => {
 	const teamsDefault = helpers.getTeamsDefault().slice(0, 2);
 	await testHelpers.resetCache({
 		players: [
-			...range(50).map(() => player.generate(0, 25, 2010, true, 15.5)),
-			...range(50).map(() => player.generate(1, 25, 2010, true, 15.5)),
+			...range(50).map(() => player.generate(0, 25, 2010, true, DEFAULT_LEVEL)),
+			...range(50).map(() => player.generate(1, 25, 2010, true, DEFAULT_LEVEL)),
 		],
 		teams: teamsDefault.map(team.generate),
 		teamSeasons: teamsDefault.map(t => team.genSeasonRow(t)),
@@ -32,6 +33,7 @@ export const initGameSim = async () => {
 	return new GameSim({
 		gid: 0,
 		teams: [teams[0], teams[1]],
+		baseInjuryRate: g.get("injuryRate"),
 	});
 };
 
@@ -74,6 +76,51 @@ describe("worker/core/GameSim.football", () => {
 		game.currentPlay = new Play(game);
 
 		assert.strictEqual(game.getPlayType(), "fieldGoalLate");
+	});
+
+	test("kick a field goal at the end of overtime in a tie game rather than running out the clock", async () => {
+		const game = await initGameSim();
+
+		// Arbitrary score, 2nd quarter, ball on the opp 20 yard line, 6 seconds left
+		game.awaitingKickoff = undefined;
+		game.o = 0;
+		game.d = 1;
+		game.team[0].stat.pts = 21;
+		game.team[0].stat.ptsQtrs = [0, 0, 0, game.team[0].stat.pts, 0];
+		game.team[1].stat.pts = game.team[0].stat.pts;
+		game.team[1].stat.ptsQtrs = [0, 0, 0, game.team[1].stat.pts, 0];
+		game.scrimmage = 80;
+		game.clock = 3 / 60;
+		game.overtimes = 1;
+		game.overtimeState = "bothTeamsPossessed";
+		game.currentPlay = new Play(game);
+
+		assert.strictEqual(game.getPlayType(), "fieldGoalLate");
+	});
+
+	test("kick a field goal in overtime if it will win the game and is very likely to go in", async () => {
+		const game = await initGameSim();
+
+		// Arbitrary score, 2nd quarter, ball on the opp 20 yard line, 6 seconds left
+		game.awaitingKickoff = undefined;
+		game.o = 0;
+		game.d = 1;
+		game.team[0].stat.pts = 21;
+		game.team[0].stat.ptsQtrs = [0, 0, 0, game.team[0].stat.pts, 0];
+		game.team[1].stat.pts = game.team[0].stat.pts;
+		game.team[1].stat.ptsQtrs = [0, 0, 0, game.team[1].stat.pts, 0];
+		game.scrimmage = 90;
+		game.clock = 10;
+		game.overtimes = 1;
+		game.overtimeState = "firstPossession";
+		game.probMadeFieldGoal = () => 0.99;
+		game.currentPlay = new Play(game);
+
+		assert(game.getPlayType() !== "fieldGoal");
+
+		game.overtimeState = "bothTeamsPossessed";
+
+		assert.strictEqual(game.getPlayType(), "fieldGoal");
 	});
 
 	test("don't punt when down late, and usually pass", async () => {

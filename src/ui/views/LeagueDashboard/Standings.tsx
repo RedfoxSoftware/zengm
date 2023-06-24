@@ -1,5 +1,4 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import { helpers } from "../../util";
 import { ColPtsOrGB, TeamColumn } from "../Standings";
 import type { View } from "../../../common/types";
@@ -10,7 +9,9 @@ const width100 = {
 
 const Standings = ({
 	confTeams,
-	numPlayoffTeams,
+	maxPlayoffSeed,
+	maxPlayoffSeedNoPlayIn,
+	numConfs,
 	playoffsByConf,
 	pointsFormula,
 	usePts,
@@ -18,7 +19,9 @@ const Standings = ({
 }: Pick<
 	View<"leagueDashboard">,
 	| "confTeams"
-	| "numPlayoffTeams"
+	| "maxPlayoffSeed"
+	| "maxPlayoffSeedNoPlayIn"
+	| "numConfs"
 	| "playoffsByConf"
 	| "pointsFormula"
 	| "usePts"
@@ -28,7 +31,7 @@ const Standings = ({
 
 	return (
 		<>
-			<table className="table table-striped table-sm align-middle mb-1">
+			<table className="table table-striped table-borderless table-sm mb-1">
 				<thead>
 					<tr>
 						<th style={width100}>Conference</th>
@@ -45,7 +48,10 @@ const Standings = ({
 							<tr
 								key={t.tid}
 								className={classNames({
-									separator: i === numPlayoffTeams - 1 && playoffsByConf,
+									separator:
+										(i === maxPlayoffSeed - 1 ||
+											i === maxPlayoffSeedNoPlayIn - 1) &&
+										(playoffsByConf || numConfs === 1),
 									"table-info": t.tid === userTid,
 								})}
 							>
@@ -61,13 +67,6 @@ const Standings = ({
 			<a href={helpers.leagueUrl(["standings"])}>» League Standings</a>
 		</>
 	);
-};
-
-Standings.propTypes = {
-	confTeams: PropTypes.arrayOf(PropTypes.object).isRequired,
-	numPlayoffTeams: PropTypes.number.isRequired,
-	playoffsByConf: PropTypes.bool.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default Standings;

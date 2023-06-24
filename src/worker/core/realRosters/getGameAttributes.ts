@@ -1,6 +1,15 @@
 import { PHASE } from "../../../common";
-import type { GetLeagueOptions } from "../../../common/types";
+import type {
+	GameAttributesLeague,
+	GetLeagueOptions,
+} from "../../../common/types";
 import { FIRST_SEASON_WITH_ALEXNOOB_ROSTERS } from "./getLeague";
+
+type MyGameAttributes = Partial<GameAttributesLeague> &
+	Pick<
+		GameAttributesLeague,
+		"confs" | "divs" | "numGames" | "numGamesPlayoffSeries"
+	>;
 
 const getGameAttributes = (
 	initialGameAttributes: any,
@@ -24,7 +33,7 @@ const getGameAttributes = (
 			gameAttributes.phase = options.phase;
 		}
 
-		return gameAttributes;
+		return gameAttributes as MyGameAttributes;
 	}
 
 	if (options.type === "legends") {
@@ -46,8 +55,10 @@ const getGameAttributes = (
 			}
 		}
 
-		return gameAttributes;
+		return gameAttributes as MyGameAttributes;
 	}
+
+	throw new Error("Should not happen");
 };
 
 export default getGameAttributes;

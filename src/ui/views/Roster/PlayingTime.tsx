@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import type { ChangeEvent } from "react";
 import { toWorker } from "../../util";
 import type { View } from "../../../common/types";
@@ -45,7 +44,7 @@ const handlePtChange = async (
 		return;
 	}
 
-	await toWorker("main", "updatePlayingTime", p.pid, ptModifier);
+	await toWorker("main", "updatePlayingTime", { pid: p.pid, ptModifier });
 };
 
 const PlayingTime = ({ p, userTid }: { p: Player; userTid: number }) => {
@@ -84,11 +83,6 @@ const PlayingTime = ({ p, userTid }: { p: Player; userTid: number }) => {
 			})}
 		</select>
 	);
-};
-
-PlayingTime.propTypes = {
-	p: PropTypes.object.isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default PlayingTime;

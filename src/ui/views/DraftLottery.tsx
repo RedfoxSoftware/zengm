@@ -1,6 +1,5 @@
 import classNames from "classnames";
 import range from "lodash-es/range";
-import PropTypes from "prop-types";
 import { useEffect, useReducer, useRef } from "react";
 import {
 	DraftAbbrev,
@@ -16,28 +15,11 @@ import type {
 	DraftType,
 } from "../../common/types";
 import useClickable from "../hooks/useClickable";
-import { getDraftLotteryProbs } from "../../common";
-
-const draftTypeDescriptions: Record<DraftType | "dummy", string> = {
-	nba2019: "Weighted lottery for the top 4 picks, like the NBA since 2019",
-	nba1994: "Weighted lottery for the top 3 picks, like the NBA from 1994-2018",
-	nba1990: "Weighted lottery for the top 3 picks, like the NBA from 1990-1993",
-	nhl2017: "Weighted lottery for the top 3 picks, like the NHL since 2017",
-	randomLotteryFirst3:
-		"Random lottery for the top 3 picks, like the NBA from 1987-1989",
-	randomLottery:
-		"Non-playoff teams draft in random order, like the NBA from 1985-1986",
-	coinFlip:
-		"Coin flip to determine the top 2 picks, like the NBA from 1966-1984",
-	noLottery:
-		"No lottery, teams draft in order of their record, from worst to best with non-playoff teams coming first",
-	noLotteryReverse:
-		"No lottery, teams draft in order of their record, from best to worst with playoff teams coming first",
-	random: "Teams draft in random order, including playoff teams",
-	freeAgents:
-		"There is no draft and all, rookies simply become free agents who can be signed by any team",
-	dummy: "From historical data",
-};
+import {
+	draftTypeDescriptions,
+	getDraftLotteryProbs,
+} from "../../common/draftLottery";
+import useStickyXX from "../components/DataTable/useStickyXX";
 
 type Props = View<"draftLottery">;
 type State = {
@@ -132,6 +114,7 @@ const Row = ({
 	indRevealed,
 	toReveal,
 	probs,
+	spectator,
 }: {
 	NUM_PICKS: number;
 	i: number;
@@ -140,19 +123,26 @@ const Row = ({
 	userTid: number;
 	indRevealed: State["indRevealed"];
 	toReveal: State["toReveal"];
-	probs: NonNullable<ReturnType<typeof getDraftLotteryProbs>>;
+	probs: NonNullable<ReturnType<typeof getDraftLotteryProbs>["probs"]>;
+	spectator: boolean;
 }) => {
 	const { clicked, toggleClicked } = useClickable();
 
-	const { tid, originalTid, chances, pick, won, lost, otl, tied, pts } = t;
+	const { tid, originalTid, chances, pick, won, lost, otl, tied, pts, dpid } =
+		t;
 
+	const userTeam = tid === userTid;
+
+	let revealedPickNumber = null;
 	const pickCols = range(NUM_PICKS).map(j => {
 		const prob = probs[i][j];
 		const pct = prob !== undefined ? `${(prob * 100).toFixed(1)}%` : undefined;
+
 		let highlighted = false;
 
 		if (pick !== undefined) {
 			highlighted = pick === j + 1;
+			revealedPickNumber = pick;
 		} else if (NUM_PICKS - 1 - j <= indRevealed) {
 			// Has this round been revealed?
 			// Is this pick revealed?
@@ -160,13 +150,15 @@ const Row = ({
 
 			if (ind === NUM_PICKS - 1 - j) {
 				highlighted = true;
+				revealedPickNumber = j + 1;
 			}
 		}
 
 		return (
 			<td
 				className={classNames({
-					"table-success": highlighted,
+					"table-success": highlighted && !userTeam,
+					"table-info": highlighted && userTeam,
 				})}
 				key={j}
 			>
@@ -174,6 +166,7 @@ const Row = ({
 			</td>
 		);
 	});
+
 	const row = (
 		<tr
 			className={classNames({
@@ -183,18 +176,43 @@ const Row = ({
 		>
 			<td
 				className={classNames({
-					"table-info": tid === userTid,
+					"table-info": userTeam,
 				})}
 			>
 				<DraftAbbrev tid={tid} originalTid={originalTid} season={season} />
 			</td>
+			<td
+				className={classNames(
+					{
+						"table-info": userTeam,
+					},
+					"text-end",
+				)}
+			>
+				{revealedPickNumber}
+			</td>
+			<td className={spectator ? "p-0" : undefined}>
+				{userTeam || spectator ? null : (
+					<button
+						className="btn btn-xs btn-light-bordered"
+						onClick={async () => {
+							await toWorker("actions", "tradeFor", {
+								dpid,
+								tid,
+							});
+						}}
+					>
+						Trade
+					</button>
+				)}
+			</td>
 			<td>
 				<a href={helpers.leagueUrl(["standings", season])}>
-					{pts ? `${pts} pts (` : null}
+					{pts !== undefined ? `${pts} pts (` : null}
 					{won}-{lost}
 					{otl > 0 ? <>-{otl}</> : null}
 					{tied > 0 ? <>-{tied}</> : null}
-					{pts ? `)` : null}
+					{pts !== undefined ? `)` : null}
 				</a>
 			</td>
 			<td>{chances}</td>
@@ -223,7 +241,11 @@ const Rigged = ({
 
 	return (
 		<tr>
-			<td colSpan={3} />
+			<th />
+			<th />
+			<th />
+			<th />
+			<th />
 			{actualRigged.map((selected, i) => (
 				<td key={i}>
 					<select
@@ -318,7 +340,11 @@ const DraftLotteryTable = (props: Props) => {
 
 	const startLottery = async () => {
 		dispatch({ type: "startClicked" });
-		const draftLotteryResult = await toWorker("main", "draftLottery");
+		const draftLotteryResult = await toWorker(
+			"main",
+			"draftLottery",
+			undefined,
+		);
 		if (draftLotteryResult) {
 			const { draftType, result } = draftLotteryResult;
 
@@ -326,7 +352,9 @@ const DraftLotteryTable = (props: Props) => {
 
 			for (let i = 0; i < result.length; i++) {
 				const pick = result[i].pick;
-				toReveal[pick - 1] = i;
+				if (pick !== undefined) {
+					toReveal[pick - 1] = i;
+				}
 				result[i].pick = undefined;
 			}
 			toReveal.reverse();
@@ -360,7 +388,7 @@ const DraftLotteryTable = (props: Props) => {
 
 	const { godMode, numToPick, rigged, season, type, userTid } = props;
 	const { draftType, result } = state;
-	const probs = getDraftLotteryProbs(result, draftType);
+	const { tooSlow, probs } = getDraftLotteryProbs(result, draftType, numToPick);
 	const NUM_PICKS = result !== undefined ? result.length : 14;
 
 	const showStartButton =
@@ -370,6 +398,8 @@ const DraftLotteryTable = (props: Props) => {
 		result.length > 0;
 
 	const showRigButton = showStartButton && godMode && rigged === undefined;
+
+	const { stickyClass, tableRef } = useStickyXX(2);
 
 	let table;
 
@@ -396,17 +426,40 @@ const DraftLotteryTable = (props: Props) => {
 		table = (
 			<>
 				<p />
+				{tooSlow ? (
+					<div className="alert alert-warning d-inline-block">
+						<p>
+							<b>Warning:</b> Computing exact odds for so many teams and picks
+							is too slow, so estimates are shown. The lottery will still run
+							correctly though.
+						</p>
+					</div>
+				) : null}
 				<ResponsiveTableWrapper nonfluid>
-					<table className="table table-striped table-bordered table-sm table-hover">
+					<table
+						className={classNames(
+							"table table-striped table-borderless table-sm table-hover",
+							stickyClass,
+						)}
+						ref={tableRef}
+					>
 						<thead>
 							<tr>
-								<th colSpan={3} />
+								<th />
+								<th />
+								<th className={props.spectator ? "p-0" : undefined} />
+								<th />
+								<th />
 								<th colSpan={NUM_PICKS} className="text-center">
 									Pick Probabilities
 								</th>
 							</tr>
 							<tr>
 								<th>Team</th>
+								<th title="Pick number" className="text-end">
+									#
+								</th>
+								<th className={props.spectator ? "p-0" : undefined} />
 								<th>Record</th>
 								<th>Chances</th>
 								{result.map((row, i) => (
@@ -432,6 +485,7 @@ const DraftLotteryTable = (props: Props) => {
 									indRevealed={state.indRevealed}
 									toReveal={state.toReveal}
 									probs={probs}
+									spectator={props.spectator}
 								/>
 							))}
 						</tbody>
@@ -440,7 +494,7 @@ const DraftLotteryTable = (props: Props) => {
 			</>
 		);
 	} else {
-		table = <p>No draft lottery results for {season}.</p>;
+		table = <p className="mt-3">No draft lottery results for {season}.</p>;
 	}
 
 	return (
@@ -490,23 +544,6 @@ const DraftLotteryTable = (props: Props) => {
 	);
 };
 
-DraftLotteryTable.propTypes = {
-	draftType: PropTypes.string,
-	result: PropTypes.arrayOf(
-		PropTypes.shape({
-			tid: PropTypes.number.isRequired,
-			originalTid: PropTypes.number.isRequired,
-			chances: PropTypes.number.isRequired,
-			pick: PropTypes.number,
-			won: PropTypes.number.isRequired,
-			lost: PropTypes.number.isRequired,
-		}),
-	),
-	season: PropTypes.number.isRequired,
-	type: PropTypes.string.isRequired,
-	userTid: PropTypes.number.isRequired,
-};
-
 const DraftLottery = (props: Props) => {
 	useTitleBar({
 		title: "Draft Lottery",
@@ -545,7 +582,5 @@ const DraftLottery = (props: Props) => {
 		</>
 	);
 };
-
-DraftLottery.propTypes = DraftLotteryTable.propTypes;
 
 export default DraftLottery;

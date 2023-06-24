@@ -55,10 +55,7 @@ const HeadToHeadAll = ({
 			key: t.tid,
 			data: [
 				{
-					classNames: classNames(
-						"align-middle",
-						userTid === t.tid ? "table-info" : undefined,
-					),
+					classNames: classNames(userTid === t.tid ? "table-info" : undefined),
 					value: (
 						<a
 							href={helpers.leagueUrl([
@@ -78,14 +75,6 @@ const HeadToHeadAll = ({
 						return null;
 					}
 
-					let record = `${info.won}-${info.lost}`;
-					if (info.tied !== undefined && info.tied > 0) {
-						record += `-${info.tied}`;
-					}
-					if (info.otl !== undefined && info.otl > 0) {
-						record += `-${info.otl}`;
-					}
-
 					return {
 						style: gradientStyle(info.winp),
 						title: `${t.abbrev}'s record vs ${t2.abbrev}`,
@@ -93,7 +82,7 @@ const HeadToHeadAll = ({
 							<>
 								{helpers.roundWinp(info.winp)}
 								<br />
-								<small>{record}</small>
+								<small>{helpers.formatRecord(info)}</small>
 							</>
 						),
 					};
@@ -126,6 +115,7 @@ const HeadToHeadAll = ({
 					<DataTable
 						cols={cols}
 						defaultSort={[0, "asc"]}
+						defaultStickyCols={1}
 						hideAllControls
 						name="HeadToHeadAll"
 						rows={rows}

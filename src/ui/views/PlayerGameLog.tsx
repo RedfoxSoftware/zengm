@@ -10,6 +10,7 @@ const PlayerGameLog = ({
 	currentSeason,
 	customMenu,
 	freeAgent,
+	gender,
 	godMode,
 	injured,
 	jerseyNumberInfos,
@@ -27,6 +28,7 @@ const PlayerGameLog = ({
 	teamJersey,
 	teamName,
 	teamURL,
+	userTid,
 	willingToSign,
 	gameLog,
 	season,
@@ -69,7 +71,7 @@ const PlayerGameLog = ({
 		...stats.map(stat => `stat:${stat}`),
 	]);
 
-	const makeRow = (game: typeof gameLog[number], i: number): DataTableRow => {
+	const makeRow = (game: (typeof gameLog)[number], i: number): DataTableRow => {
 		return {
 			key: i,
 			data: [
@@ -185,6 +187,7 @@ const PlayerGameLog = ({
 			<TopStuff
 				currentSeason={currentSeason}
 				freeAgent={freeAgent}
+				gender={gender}
 				godMode={godMode}
 				injured={injured}
 				jerseyNumberInfos={jerseyNumberInfos}
@@ -202,6 +205,7 @@ const PlayerGameLog = ({
 				teamJersey={teamJersey}
 				teamName={teamName}
 				teamURL={teamURL}
+				userTid={userTid}
 				willingToSign={willingToSign}
 			/>
 

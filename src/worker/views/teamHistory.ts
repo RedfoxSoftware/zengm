@@ -8,14 +8,14 @@ import type {
 } from "../../common/types";
 import { getMostCommonPosition } from "../core/player/checkJerseyNumberRetirement";
 import { bySport } from "../../common";
+import addFirstNameShort from "../util/addFirstNameShort";
+import { groupByUnique } from "../../common/groupBy";
 
 export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
 	let bestRecord;
 	let worstRecord;
 	let bestWinp = -Infinity;
 	let worstWinp = Infinity;
-	let mostWon = 0;
-	let mostLost = 0;
 
 	const history: {
 		season: number;
@@ -82,24 +82,29 @@ export const getHistoryTeam = (teamSeasons: TeamSeason[]) => {
 			championships += 1;
 		}
 
-		const winp = helpers.calcWinp(teamSeason);
+		const gp = helpers.getTeamSeasonGp(teamSeason);
+		if (gp > 0) {
+			const winp = helpers.calcWinp(teamSeason);
 
-		if (
-			winp > bestWinp &&
-			(teamSeason.season < g.get("season") || teamSeason.won >= mostWon)
-		) {
-			bestRecord = history.at(-1);
-			bestWinp = winp;
-			mostWon = teamSeason.won;
-		}
+			if (
+				!bestRecord ||
+				(winp >= bestWinp &&
+					(teamSeason.won > bestRecord.won ||
+						teamSeason.lost < bestRecord.lost))
+			) {
+				bestRecord = history.at(-1);
+				bestWinp = winp;
+			}
 
-		if (
-			winp < worstWinp &&
-			(teamSeason.season < g.get("season") || teamSeason.won >= mostLost)
-		) {
-			worstRecord = history.at(-1);
-			worstWinp = winp;
-			mostLost = teamSeason.lost;
+			if (
+				!worstRecord ||
+				(winp <= worstWinp &&
+					(teamSeason.lost > worstRecord.lost ||
+						teamSeason.won < worstRecord.won))
+			) {
+				worstRecord = history.at(-1);
+				worstWinp = winp;
+			}
 		}
 	}
 
@@ -135,6 +140,7 @@ export const getHistory = async (
 	const teamHistory = getHistoryTeam(teamSeasons);
 
 	const stats = bySport({
+		baseball: ["gp", "keyStats", "war"],
 		basketball: ["gp", "min", "pts", "trb", "ast", "per", "ewa"],
 		football: ["gp", "keyStats", "av"],
 		hockey: ["gp", "keyStats", "ops", "dps", "ps"],
@@ -143,12 +149,14 @@ export const getHistory = async (
 	let players = await idb.getCopies.playersPlus(playersAll, {
 		attrs: [
 			"pid",
-			"name",
+			"firstName",
+			"lastName",
 			"injury",
 			"tid",
 			"hof",
 			"watch",
 			"jerseyNumber",
+			"awards",
 			"retirableJerseyNumbers",
 		],
 		ratings: ["pos"],
@@ -158,6 +166,14 @@ export const getHistory = async (
 	// Not sure why this is necessary, but sometimes statsTids gets an entry but ratings doesn't
 	players = players.filter(p => p.careerStats.gp > 0);
 
+	players = addFirstNameShort(players);
+
+	const champSeasons = new Set(
+		teamHistory.history
+			.filter(row => row.playoffRoundsWon >= row.numPlayoffRounds)
+			.map(row => row.season),
+	);
+
 	for (const p of players) {
 		p.lastYr = "";
 		if (p.stats.length > 0) {
@@ -166,6 +182,12 @@ export const getHistory = async (
 				p.lastYr += ` ${p.stats.at(-1).abbrev}`;
 			}
 		}
+
+		p.numRings = p.awards.filter(
+			(award: Player["awards"][number]) =>
+				award.type === "Won Championship" && champSeasons.has(award.season),
+		).length;
+		delete p.awards;
 
 		// Handle case where ratings don't exist
 		p.pos = p.ratings.length > 0 ? p.ratings.at(-1).pos : "";
@@ -214,41 +236,42 @@ const updateTeamHistory = async (
 					region: ts ? ts.region : t.region,
 				};
 
-				let name;
+				let firstName;
+				let lastName;
 				let pos;
-				let champSeasons: number[] = [];
+				let lastSeasonWithTeam = -Infinity;
 				if (row.pid !== undefined) {
 					const p = await idb.getCopy.players({ pid: row.pid }, "noCopyCache");
 					if (p) {
-						name = `${p.firstName} ${p.lastName}`;
+						firstName = p.firstName;
+						lastName = p.lastName;
 						pos = getMostCommonPosition(p, inputs.tid);
-
-						champSeasons = p.awards
-							.filter(award => award.type === "Won Championship")
-							.map(award => award.season)
-							.sort();
+						for (const row of p.stats) {
+							if (row.tid === inputs.tid && row.season > lastSeasonWithTeam) {
+								lastSeasonWithTeam = row.season;
+							}
+						}
 					}
 				}
 
 				return {
 					...row,
 					teamInfo,
-					name,
+					firstName,
+					lastName,
 					pos,
-					champSeasons,
+					lastSeasonWithTeam,
 				};
 			}),
 		);
 
 		const retiredByPid: Record<number, string[]> = {};
-		if (retiredJerseyNumbers) {
-			for (const { pid, number } of retiredJerseyNumbers) {
-				if (pid !== undefined) {
-					if (!retiredByPid[pid]) {
-						retiredByPid[pid] = [];
-					}
-					retiredByPid[pid].push(number);
+		for (const { pid, number } of retiredJerseyNumbers) {
+			if (pid !== undefined) {
+				if (!retiredByPid[pid]) {
+					retiredByPid[pid] = [];
 				}
+				retiredByPid[pid].push(number);
 			}
 		}
 
@@ -275,23 +298,21 @@ const updateTeamHistory = async (
 
 		const history = await getHistory(teamSeasons, players);
 
+		const playersByPid = groupByUnique(history.players, "pid");
 		const retiredJerseyNumbers2 = retiredJerseyNumbers.map(row => {
 			let numRings = 0;
-			for (const historyRow of history.history) {
-				if (
-					historyRow.playoffRoundsWon >= historyRow.numPlayoffRounds &&
-					row.champSeasons.includes(historyRow.season)
-				) {
-					numRings += 1;
-				}
+			if (row.pid !== undefined) {
+				numRings = playersByPid[row.pid]?.numRings ?? 0;
 			}
 
 			return {
-				name: row.name,
+				firstName: row.firstName,
+				lastName: row.lastName,
 				number: row.number,
 				pid: row.pid,
 				pos: row.pos,
 				score: row.score,
+				lastSeasonWithTeam: row.lastSeasonWithTeam,
 				seasonRetired: row.seasonRetired,
 				seasonTeamInfo: row.seasonTeamInfo,
 				teamInfo: row.teamInfo,

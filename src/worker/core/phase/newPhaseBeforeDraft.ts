@@ -39,7 +39,7 @@ const upcomingScheduledEventBlocksInflation = async () => {
 	return scheduledEvents.some(event => {
 		if (event.type === "gameAttributes") {
 			for (const key of INFLATION_GAME_ATTRIBUTES) {
-				if (event.info.hasOwnProperty(key)) {
+				if (Object.hasOwn(event.info, key)) {
 					return true;
 				}
 			}
@@ -173,6 +173,7 @@ const setChampNoPlayoffs = async (conditions: Conditions) => {
 				g.get("teamInfoCache")[tid]?.name
 			}</a> finished in 1st place and are league champions!`,
 			showNotification: true,
+			hideInLiveGame: true,
 			tids: [tid],
 			score: 20,
 			saveToDb: true,
@@ -183,97 +184,11 @@ const setChampNoPlayoffs = async (conditions: Conditions) => {
 	await idb.cache.teamSeasons.put(teamSeason);
 };
 
-const newPhaseBeforeDraft = async (
-	conditions: Conditions,
-	liveGameInProgress: boolean = false,
-): Promise<PhaseReturn> => {
-	if (g.get("numGamesPlayoffSeries").length === 0) {
-		// Set champ of the league!
-		await setChampNoPlayoffs(conditions);
-	}
-
-	achievement.check("afterPlayoffs", conditions);
-	await season.doAwards(conditions);
-	const teams = await idb.getCopies.teamsPlus(
-		{
-			attrs: ["tid"],
-			seasonAttrs: ["playoffRoundsWon"],
-			season: g.get("season"),
-			active: true,
-		},
-		"noCopyCache",
-	);
-
-	// Give award to all players on the championship team
-	const t = teams.find(
-		t2 =>
-			t2.seasonAttrs.playoffRoundsWon ===
-			g.get("numGamesPlayoffSeries", "current").length,
-	);
-
-	if (t !== undefined) {
-		const players = await idb.cache.players.indexGetAll("playersByTid", t.tid);
-
-		for (const p of players) {
-			p.awards.push({
-				season: g.get("season"),
-				type: "Won Championship",
-			});
-			await idb.cache.players.put(p);
-		}
-	}
-
-	if (g.get("challengeLoseBestPlayer")) {
-		const tids = g.get("userTids");
-		for (const tid of tids) {
-			const players = await idb.cache.players.indexGetAll("playersByTid", tid);
-
-			let bestOvr = 0;
-			let bestPlayer: Player | undefined;
-			for (const p of players) {
-				const ovr = p.ratings.at(-1).ovr;
-				if (ovr > bestOvr) {
-					bestOvr = ovr;
-					bestPlayer = p;
-				}
-			}
-
-			if (bestPlayer) {
-				// Kill/retire player, depending on if he's a real player or not
-				if (bestPlayer.real) {
-					await player.retire(bestPlayer, conditions);
-					await idb.cache.players.put(bestPlayer);
-
-					// Similar to the tragic death notification
-					logEvent(
-						{
-							type: "tragedy",
-							text: `<a href="${helpers.leagueUrl([
-								"player",
-								bestPlayer.pid,
-							])}">${bestPlayer.firstName} ${
-								bestPlayer.lastName
-							}</a> decided to retire in the prime of his career.`,
-							showNotification: true,
-							pids: [bestPlayer.pid],
-							tids: [tid],
-							persistent: true,
-							score: 20,
-						},
-						conditions,
-					);
-				} else {
-					await player.killOne(conditions, bestPlayer);
-				}
-			}
-		}
-	}
-
+const doThanosMode = async (conditions: Conditions) => {
 	const thanosCooldownEnd = g.get("thanosCooldownEnd");
 	if (
-		g.get("challengeThanosMode") &&
 		(thanosCooldownEnd === undefined || g.get("season") >= thanosCooldownEnd) &&
-		Math.random() < 0.2
+		Math.random() < g.get("challengeThanosMode") / 100
 	) {
 		const activePlayers = await idb.cache.players.indexGetAll("playersByTid", [
 			0,
@@ -361,6 +276,131 @@ const newPhaseBeforeDraft = async (
 			thanosCooldownEnd: g.get("season") + 3,
 		});
 	}
+};
+
+const doSisyphusMode = async (conditions: Conditions) => {
+	const { swappedTid } = await league.swapWorstRoster(true);
+	let text = "Sisyphus Mode activated! ";
+	const tids = [g.get("userTid")];
+	if (swappedTid !== undefined) {
+		const teamInfo = g.get("teamInfoCache")[swappedTid];
+		text += `Your roster has been swapped with the worst team in the league, the ${teamInfo.region} ${teamInfo.name}.`;
+		tids.push(swappedTid);
+	} else {
+		text +=
+			"But somehow your roster is already the worst in the league, so it didn't do anything.";
+	}
+
+	logEvent(
+		{
+			type: "sisyphusTeam",
+			text,
+			showNotification: true,
+			hideInLiveGame: true,
+			pids: [],
+			tids,
+			persistent: true,
+			score: 20,
+		},
+		conditions,
+	);
+};
+
+const newPhaseBeforeDraft = async (
+	conditions: Conditions,
+	liveGameInProgress: boolean = false,
+): Promise<PhaseReturn> => {
+	if (g.get("numGamesPlayoffSeries").length === 0) {
+		// Set champ of the league!
+		await setChampNoPlayoffs(conditions);
+	}
+
+	await achievement.check("afterPlayoffs", conditions);
+
+	await season.doAwards(conditions);
+	const teams = await idb.getCopies.teamsPlus(
+		{
+			attrs: ["tid"],
+			seasonAttrs: ["playoffRoundsWon"],
+			season: g.get("season"),
+			active: true,
+		},
+		"noCopyCache",
+	);
+
+	// Give award to all players on the championship team
+	const t = teams.find(
+		t2 =>
+			t2.seasonAttrs.playoffRoundsWon ===
+			g.get("numGamesPlayoffSeries", "current").length,
+	);
+
+	if (t !== undefined) {
+		const players = await idb.cache.players.indexGetAll("playersByTid", t.tid);
+
+		for (const p of players) {
+			p.awards.push({
+				season: g.get("season"),
+				type: "Won Championship",
+			});
+			await idb.cache.players.put(p);
+		}
+	}
+
+	if (g.get("challengeLoseBestPlayer")) {
+		const tids = g.get("userTids");
+		for (const tid of tids) {
+			const players = await idb.cache.players.indexGetAll("playersByTid", tid);
+
+			let bestOvr = 0;
+			let bestPlayer: Player | undefined;
+			for (const p of players) {
+				const ovr = p.ratings.at(-1)!.ovr;
+				if (ovr > bestOvr) {
+					bestOvr = ovr;
+					bestPlayer = p;
+				}
+			}
+
+			if (bestPlayer) {
+				// Kill/retire player, depending on if he's a real player or not
+				if (bestPlayer.real) {
+					await player.retire(bestPlayer, conditions);
+					await idb.cache.players.put(bestPlayer);
+
+					// Similar to the tragic death notification
+					logEvent(
+						{
+							type: "tragedy",
+							text: `<a href="${helpers.leagueUrl([
+								"player",
+								bestPlayer.pid,
+							])}">${bestPlayer.firstName} ${
+								bestPlayer.lastName
+							}</a> decided to retire in the prime of ${helpers.pronoun(
+								g.get("gender"),
+								"his",
+							)} career.`,
+							showNotification: true,
+							pids: [bestPlayer.pid],
+							tids: [tid],
+							persistent: true,
+							score: 20,
+						},
+						conditions,
+					);
+				} else {
+					await player.killOne(conditions, bestPlayer);
+				}
+			}
+		}
+	}
+
+	await doThanosMode(conditions);
+
+	if (g.get("challengeSisyphusMode") && t?.tid === g.get("userTid")) {
+		await doSisyphusMode(conditions);
+	}
 
 	if (!g.get("repeatSeason")) {
 		// Do annual tasks for each player, like checking for retirement
@@ -388,7 +428,8 @@ const newPhaseBeforeDraft = async (
 
 			// Update "free agent years" counter and retire players who have been free agents for more than one years
 			if (p.tid === PLAYER.FREE_AGENT) {
-				if (p.yearsFreeAgent >= 1) {
+				const age = g.get("season") - p.born.year;
+				if (p.yearsFreeAgent >= 1 && age >= g.get("minRetireAge")) {
 					await player.retire(p, conditions);
 					update = true;
 				} else {
@@ -455,7 +496,7 @@ const newPhaseBeforeDraft = async (
 		}
 
 		await team.updateStrategies();
-		achievement.check("afterAwards", conditions);
+		await achievement.check("afterAwards", conditions);
 		const response = await season.updateOwnerMood();
 		if (response) {
 			await genMessage(response.deltas, response.cappedDeltas);
@@ -471,15 +512,18 @@ const newPhaseBeforeDraft = async (
 	}
 
 	if (g.get("gameOver")) {
-		achievement.check("afterFired", conditions);
+		await achievement.check("afterFired", conditions);
 	}
 
 	await doInflation(conditions);
 
 	// Don't redirect if we're viewing a live game now
-	let url;
+	let redirect;
 	if (!liveGameInProgress) {
-		url = helpers.leagueUrl(["history"]);
+		redirect = {
+			url: helpers.leagueUrl(["history"]),
+			text: "View season summary",
+		};
 	} else {
 		local.unviewedSeasonSummary = true;
 	}
@@ -488,9 +532,19 @@ const newPhaseBeforeDraft = async (
 		riggedLottery: undefined,
 	});
 
-	toUI("bbgmPing", ["season", g.get("season")], conditions);
+	toUI(
+		"analyticsEvent",
+		[
+			"completed_season",
+			{
+				season: g.get("season"),
+				league_id: g.get("lid"),
+			},
+		],
+		conditions,
+	);
 	return {
-		url,
+		redirect,
 		updateEvents: ["playerMovement"],
 	};
 };

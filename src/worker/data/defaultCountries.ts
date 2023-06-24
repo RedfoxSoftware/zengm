@@ -6,6 +6,7 @@ import { bySport } from "../../common";
 // Countries in default names will be added to this in loadNames.ts, so be careful using this anywhere else!
 
 const groups = {
+	chinese: ["China", "Taiwan"],
 	hispanic: [
 		"Argentina",
 		"Chile",
@@ -54,7 +55,63 @@ if (process.env.NODE_ENV === "test") {
 	};
 } else {
 	defaultCountries = bySport<Record<string, number>>({
+		// Frequencies manually taken from https://en.wikipedia.org/wiki/List_of_active_Major_League_Baseball_players_by_country_of_birth
+		baseball: {
+			USA: 1088,
+			"Dominican Republic": 169,
+			Venezuela: 101,
+			"Puerto Rico": 30,
+			Cuba: 27,
+			Mexico: 17,
+			Canada: 14,
+			Colombia: 11,
+			Panama: 9,
+			Japan: 8,
+			"South Korea": 7,
+			// "Curacao": 5, // Not sure what to make of names
+			Australia: 3,
+			Taiwan: 2,
+
+			// Extra countries from https://www.baseball-reference.com/bio/
+			"American Samoa": 1,
+			Austria: 1,
+			Bahamas: 1,
+			Belgium: 1,
+			Brazil: 1,
+			China: 1,
+			"Czech Republic": 1,
+			Denmark: 1,
+			England: 1,
+			Finland: 1,
+			France: 1,
+			Germany: 1,
+			Greece: 1,
+			Honduras: 1,
+			Indonesia: 1,
+			Ireland: 1,
+			Italy: 1,
+			Jamaica: 1,
+			Latvia: 1,
+			Lithuania: 1,
+			Netherlands: 1,
+			Nicaragua: 1,
+			Norway: 1,
+			Peru: 1,
+			Philippines: 1,
+			Poland: 1,
+			Portugal: 1,
+			Russia: 1,
+			Slovakia: 1,
+			"South Africa": 1,
+			Spain: 1,
+			Sweden: 1,
+			Switzerland: 1,
+			"Virgin Islands": 1,
+			Ukraine: 1,
+			Vietnam: 1,
+		},
 		basketball: {
+			Albania: 2,
 			Algeria: 1,
 			Angola: 8,
 			Argentina: 71,
@@ -73,7 +130,7 @@ if (process.env.NODE_ENV === "test") {
 			"Cape Verde": 5,
 			"Central African Republic": 9,
 			Chad: 5,
-			China: 30,
+			China: 34,
 			Colombia: 15,
 			Congo: 34,
 			Croatia: 216,
@@ -140,6 +197,7 @@ if (process.env.NODE_ENV === "test") {
 			Sudan: 24,
 			Sweden: 47,
 			Switzerland: 15,
+			Taiwan: 3,
 			"Trinidad and Tobago": 11,
 			Turkey: 110,
 			USA: 23461,

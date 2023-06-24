@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { memo } from "react";
 import { GAME_NAME } from "../../common";
 
@@ -12,8 +11,8 @@ const LogoAndText = memo(({ gold, inLeague, updating }: Props) => {
 		<a
 			className={
 				inLeague
-					? "navbar-brand text-muted d-none d-md-inline"
-					: "navbar-brand text-muted"
+					? "navbar-brand text-body-secondary d-none d-md-inline ms-md-2 ms-lg-0"
+					: "navbar-brand text-body-secondary"
 			}
 			href="/"
 		>
@@ -27,17 +26,12 @@ const LogoAndText = memo(({ gold, inLeague, updating }: Props) => {
 					animationPlayState: updating ? "running" : "paused",
 				}}
 			/>
-			<span className="d-none d-lg-inline">{GAME_NAME}</span>
-			{!inLeague ? <span className="d-lg-none">{GAME_NAME}</span> : null}
+
+			<span className={inLeague ? "d-none d-lg-inline" : undefined}>
+				{GAME_NAME}
+			</span>
 		</a>
 	);
 });
-
-// @ts-ignore
-LogoAndText.propTypes = {
-	gold: PropTypes.bool,
-	inLeague: PropTypes.bool,
-	updating: PropTypes.bool.isRequired,
-};
 
 export default LogoAndText;

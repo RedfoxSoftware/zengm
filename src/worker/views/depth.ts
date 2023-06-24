@@ -1,10 +1,11 @@
-import { team } from "../core";
+import { player, team } from "../core";
 import { idb } from "../db";
 import { g } from "../util";
 import posRatings from "../../common/posRatings";
 import type { UpdateEvents, ViewInput } from "../../common/types";
 import { bySport, isSport } from "../../common";
 import { NUM_LINES, NUM_PLAYERS_PER_LINE } from "../../common/constants.hockey";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const defenseStats = [
 	"defTckSolo",
@@ -24,7 +25,46 @@ const defenseStats = [
 	"defFmbTD",
 ];
 
+const baseballLineupStats = [
+	"war",
+	"ab",
+	"h",
+	"hr",
+	"ba",
+	"r",
+	"rbi",
+	"sb",
+	"obp",
+	"slg",
+	"ops",
+];
+
+export const buffOvrDH = (p: {
+	ratings: {
+		ovrs: {
+			DH: number;
+		};
+		pots: {
+			DH: number;
+		};
+	};
+}) => {
+	// For roster auto sort to work, it's best if DH is only the offensive component, so it is directly comparable to other positions. Otherwise you could wind up with a better offensive+defensive player winding up at DH, when you'd rather have him in the field. But then, displayed ovrs for DHs are really low. So adjust it with this.
+	for (const key of ["ovrs", "pots"] as const) {
+		if (p.ratings?.[key]?.DH !== undefined) {
+			p.ratings[key].DH = player.limitRating((0.95 / 0.7) * p.ratings[key].DH);
+		}
+	}
+};
+
 const stats = bySport<Record<string, string[]>>({
+	baseball: {
+		L: baseballLineupStats,
+		LP: baseballLineupStats,
+		D: baseballLineupStats,
+		DP: baseballLineupStats,
+		P: ["war", "w", "l", "era", "gpPit", "gsPit", "sv", "ip", "soPit", "whip"],
+	},
 	basketball: {},
 	football: {
 		QB: [
@@ -77,7 +117,7 @@ const updateDepth = async (
 	updateEvents: UpdateEvents,
 	state: any,
 ) => {
-	if (!isSport("football") && !isSport("hockey")) {
+	if (!isSport("baseball") && !isSport("football") && !isSport("hockey")) {
 		throw new Error("Not implemented");
 	}
 
@@ -91,22 +131,64 @@ const updateDepth = async (
 		playoffs !== state.playoffs ||
 		abbrev !== state.abbrev
 	) {
+		let showDH: "noDH" | "dh" | "both" | undefined;
+		let pos2 = pos;
+		if (isSport("baseball")) {
+			const dh = g.get("dh");
+			if (dh === "none") {
+				showDH = "noDH";
+			} else if (dh === "all") {
+				showDH = "dh";
+			} else {
+				const confs = g.get("confs");
+				const filteredConfs = confs.filter(conf => dh.includes(conf.cid));
+				if (confs.length === filteredConfs.length) {
+					showDH = "dh";
+				} else if (filteredConfs.length === 0) {
+					showDH = "noDH";
+				} else {
+					showDH = "both";
+				}
+			}
+
+			if (showDH === "noDH") {
+				if (pos === "L") {
+					pos2 = "LP";
+				} else if (pos === "D") {
+					pos2 = "DP";
+				}
+			} else if (showDH === "dh") {
+				if (pos === "LP") {
+					pos2 = "L";
+				} else if (pos === "DP") {
+					pos2 = "D";
+				}
+			}
+		}
+
 		const editable = tid === g.get("userTid") && !g.get("spectator");
-		// @ts-ignore
-		const ratings = ["hgt", "stre", "spd", "endu", ...posRatings(pos)];
+		const ratings = [
+			...(isSport("baseball")
+				? pos2 === "P"
+					? []
+					: ["hgt", "spd"]
+				: ["hgt", "stre", "spd", "endu"]),
+			...posRatings(pos2),
+		];
 		const playersAll = await idb.cache.players.indexGetAll("playersByTid", tid);
-		const players = await idb.getCopies.playersPlus(playersAll, {
-			attrs: ["pid", "name", "age", "injury", "watch"],
-			ratings: ["skills", "pos", "ovr", "pot", "ovrs", "pots", ...ratings],
-			playoffs: playoffs === "playoffs",
-			regularSeason: playoffs !== "playoffs",
-			// @ts-ignore
-			stats: [...stats[pos], "jerseyNumber"],
-			season: g.get("season"),
-			showNoStats: true,
-			showRookies: true,
-			fuzz: true,
-		});
+		const players = addFirstNameShort(
+			await idb.getCopies.playersPlus(playersAll, {
+				attrs: ["pid", "firstName", "lastName", "age", "injury", "watch"],
+				ratings: ["skills", "pos", "ovr", "pot", "ovrs", "pots", ...ratings],
+				playoffs: playoffs === "playoffs",
+				regularSeason: playoffs !== "playoffs",
+				stats: [...stats[pos2], "jerseyNumber"],
+				season: g.get("season"),
+				showNoStats: true,
+				showRookies: true,
+				fuzz: true,
+			}),
+		);
 
 		// Sort players based on current depth chart
 		const t = await idb.cache.teams.get(tid);
@@ -117,15 +199,9 @@ const updateDepth = async (
 
 		const depthPlayers = team.getDepthPlayers(t.depth, players);
 
-		// https://github.com/microsoft/TypeScript/issues/21732
-		// @ts-ignore
-		const stats2: string[] = stats.hasOwnProperty(pos) ? stats[pos] : [];
+		const stats2: string[] = stats[pos2] ?? [];
 
-		const players2: any[] = depthPlayers.hasOwnProperty(pos)
-			? // https://github.com/microsoft/TypeScript/issues/21732
-			  // @ts-ignore
-			  depthPlayers[pos]
-			: [];
+		const players2: any[] = depthPlayers[pos2] ?? [];
 
 		let multiplePositionsWarning: string | undefined;
 		if (isSport("hockey") && players.length >= g.get("minRosterSize")) {
@@ -147,11 +223,11 @@ const updateDepth = async (
 						break;
 					}
 
-					const { name, pid } = p;
+					const { firstName, lastName, pid } = p;
 					let info = playerInfoByPid.get(pid);
 					if (!info) {
 						info = {
-							name,
+							name: `${firstName} ${lastName}`,
 							positions: [] as string[],
 						};
 						playerInfoByPid.set(pid, info);
@@ -174,17 +250,24 @@ const updateDepth = async (
 			}
 		}
 
+		if (isSport("baseball")) {
+			for (const p of players2) {
+				buffOvrDH(p);
+			}
+		}
+
 		return {
 			abbrev,
 			challengeNoRatings: g.get("challengeNoRatings"),
 			editable,
 			keepRosterSorted: t.keepRosterSorted,
 			multiplePositionsWarning,
-			pos,
+			pos: pos2,
 			players: players2,
 			playoffs,
 			ratings,
 			season: g.get("season"),
+			showDH,
 			stats: stats2,
 			tid,
 		};

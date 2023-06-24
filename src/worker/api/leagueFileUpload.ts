@@ -9,10 +9,7 @@ import schema from "league-schema"; // eslint-disable-line
 import { helpers, toUI } from "../util";
 import { highWaterMark } from "../core/league/createStream";
 import type { Conditions } from "../../common/types";
-import {
-	toPolyfillReadable,
-	toPolyfillTransform,
-} from "../util/polyfills-modern";
+import { toPolyfillReadable, toPolyfillTransform } from "bbgm-polyfills"; // eslint-disable-line
 
 // These objects (at the root of a league file) should be emitted as a complete object, rather than individual rows from an array
 export const CUMULATIVE_OBJECTS = new Set([
@@ -313,9 +310,15 @@ export const emitProgressStream = (
 };
 
 const initialCheck = async (
-	file: File | string,
-	includePlayersInBasicInfo: boolean | undefined,
-	leagueCreationID: number,
+	{
+		file,
+		includePlayersInBasicInfo,
+		leagueCreationID,
+	}: {
+		file: File | string;
+		includePlayersInBasicInfo: boolean | undefined;
+		leagueCreationID: number;
+	},
 	conditions: Conditions,
 ) => {
 	let stream: ReadableStream;
@@ -327,6 +330,39 @@ const initialCheck = async (
 		} catch (error) {
 			throw new Error(
 				"Could be a network error, an invalid URL, or an invalid Access-Control-Allow-Origin header",
+			);
+		}
+
+		if (!response.ok) {
+			let description;
+			switch (response.status) {
+				case 400:
+					description = "bad request";
+					break;
+				case 401:
+					description = "unauthorized";
+					break;
+				case 403:
+					description = "forbidden";
+					break;
+				case 404:
+					description = "file not found";
+					break;
+				case 500:
+					description = "internal server error";
+					break;
+				case 502:
+					description = "bad gateway";
+					break;
+				case 503:
+					description = "service unavailable";
+					break;
+			}
+
+			throw new Error(
+				`server responded with HTTP error code ${response.status}${
+					description ? ` (${description})` : ""
+				}`,
 			);
 		}
 

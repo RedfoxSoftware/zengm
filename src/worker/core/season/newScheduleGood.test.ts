@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import testHelpers from "../../../test/helpers";
 import newScheduleGood from "./newScheduleGood";
 import { g, helpers } from "../../util";
@@ -405,7 +405,7 @@ describe("worker/core/season/newScheduleGood", () => {
 			const { tids, warning } = newScheduleGood([
 				...defaultTeams,
 				{
-					tid: defaultTeams.at(-1).tid + 1,
+					tid: defaultTeams.at(-1)!.tid + 1,
 					seasonAttrs: {
 						cid: 0,
 						did: 0,

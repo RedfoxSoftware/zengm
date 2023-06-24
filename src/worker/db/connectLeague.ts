@@ -5,7 +5,7 @@ import {
 	DIFFICULTY,
 	gameAttributesArrayToObject,
 	isSport,
-	MAX_SUPPORTED_LEAGUE_VERSION,
+	LEAGUE_DATABASE_VERSION,
 	PHASE,
 	PLAYER,
 	unwrapGameAttribute,
@@ -37,8 +37,10 @@ import type {
 	ScheduledEvent,
 	HeadToHead,
 	DraftPick,
+	SeasonLeaders,
 } from "../../common/types";
 import getInitialNumGamesConfDivSettings from "../core/season/getInitialNumGamesConfDivSettings";
+import { amountToLevel } from "../../common/budgetLevels";
 
 export interface LeagueDB extends DBSchema {
 	allStars: {
@@ -70,7 +72,7 @@ export interface LeagueDB extends DBSchema {
 	};
 	gameAttributes: {
 		key: string;
-		value: GameAttribute;
+		value: GameAttribute<any>;
 	};
 	games: {
 		key: number;
@@ -132,6 +134,10 @@ export interface LeagueDB extends DBSchema {
 			season: number;
 		};
 	};
+	seasonLeaders: {
+		key: number;
+		value: SeasonLeaders;
+	};
 	teamSeasons: {
 		key: number;
 		value: TeamSeason;
@@ -160,9 +166,11 @@ export interface LeagueDB extends DBSchema {
 	};
 }
 
+export type LeagueDBStoreNames = StoreNames<LeagueDB>;
+
 type VersionChangeTransaction = IDBPTransaction<
 	LeagueDB,
-	StoreNames<LeagueDB>[],
+	LeagueDBStoreNames[],
 	"versionchange"
 >;
 
@@ -439,6 +447,9 @@ const create = (db: IDBPDatabase<LeagueDB>) => {
 		keyPath: "gid",
 		autoIncrement: true,
 	});
+	db.createObjectStore("seasonLeaders", {
+		keyPath: "season",
+	});
 	const teamSeasonsStore = db.createObjectStore("teamSeasons", {
 		keyPath: "rid",
 		autoIncrement: true,
@@ -579,7 +590,7 @@ const migrate = async ({
 				for (const teamStats of (t as any).stats) {
 					teamStats.tid = t.tid;
 
-					if (!teamStats.hasOwnProperty("ba")) {
+					if (!Object.hasOwn(teamStats, "ba")) {
 						teamStats.ba = 0;
 					}
 
@@ -779,7 +790,7 @@ const migrate = async ({
 						r.ovr = player.ovr(r);
 						r.skills = player.skills(r);
 
-						// Don't want to deal with bootstrapPot now being async
+						// Don't want to deal with monteCarloPot now being async
 						r.pot = r.ovr;
 
 						if (p.draft.year === r.season) {
@@ -1184,12 +1195,141 @@ const migrate = async ({
 			unique: false,
 		});
 	}
+
+	if (oldVersion <= 50) {
+		const store = transaction.objectStore("gameAttributes");
+		const hardCap = await store.get("hardCap");
+
+		if (hardCap) {
+			const newValue = hardCap.value ? "hard" : "soft";
+			await store.put({
+				key: "salaryCapType",
+				value: newValue,
+			});
+			await store.delete("hardCap");
+		}
+	}
+
+	if (oldVersion <= 51) {
+		// Non-basketball sports may have had a basketball pace stored in gameAttributes if they were created before gameAttributesKeysSportSpecific
+		if (!isSport("basketball")) {
+			const store = transaction.objectStore("gameAttributes");
+			const pace = await store.get("pace");
+
+			if (pace?.value === 100) {
+				await store.put({
+					key: "pace",
+					value: 1,
+				});
+			}
+		}
+	}
+
+	if (oldVersion <= 52) {
+		db.createObjectStore("seasonLeaders", {
+			keyPath: "season",
+		});
+	}
+
+	if (oldVersion <= 53) {
+		const store = transaction.objectStore("gameAttributes");
+		const challengeThanosMode = await store.get("challengeThanosMode");
+
+		await store.put({
+			key: "challengeThanosMode",
+			value: challengeThanosMode?.value ? 20 : 0,
+		});
+	}
+
+	if (oldVersion <= 54) {
+		type OldBudgetItem = {
+			amount: number;
+			rank: number;
+		};
+
+		const store = transaction.objectStore("gameAttributes");
+		const salaryCap: number =
+			(await store.get("salaryCap"))?.value ?? defaultGameAttributes.salaryCap;
+
+		const budgetsByTid: Record<number, Team["budget"]> = {};
+
+		await iterate(transaction.objectStore("teams"), undefined, undefined, t => {
+			// Compute equivalent levels for the budget values
+			for (const key of helpers.keys(t.budget)) {
+				const value = t.budget[key] as unknown as OldBudgetItem;
+				if (typeof value !== "number") {
+					if (key === "ticketPrice") {
+						t.budget[key] = value.amount;
+					} else {
+						t.budget[key] = amountToLevel(value.amount, salaryCap);
+					}
+				}
+			}
+
+			t.initialBudget = {
+				coaching: t.budget.coaching,
+				facilities: t.budget.facilities,
+				health: t.budget.health,
+				scouting: t.budget.scouting,
+			};
+
+			budgetsByTid[t.tid] = t.budget;
+
+			return t;
+		});
+
+		await iterate(
+			transaction.objectStore("teamSeasons"),
+			undefined,
+			undefined,
+			ts => {
+				if (ts.tied === undefined) {
+					ts.tied = 0;
+				}
+				if (ts.otl === undefined) {
+					ts.otl = 0;
+				}
+				const gp = helpers.getTeamSeasonGp(ts);
+				if (ts.gpHome === undefined) {
+					ts.gpHome = Math.round(gp / 2);
+				}
+
+				// Move the amount to root, no more storing rank
+				for (const key of helpers.keys(ts.revenues)) {
+					const value = ts.revenues[key] as unknown as OldBudgetItem;
+					if (typeof value !== "number") {
+						ts.revenues[key] = value.amount;
+					}
+				}
+				for (const key of helpers.keys(ts.expenses)) {
+					const value = ts.expenses[key] as unknown as OldBudgetItem;
+					if (typeof value !== "number") {
+						ts.expenses[key] = value.amount;
+					}
+				}
+
+				// Compute historical expense levels, assuming budget was the same as it is now. In theory could come up wtih a better estimate from expenses, but historical salary cap data is not stored so it wouldn't be perfect, and also who cares
+				const expenseLevelsKeys = [
+					"coaching",
+					"facilities",
+					"health",
+					"scouting",
+				] as const;
+				ts.expenseLevels = {} as any;
+				for (const key of expenseLevelsKeys) {
+					ts.expenseLevels[key] = gp * budgetsByTid[ts.tid][key];
+				}
+
+				return ts;
+			},
+		);
+	}
 };
 
 const connectLeague = (lid: number) =>
 	connectIndexedDB<LeagueDB>({
 		name: `league${lid}`,
-		version: MAX_SUPPORTED_LEAGUE_VERSION,
+		version: LEAGUE_DATABASE_VERSION,
 		lid,
 		create,
 		migrate,

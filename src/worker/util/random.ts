@@ -1,4 +1,26 @@
 /**
+ * Get a random number selected from a uniform distribution.
+ *
+ * @memberOf util.random
+ * @param {number} a Minimum number that can be returned.
+ * @param {number} b Maximum number that can be returned.
+ * @return {number} Random number from uniform distribution.
+ */
+const uniform = (a: number, b: number): number => {
+	return Math.random() * (b - a) + a;
+};
+
+// https://stackoverflow.com/a/19303725/786644
+const uniformSeed = (seed?: number): number => {
+	if (seed === undefined) {
+		return Math.random();
+	}
+
+	const x = Math.sin(seed) * 10000;
+	return x - Math.floor(x);
+};
+
+/**
  * Choose a random integer from [a, b]
  *
  * @memberOf util.random
@@ -6,8 +28,9 @@
  * @param {number} b Maximum integer that can be returned.
  * @return {number} Random integer between a and b.
  */
-const randInt = (a: number, b: number): number => {
-	return Math.floor(Math.random() * (1 + b - a)) + a;
+const randInt = (a: number, b: number, seed?: number): number => {
+	const r = seed === undefined ? Math.random() : uniformSeed(seed);
+	return Math.floor(r * (1 + b - a)) + a;
 };
 
 /**
@@ -16,11 +39,11 @@ const randInt = (a: number, b: number): number => {
  * @memberOf util.random
  * @param {array} list List to be shuffled in place.
  */
-const shuffle = (list: any[]) => {
+const shuffle = (list: any[], seed?: number) => {
 	const l = list.length;
 
 	for (let i = 1; i < l; i++) {
-		const j = randInt(0, i);
+		const j = randInt(0, i, seed !== undefined ? seed + i : undefined);
 
 		if (j !== i) {
 			const t = list[i]; // swap list[i] and list[j]
@@ -109,35 +132,27 @@ const truncGauss = (
 };
 
 /**
- * Get a random number selected from a uniform distribution.
- *
- * @memberOf util.random
- * @param {number} a Minimum number that can be returned.
- * @param {number} b Maximum number that can be returned.
- * @return {number} Random number from uniform distribution.
- */
-const uniform = (a: number, b: number): number => {
-	return Math.random() * (b - a) + a;
-};
-
-// https://stackoverflow.com/a/19303725/786644
-const uniformSeed = (seed: number): number => {
-	const x = Math.sin(seed) * 10000;
-	return x - Math.floor(x);
-};
-
-/**
  * Choose a random element from a non-empty array.
  *
  * @memberOf util.random
  * @param {number} x Array to choose a random value from.
  */
 const choice = <T>(
-	x: T[],
+	x: readonly T[],
 	weightInput?: ((a: T, index: number) => number) | number[],
+	seed?: number,
 ): T => {
+	let seed2 = seed ?? 0;
+	const getSeed = () => {
+		if (seed === undefined) {
+			return undefined;
+		}
+		seed2 += 1;
+		return seed2;
+	};
+
 	if (weightInput === undefined) {
-		return x[Math.floor(Math.random() * x.length)];
+		return x[Math.floor(uniformSeed(getSeed()) * x.length)];
 	}
 
 	let weights;
@@ -159,8 +174,8 @@ const choice = <T>(
 
 		return array;
 	}, []);
-	const max = cumsums.at(-1);
-	const rand = Math.random() * max;
+	const max = cumsums.at(-1)!;
+	const rand = uniformSeed(getSeed()) * max;
 	const ind = cumsums.findIndex(cumsum => cumsum >= rand);
 	return x[ind];
 };

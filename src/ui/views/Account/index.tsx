@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { useEffect, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
@@ -13,6 +12,7 @@ import type { View } from "../../../common/types";
 import { GameLinks } from "../../components";
 import { ajaxErrorMsg } from "../LoginOrRegister";
 import AccountInfoForm from "./AccountInfoForm";
+import DeleteAccountForm from "./DeleteAccountForm";
 
 const StripeButton = ({ email }: { email: string }) => {
 	const [handler, setHandler] = useState<StripeCheckoutHandler | undefined>();
@@ -42,7 +42,7 @@ const StripeButton = ({ email }: { email: string }) => {
 								goldResult: data,
 							});
 							if (data.success) {
-								toWorker("main", "initGold");
+								toWorker("main", "initGold", undefined);
 							}
 						} catch (error) {
 							console.error(error);
@@ -167,7 +167,7 @@ const UserInfo = ({
 			return;
 		}
 
-		await toWorker("main", "checkAccount");
+		await toWorker("main", "checkAccount", undefined);
 		await toWorker("main", "realtimeUpdate", ["account"]);
 		await realtimeUpdate([], "/");
 	};
@@ -209,14 +209,6 @@ const UserInfo = ({
 			) : null}
 		</>
 	);
-};
-
-UserInfo.propTypes = {
-	goldUntilDateString: PropTypes.string.isRequired,
-	loggedIn: PropTypes.bool.isRequired,
-	showGoldActive: PropTypes.bool.isRequired,
-	showGoldCancelled: PropTypes.bool.isRequired,
-	username: PropTypes.string,
 };
 
 const Account = ({
@@ -278,6 +270,11 @@ const Account = ({
 						today!
 					</p>
 
+					<p>
+						You can cancel a subscription at any time by clicking "Cancel" on
+						your account page.
+					</p>
+
 					{!loggedIn ? (
 						<p className="mb-0">
 							<a href="/account/login_or_register">
@@ -321,6 +318,15 @@ const Account = ({
 					<h2 className="mt-5">Update Account Info</h2>
 
 					<AccountInfoForm initialEmail={email} initialUsername={username} />
+
+					<h2 className="mt-5">Delete Account</h2>
+
+					<div style={{ maxWidth: 648 }}>
+						<DeleteAccountForm
+							username={username}
+							showGoldActive={showGoldActive}
+						/>
+					</div>
 				</>
 			) : null}
 

@@ -1,4 +1,5 @@
 import classNames from "classnames";
+import { useRef } from "react";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
 
 const getValidTeamColors = (t?: { colors: any }) => {
@@ -16,6 +17,8 @@ const getValidTeamColors = (t?: { colors: any }) => {
 const JerseyNumber = ({
 	className,
 	number,
+	onClick,
+	extraText,
 	start,
 	end,
 	t,
@@ -23,6 +26,8 @@ const JerseyNumber = ({
 }: {
 	className?: string;
 	number: string;
+	onClick?: () => void;
+	extraText?: string;
 	start: number;
 	end: number;
 	t?: {
@@ -48,15 +53,37 @@ const JerseyNumber = ({
 	}
 
 	if (retired) {
-		text += " (retired)";
+		text += ` (retired${extraText ? `, ${extraText}` : ""})`;
+	} else if (extraText) {
+		text += ` (${extraText})`;
 	}
 
 	const border = retired
 		? "4px double var(--bs-yellow)"
 		: `2px solid ${colors[2]}`;
 
+	let fontSize = 32;
+	const numDigits = number.length;
+	if (numDigits === 3) {
+		fontSize = 26;
+	} else if (numDigits === 4) {
+		fontSize = 20;
+	} else if (numDigits > 4) {
+		fontSize = 17;
+	}
+
+	// On mobile, we show the jersey number popover on click, because there is no way to hover like on desktop. This means any onClick action (like toggling retirement) should happen only on subsequent clicks, while it's already open from the first click. That gets handled with onToggle, which fires before it opens, and gives us a chance to set preventNextClick.
+	const preventNextClick = useRef(false);
+
 	return (
 		<OverlayTrigger
+			onToggle={
+				window.mobile
+					? () => {
+							preventNextClick.current = true;
+					  }
+					: undefined
+			}
 			overlay={<Tooltip id={id}>{text}</Tooltip>}
 			placement="bottom"
 		>
@@ -64,6 +91,7 @@ const JerseyNumber = ({
 				className={classNames(
 					"d-flex align-items-center justify-content-center",
 					className,
+					onClick ? "cursor-pointer" : undefined,
 				)}
 				style={{
 					width: 55,
@@ -71,8 +99,20 @@ const JerseyNumber = ({
 					border,
 					backgroundColor: colors[0],
 					color: colors[1],
-					fontSize: 32,
+					fontSize,
 				}}
+				role={onClick ? "button" : undefined}
+				onClick={
+					onClick
+						? () => {
+								if (preventNextClick.current) {
+									preventNextClick.current = false;
+								} else {
+									onClick();
+								}
+						  }
+						: undefined
+				}
 			>
 				{number}
 			</div>

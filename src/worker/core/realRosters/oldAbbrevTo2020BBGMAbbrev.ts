@@ -99,8 +99,8 @@ const oldAbbrevTo2020BBGMAbbrev = (abbrev: string) => {
 		SDA: "HOU",
 	};
 
-	if (abbrevs.hasOwnProperty(abbrev)) {
-		// @ts-ignore
+	if (Object.hasOwn(abbrevs, abbrev)) {
+		// @ts-expect-error
 		return abbrevs[abbrev];
 	}
 

@@ -1,13 +1,26 @@
-const CleanCSS = require("clean-css");
-const crypto = require("crypto");
-const fs = require("fs");
-const fse = require("fs-extra");
-const htmlmin = require("html-minifier-terser");
-const sass = require("sass");
-const path = require("path");
-const { PurgeCSS } = require("purgecss");
-const replace = require("replace");
-const getSport = require("./getSport");
+import * as lightningCSS from "lightningcss";
+import browserslist from "browserslist";
+import { Buffer } from "node:buffer";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import fse from "fs-extra";
+import * as htmlmin from "html-minifier-terser";
+import * as sass from "sass";
+import path from "node:path";
+import { PurgeCSS } from "purgecss";
+import replace from "replace";
+
+const SPORTS = ["baseball", "basketball", "football", "hockey"];
+
+const getSport = () => {
+	if (SPORTS.includes(process.env.SPORT)) {
+		return process.env.SPORT;
+	}
+	if (process.env.SPORT === undefined) {
+		return "basketball";
+	}
+	throw new Error(`Invalid SPORT: ${process.env.SPORT}`);
+};
 
 const fileHash = contents => {
 	// https://github.com/sindresorhus/rev-hash
@@ -42,9 +55,14 @@ const buildCSS = async (watch /*: boolean*/ = false) => {
 						// For align="end" in react-bootstrap
 						/^dropdown-menu-end$/,
 
-						/^flag-/,
+						// flag-icons
+						/^fi$/,
+						/^fi-/,
+
 						/^dark-select/,
 						/^bar-graph/,
+						/^watch-active/,
+						/^dashboard-top-link-other/,
 					],
 				},
 		  });
@@ -54,15 +72,31 @@ const buildCSS = async (watch /*: boolean*/ = false) => {
 
 		let output;
 		if (!watch) {
+			// https://zengm.com/blog/2022/07/investigating-a-tricky-performance-bug/
+			const DANGER_CSS = ".input-group.has-validation";
+			if (!rawCSS[i].includes(DANGER_CSS)) {
+				throw new Error(
+					`rawCSS no longer contains ${DANGER_CSS} - same problem might exist with another name?`,
+				);
+			}
+
 			const purgeCSSResult = purgeCSSResults[i].css;
-			const result = new CleanCSS().minify(purgeCSSResult);
-			if (result.errors.length > 0) {
-				console.log("clean-css errors", result.errors);
+
+			const { code } = lightningCSS.transform({
+				filename: `${filename}.css`,
+				code: Buffer.from(purgeCSSResult),
+				minify: true,
+				sourceMap: false,
+				targets: lightningCSS.browserslistToTargets(
+					browserslist("Chrome >= 55, Firefox >= 78, Safari >= 12"),
+				),
+			});
+
+			output = code;
+
+			if (output.includes(DANGER_CSS)) {
+				throw new Error(`CSS output contains ${DANGER_CSS}`);
 			}
-			if (result.warnings.length > 0) {
-				console.log("clean-css warnings", result.warnings);
-			}
-			output = result.styles;
 		} else {
 			output = rawCSS[i];
 		}
@@ -88,11 +122,11 @@ const buildCSS = async (watch /*: boolean*/ = false) => {
 
 const bySport = object => {
 	const sport = getSport();
-	if (object.hasOwnProperty(sport)) {
+	if (Object.hasOwn(object, sport)) {
 		return object[sport];
 	}
 
-	if (object.hasOwnProperty("default")) {
+	if (Object.hasOwn(object, "default")) {
 		return object.default;
 	}
 
@@ -103,6 +137,7 @@ const setSport = () => {
 	replace({
 		regex: "GAME_NAME",
 		replacement: bySport({
+			baseball: "ZenGM Baseball",
 			basketball: "Basketball GM",
 			football: "Football GM",
 			hockey: "ZenGM Hockey",
@@ -113,6 +148,7 @@ const setSport = () => {
 	replace({
 		regex: "SPORT",
 		replacement: bySport({
+			baseball: "baseball",
 			basketball: "basketball",
 			football: "football",
 			hockey: "hockey",
@@ -125,7 +161,7 @@ const setSport = () => {
 		replacement: bySport({
 			basketball: "basketball-gm.com",
 			football: "football-gm.com",
-			hockey: "zengm.com",
+			default: "zengm.com",
 		}),
 		paths: ["build/index.html"],
 		silent: true,
@@ -133,9 +169,10 @@ const setSport = () => {
 	replace({
 		regex: "WEBSITE_ROOT",
 		replacement: bySport({
+			baseball: "zengm.com/baseball",
 			basketball: "basketball-gm.com",
 			football: "football-gm.com",
-			hockey: "basketball-gm.com",
+			hockey: "zengm.com/hockey",
 		}),
 		paths: ["build/index.html"],
 		silent: true,
@@ -143,6 +180,7 @@ const setSport = () => {
 	replace({
 		regex: "PLAY_SUBDOMAIN",
 		replacement: bySport({
+			baseball: "baseball.zengm.com",
 			basketball: "play.basketball-gm.com",
 			football: "play.football-gm.com",
 			hockey: "hockey.zengm.com",
@@ -153,6 +191,7 @@ const setSport = () => {
 	replace({
 		regex: "BETA_SUBDOMAIN",
 		replacement: bySport({
+			baseball: "beta.baseball.zengm.com",
 			basketball: "beta.basketball-gm.com",
 			football: "beta.football-gm.com",
 			hockey: "beta.hockey.zengm.com",
@@ -163,7 +202,13 @@ const setSport = () => {
 };
 
 const copyFiles = watch => {
-	const foldersToIgnore = ["basketball", "css", "football", "hockey"];
+	const foldersToIgnore = [
+		"baseball",
+		"basketball",
+		"css",
+		"football",
+		"hockey",
+	];
 
 	fse.copySync("public", "build", {
 		filter: filename => {
@@ -194,7 +239,7 @@ const copyFiles = watch => {
 
 	// Remove the empty folders created by the "filter" function.
 	for (const folder of foldersToIgnore) {
-		fse.removeSync(`build/${folder}`);
+		fs.rmSync(`build/${folder}`, { recursive: true, force: true });
 	}
 
 	const realPlayerFilenames = ["real-player-data", "real-player-stats"];
@@ -206,8 +251,9 @@ const copyFiles = watch => {
 	}
 
 	fse.copySync("data/names.json", "build/gen/names.json");
+	fse.copySync("data/names-female.json", "build/gen/names-female.json");
 
-	fse.copySync("node_modules/flag-icon-css/flags/4x3", "build/img/flags");
+	fse.copySync("node_modules/flag-icons/flags/4x3", "build/img/flags");
 	const flagHtaccess = `<IfModule mod_headers.c>
 	Header set Cache-Control "public,max-age=31536000"
 </IfModule>`;
@@ -230,7 +276,7 @@ const genRev = () => {
 };
 
 const reset = () => {
-	fse.removeSync("build");
+	fs.rmSync("build", { recursive: true, force: true });
 	fs.mkdirSync("build/gen", { recursive: true });
 };
 
@@ -278,12 +324,12 @@ const setTimestamps = (rev /*: string*/, watch /*: boolean*/ = false) => {
   var host = '${bySport({
 		basketball: "basketball-gm.com",
 		football: "football-gm.com",
-		hockey: "zengm.com",
+		default: "zengm.com",
 	})}';
   var element = document.createElement('script');
   var firstScript = document.getElementsByTagName('script')[0];
-  var url = 'https://quantcast.mgr.consensu.org'
-    .concat('/choice/', 'M1Q1fpfqa7Vk4', '/', host, '/choice.js')
+  var url = 'https://cmp.quantcast.com'
+    .concat('/choice/', 'M1Q1fpfqa7Vk4', '/', host, '/choice.js');
   var uspTries = 0;
   var uspTriesLimit = 3;
   element.async = true;
@@ -344,6 +390,9 @@ const setTimestamps = (rev /*: string*/, watch /*: boolean*/ = false) => {
           args[2](retr);
         }
       } else {
+        if(args[0] === 'init' && typeof args[3] === 'object') {
+          args[3] = { ...args[3], tag_version: 'V2' };
+        }
         queue.push(args);
       }
     }
@@ -376,10 +425,10 @@ const setTimestamps = (rev /*: string*/, watch /*: boolean*/ = false) => {
             };
             if (msgIsString) {
               returnMsg = JSON.stringify(returnMsg);
-			}
-			if (event.source) {
-			  event.source.postMessage(returnMsg, '*');
-			}
+            }
+            if (event && event.source && event.source.postMessage) {
+              event.source.postMessage(returnMsg, '*');
+            }
           },
           payload.parameter
         );
@@ -475,7 +524,7 @@ if (window.enableLogging) {
 		replacement: bySport({
 			basketball: "UA-38759330-1",
 			football: "UA-38759330-2",
-			hockey: "UA-38759330-3",
+			default: "UA-38759330-3",
 		}),
 		paths: ["build/index.html"],
 		silent: true,
@@ -486,7 +535,7 @@ if (window.enableLogging) {
 		replacement: bySport({
 			basketball: "_5lgefwumzxr6qxsbcz46dpx624",
 			football: "_ez6qiutxtbl66x5e22u5mzuyqq",
-			hockey: "_zrz3msjci2slargulizluenoni",
+			default: "_zrz3msjci2slargulizluenoni",
 		}),
 		paths: ["build/index.html"],
 		silent: true,
@@ -495,67 +544,11 @@ if (window.enableLogging) {
 	replace({
 		regex: "BUGSNAG_API_KEY",
 		replacement: bySport({
+			baseball: "37b1fd32d021f7716dc0e1d4a3e619bc",
 			basketball: "c10b95290070cb8888a7a79cc5408555",
 			football: "fed8957cbfca2d1c80997897b840e6cf",
 			hockey: "449e8ed576f7cbccf5c7649e936ab9ff",
 		}),
-		paths: ["build/index.html"],
-		silent: true,
-	});
-
-	const sport = getSport();
-
-	const quantcastCode = "";
-	/*if (!watch && sport === "basketball") {
-		quantcastCode = `<script type="text/javascript">
-if (window.enableLogging) {
-var _qevents = _qevents || [];(function() {
-var elem = document.createElement('script');
-elem.src = (document.location.protocol == "https:" ? "https://secure" : "http://edge") + ".quantserve.com/quant.js";
-elem.async = true;
-elem.type = "text/javascript";
-var scpt = document.getElementsByTagName('script')[0];
-scpt.parentNode.insertBefore(elem, scpt);
-})();_qevents.push({
-qacct:"p-Ye5RY6xC03ZWz"
-});
-}
-</script><noscript>
-<div style="display:none;">
-<img src="//pixel.quantserve.com/pixel/p-Ye5RY6xC03ZWz.gif" border="0" height="1" width="1" alt="Quantcast"/>
-</div>
-</noscript>`;
-	}*/
-	replace({
-		regex: "QUANTCAST_CODE",
-		replacement: quantcastCode,
-		paths: ["build/index.html"],
-		silent: true,
-	});
-
-	let facebookPixelCode = "";
-	if (!watch && sport === "basketball") {
-		facebookPixelCode = `<!-- Facebook Pixel Code -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '1285618145138713');
-fbq('track', 'PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=1285618145138713&ev=PageView&noscript=1"
-/></noscript>
-<!-- End Facebook Pixel Code -->`;
-	}
-	replace({
-		regex: "FACEBOOK_PIXEL_CODE",
-		replacement: facebookPixelCode,
 		paths: ["build/index.html"],
 		silent: true,
 	});
@@ -576,12 +569,13 @@ const minifyIndexHTML = async () => {
 	fs.writeFileSync("build/index.html", minified);
 };
 
-module.exports = {
+export {
 	bySport,
 	buildCSS,
 	copyFiles,
 	fileHash,
 	genRev,
+	getSport,
 	reset,
 	setTimestamps,
 	minifyIndexHTML,

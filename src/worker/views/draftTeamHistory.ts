@@ -1,4 +1,4 @@
-import { bySport, getDraftLotteryProbs, PLAYER } from "../../common";
+import { bySport, PLAYER } from "../../common";
 import { idb } from "../db";
 import { g } from "../util";
 import type {
@@ -7,6 +7,9 @@ import type {
 	Player,
 } from "../../common/types";
 import maxBy from "lodash-es/maxBy";
+import addFirstNameShort from "../util/addFirstNameShort";
+import { getDraftLotteryProbs } from "../../common/draftLottery";
+import { getNumToPick } from "../core/draft/genOrder";
 
 const updateDraftTeamHistory = async (
 	inputs: ViewInput<"draftTeamHistory">,
@@ -20,6 +23,7 @@ const updateDraftTeamHistory = async (
 	}
 
 	const stats = bySport({
+		baseball: ["gp", "keyStats", "war"],
 		basketball: ["gp", "min", "pts", "trb", "ast", "per", "ws"],
 		football: ["gp", "keyStats", "av"],
 		hockey: ["gp", "keyStats", "ops", "dps", "ps"],
@@ -36,7 +40,8 @@ const updateDraftTeamHistory = async (
 			"abbrev",
 			"draft",
 			"pid",
-			"name",
+			"firstName",
+			"lastName",
 			"age",
 			"hof",
 			"watch",
@@ -73,9 +78,14 @@ const updateDraftTeamHistory = async (
 					preLotteryRank = lotteryRowIndex + 1;
 					lotteryChange = preLotteryRank - p.draft.pick;
 
-					const probs = getDraftLotteryProbs(
+					const numToPick = getNumToPick(
+						draftLottery.draftType ?? "nba1994",
+						draftLottery.result.length,
+					);
+					const { probs } = getDraftLotteryProbs(
 						draftLottery.result,
 						draftLottery.draftType,
+						numToPick,
 					);
 					if (probs) {
 						lotteryProb = probs[lotteryRowIndex]?.[p.draft.pick - 1];
@@ -87,7 +97,8 @@ const updateDraftTeamHistory = async (
 		players.push({
 			// Attributes
 			pid: p.pid,
-			name: p.name,
+			firstName: p.firstName,
+			lastName: p.lastName,
 			draft: p.draft,
 			currentAge: p.age,
 			currentAbbrev: p.abbrev,
@@ -125,7 +136,7 @@ const updateDraftTeamHistory = async (
 		abbrev,
 		challengeNoRatings: g.get("challengeNoRatings"),
 		draftType: g.get("draftType"),
-		players,
+		players: addFirstNameShort(players),
 		stats,
 		userAbbrev,
 	};

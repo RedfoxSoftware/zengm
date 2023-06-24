@@ -1,17 +1,16 @@
-import PropTypes from "prop-types";
 import { useCallback, useState } from "react";
 import { Dropdown } from "react-bootstrap";
 import { PLAYER } from "../../common";
 import useTitleBar from "../hooks/useTitleBar";
-import { getCols, helpers, toWorker } from "../util";
-import {
-	ActionButton,
-	DataTable,
-	PlayerNameLabels,
-	WatchBlock,
-} from "../components";
+import { getCols, helpers, toWorker, useLocalPartial } from "../util";
+import { ActionButton, DataTable, WatchBlock } from "../components";
 import type { View } from "../../common/types";
 import { wrappedAgeAtDeath } from "../components/AgeAtDeath";
+import {
+	wrappedContractAmount,
+	wrappedContractExp,
+} from "../components/contract";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const WatchList = ({
 	challengeNoRatings,
@@ -25,7 +24,7 @@ const WatchList = ({
 
 	const clearWatchList = useCallback(async () => {
 		setClearing(true);
-		await toWorker("main", "clearWatchList");
+		await toWorker("main", "clearWatchList", undefined);
 		setClearing(false);
 	}, []);
 
@@ -34,6 +33,8 @@ const WatchList = ({
 		dropdownView: "watch_list",
 		dropdownFields: { statTypes: statType, playoffs, flagNote },
 	});
+
+	const { gender } = useLocalPartial(["gender"]);
 
 	const cols = getCols(
 		[
@@ -64,8 +65,8 @@ const WatchList = ({
 		} else if (p.tid === PLAYER.UNDRAFTED) {
 			contract = `${p.draft.year} Draft Prospect`;
 		} else {
-			contract = helpers.formatCurrency(p.contract.amount, "M");
-			exp = p.contract.exp;
+			contract = wrappedContractAmount(p);
+			exp = wrappedContractExp(p);
 		}
 
 		const showRatings = !challengeNoRatings || p.tid === PLAYER.RETIRED;
@@ -73,16 +74,21 @@ const WatchList = ({
 		return {
 			key: p.pid,
 			data: [
-				<WatchBlock pid={p.pid} watch={p.watch} />,
-				<PlayerNameLabels
-					injury={p.injury}
-					jerseyNumber={p.jerseyNumber}
-					pid={p.pid}
-					skills={p.ratings.skills}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				{
+					value: <WatchBlock pid={p.pid} watch={p.watch} />,
+					searchValue: p.watch,
+					sortValue: p.watch,
+				},
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					jerseyNumber: p.jerseyNumber,
+					skills: p.ratings.skills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.ratings.pos,
 				wrappedAgeAtDeath(p.age, p.ageAtDeath),
 				<a href={helpers.leagueUrl(["roster", `${p.abbrev}_${p.tid}`])}>
@@ -98,7 +104,7 @@ const WatchList = ({
 				{
 					value: (
 						<div
-							className="overflow-auto"
+							className="overflow-auto small-scrollbar"
 							style={{
 								maxHeight: 300,
 								whiteSpace: "pre-line",
@@ -141,7 +147,10 @@ const WatchList = ({
 				On other pages, you can find the watch icon by clicking the info button{" "}
 				<span className="glyphicon glyphicon-stats" /> next to a player's name.
 			</p>
-			<p>You can edit a player's note near the top of his profile page.</p>
+			<p>
+				You can edit a player's note near the top of{" "}
+				{helpers.pronoun(gender, "his")} profile page.
+			</p>
 
 			<ActionButton
 				className="mb-3"
@@ -155,19 +164,13 @@ const WatchList = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[5, "desc"]}
+				defaultStickyCols={window.mobile ? 1 : 2}
 				name="WatchList"
 				pagination
 				rows={rows}
 			/>
 		</>
 	);
-};
-
-WatchList.propTypes = {
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	playoffs: PropTypes.oneOf(["playoffs", "regularSeason"]).isRequired,
-	statType: PropTypes.oneOf(["per36", "perGame", "totals"]).isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
 };
 
 export default WatchList;

@@ -1,10 +1,10 @@
 import type { UpdateEvents } from "../../common/types";
 import useTitleBar from "../hooks/useTitleBar";
-import router, { Context, makeRegex } from "../router";
+import router, { type Context, makeRegex } from "../router";
 import { local, localActions } from "./local";
 import realtimeUpdate from "./realtimeUpdate";
 import toWorker from "./toWorker";
-import create from "zustand";
+import { create } from "zustand";
 import routeInfos from "./routeInfos";
 
 /**
@@ -36,6 +36,7 @@ type State = {
 	idLoading: string | undefined;
 	inLeague: boolean;
 	data: Record<string, any>;
+	scrollToTop: boolean;
 };
 
 type ViewInfo = {
@@ -68,6 +69,7 @@ export const useViewData = create<
 			set(state);
 		},
 	},
+	scrollToTop: false,
 }));
 
 const actions = useViewData.getState().actions;
@@ -194,6 +196,8 @@ class ViewManager {
 		await router.navigate(actualURL, {
 			state,
 			refresh,
+
+			// Would like to make this `replace: replace || url === undefined,` so it doesn't add a history entry on refreshes, but then Safari errors "Attempt to use history.replaceState() more than 100 times per 30 seconds"
 			replace,
 		});
 
@@ -242,13 +246,16 @@ class ViewManager {
 		const lid = local.getState().lid;
 
 		if (inLeague) {
-			if (newLid !== lid) {
-				await toWorker("main", "beforeViewLeague", newLid, lid);
+			if (newLid !== lid && newLid !== undefined) {
+				await toWorker("main", "beforeViewLeague", {
+					newLid,
+					loadedLid: lid,
+				});
 			}
 		} else {
 			// eslint-disable-next-line no-lonely-if
 			if (lid !== undefined) {
-				await toWorker("main", "beforeViewNonLeague");
+				await toWorker("main", "beforeViewNonLeague", undefined);
 				localActions.updateGameAttributes({
 					lid: undefined,
 				});
@@ -266,15 +273,13 @@ class ViewManager {
 		delete ctxBBGM.navigationSymbol; // Can't send Symbol to worker
 
 		// Resolve all the promises before updating the UI to minimize flicker
-		const results = await toWorker(
-			"main",
-			"runBefore",
-			id,
-			context.params,
+		const results = await toWorker("main", "runBefore", {
+			viewId: id,
+			params: context.params,
 			ctxBBGM,
 			updateEvents,
 			prevData,
-		);
+		});
 
 		if (navigationSymbol !== this.lastNavigationSymbol) {
 			this.initNextAction();
@@ -297,7 +302,7 @@ class ViewManager {
 
 		if (
 			prevData.errorMessage ||
-			(results && results.hasOwnProperty("errorMessage"))
+			(results && Object.hasOwn(results, "errorMessage"))
 		) {
 			NewComponent = ErrorMessage;
 		}
@@ -309,6 +314,7 @@ class ViewManager {
 			idLoaded: id,
 			idLoading: undefined,
 			inLeague,
+			scrollToTop: updateEvents.length === 1 && updateEvents[0] === "firstRun",
 		};
 
 		if (vars.data && vars.data.redirectUrl !== undefined) {
@@ -335,11 +341,6 @@ class ViewManager {
 		actions.reset(vars);
 		this.idLoaded = id;
 		this.viewData = vars.data;
-
-		// Scroll to top if this load came from user clicking a link
-		if (updateEvents.length === 1 && updateEvents[0] === "firstRun") {
-			window.scrollTo(window.pageXOffset, 0);
-		}
 
 		this.initNextAction();
 	}

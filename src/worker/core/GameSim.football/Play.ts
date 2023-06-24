@@ -438,6 +438,7 @@ class Play {
 				statChanges.push([state.o, event.qb, "pssSk"]);
 				statChanges.push([state.o, event.qb, "pssSkYds", Math.abs(event.yds)]);
 				statChanges.push([state.d, event.p, "defSk"]);
+				statChanges.push([state.d, event.p, "defTckSolo"]);
 			} else if (event.type === "pss") {
 				statChanges.push([state.o, event.qb, "pss"]);
 				statChanges.push([state.o, event.target, "tgt"]);
@@ -817,16 +818,18 @@ class Play {
 
 	checkDownAtEndOfPlay(state: State) {
 		// In endzone at end of play
-		if (
-			state.scrimmage >= 100 ||
-			state.scrimmage <= 0 ||
-			state.numPossessionChanges > 0
-		) {
+		if (state.scrimmage >= 100 || state.scrimmage <= 0) {
 			return;
 		}
 
 		// No first down or turnover on downs if extra point or two point conversion - see issue #396
 		if (state.awaitingAfterTouchdown) {
+			return;
+		}
+
+		// If the ball moved after the change in possession, we need to compute values (especially toGo) for a new first down, otherwise you can get stuff like 1st & 10 from the 4 yard line when it should be 1st & goal.
+		if (state.numPossessionChanges > 0) {
+			state.newFirstDown();
 			return;
 		}
 
@@ -1113,7 +1116,7 @@ class Play {
 								tackOn: false,
 							});
 
-							const indexEvent = this.spotOfEnforcementIndexes.at(-1);
+							const indexEvent = this.spotOfEnforcementIndexes.at(-1)!;
 							if (indexEvent > 0) {
 								subResults.push({
 									indexEvent,
@@ -1212,7 +1215,7 @@ class Play {
 			// Actually apply result of accepted penalty - ASSUMES JUST ONE IS ACCEPTED
 			this.state.current = result.state;
 
-			if (result.indexAccept >= 0) {
+			if (result.indexAccept >= 0 || offsetStatus === "offset") {
 				let numPenaltiesSeen = 0;
 
 				const statChanges = [

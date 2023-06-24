@@ -1,13 +1,11 @@
-import PropTypes from "prop-types";
-import {
-	DataTable,
-	MoreLinks,
-	PlayerNameLabels,
-	TeamLogoInline,
-} from "../components";
+import { DataTable, MoreLinks, TeamLogoInline } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import type { View } from "../../common/types";
+import {
+	CountBadge,
+	wrappedPlayerNameLabels,
+} from "../components/PlayerNameLabels";
 
 const awardName = (
 	award:
@@ -25,39 +23,31 @@ const awardName = (
 ) => {
 	if (!award) {
 		// For old seasons with no Finals MVP
-		return "N/A";
+		return {
+			value: "N/A",
+			sortValue: undefined,
+		};
 	}
 
-	const ret = (
-		<div className="d-flex">
-			<div className="me-auto">
-				<PlayerNameLabels pid={award.pid} pos={award.pos} season={season}>
-					{award.name}
-				</PlayerNameLabels>{" "}
-				(
-				<a
-					href={helpers.leagueUrl([
-						"roster",
-						`${award.abbrev}_${award.tid}`,
-						season,
-					])}
-				>
-					{award.abbrev}
-				</a>
-				)
-			</div>
-			<CountBadge count={award.count} />
-		</div>
-	);
+	const wrappedValue = wrappedPlayerNameLabels({
+		pid: award.pid,
+		pos: award.pos,
+		season: season,
+		legacyName: award.name,
+		abbrev: award.abbrev,
+		tid: award.tid,
+		count: award.count,
+	});
 
 	// This is our team.
 	if (award.tid === userTid) {
 		return {
+			...wrappedValue,
 			classNames: "table-info",
-			value: ret,
 		};
 	}
-	return ret;
+
+	return wrappedValue;
 };
 
 const teamName = (
@@ -70,27 +60,13 @@ const teamName = (
 				<a href={helpers.leagueUrl(["roster", `${t.abbrev}_${t.tid}`, season])}>
 					{t.region}
 				</a>{" "}
-				({t.won}-{t.lost}
-				{t.otl > 0 ? <>-{t.otl}</> : null}
-				{t.tied > 0 ? <>-{t.tied}</> : null})
+				({helpers.formatRecord(t)})
 			</>
 		);
 	}
 
 	// This happens if there is missing data, such as from Delete Old Data
 	return "N/A";
-};
-
-const CountBadge = ({ count }: { count: number }) => {
-	if (count > 1) {
-		return (
-			<div className="ms-1">
-				<span className="badge bg-secondary align-text-bottom">{count}</span>
-			</div>
-		);
-	}
-
-	return null;
 };
 
 const formatTeam = (
@@ -158,21 +134,15 @@ const HistoryAll = ({ awards, seasons, userTid }: View<"historyAll">) => {
 			<MoreLinks type="league" page="history_all" />
 
 			<DataTable
-				className="align-middle"
 				cols={cols}
 				defaultSort={[0, "desc"]}
+				defaultStickyCols={1}
 				name="HistoryAll"
 				pagination
 				rows={rows}
 			/>
 		</>
 	);
-};
-
-HistoryAll.propTypes = {
-	awards: PropTypes.arrayOf(PropTypes.string).isRequired,
-	seasons: PropTypes.arrayOf(PropTypes.object).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default HistoryAll;

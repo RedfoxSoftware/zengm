@@ -1,5 +1,5 @@
 import classNames from "classnames";
-import { useState, FormEvent, useEffect } from "react";
+import { useState, type FormEvent, useEffect } from "react";
 import { groupBy } from "../../../common/groupBy";
 import { ActionButton, StickyBottomButtons } from "../../components";
 import { confirm, localActions, logEvent } from "../../util";
@@ -208,9 +208,9 @@ export const SPECIAL_STATE_ALL = [
 	...SPECIAL_STATE_BOOLEANS,
 	...SPECIAL_STATE_OTHERS,
 ];
-export type SpecialStateOthers = typeof SPECIAL_STATE_OTHERS[number];
-type SpecialStateBoolean = typeof SPECIAL_STATE_BOOLEANS[number];
-type SpecialStateAll = typeof SPECIAL_STATE_ALL[number];
+export type SpecialStateOthers = (typeof SPECIAL_STATE_OTHERS)[number];
+type SpecialStateBoolean = (typeof SPECIAL_STATE_BOOLEANS)[number];
+type SpecialStateAll = (typeof SPECIAL_STATE_ALL)[number];
 
 export type State = Record<Exclude<Key, SpecialStateAll>, string> &
 	Record<SpecialStateBoolean, boolean> &
@@ -232,6 +232,8 @@ const SettingsForm = ({
 	hideShortcuts,
 	defaultNewLeagueSettings,
 	alwaysShowGodModeSettings,
+	isInsideModal,
+	hideGodModeToggle,
 }: {
 	onCancel?: () => void;
 	onCancelDefaultSetting?: (key: Key) => void;
@@ -245,9 +247,11 @@ const SettingsForm = ({
 	hideShortcuts?: boolean;
 	defaultNewLeagueSettings?: boolean;
 	alwaysShowGodModeSettings?: boolean;
+	isInsideModal?: boolean;
+	hideGodModeToggle?: boolean;
 
 	// Used to filter diplayed settings, for the DefaultSettings page
-	settingsShown?: Key[];
+	settingsShown?: Readonly<Key[]>;
 }) => {
 	useEffect(() => {
 		localActions.update({
@@ -335,7 +339,6 @@ const SettingsForm = ({
 					const partnerOption = settings.find(
 						setting => setting.key === partner,
 					);
-					console.log(partner, partnerOption);
 					if (partnerOption) {
 						options.push(partnerOption);
 					}
@@ -347,11 +350,11 @@ const SettingsForm = ({
 				const value = state[key];
 
 				// https://github.com/microsoft/TypeScript/issues/21732
-				// @ts-ignore
-				const parse = encodeDecodeFunctions[type].parse;
+				// @ts-expect-error
+				const parse = option.parse ?? encodeDecodeFunctions[type].parse;
 
 				try {
-					// @ts-ignore
+					// @ts-expect-error
 					output[key] = parse ? parse(value) : value;
 				} catch (error) {
 					setSubmitting(false);
@@ -430,7 +433,7 @@ const SettingsForm = ({
 	const showGodModeSettingsButton = !godMode && !alwaysShowGodModeSettings;
 
 	return (
-		<div className="settings-wrapper mt-lg-2">
+		<div className="settings-wrapper">
 			<form
 				onSubmit={handleFormSubmit}
 				className="flex-grow-1"
@@ -461,30 +464,32 @@ const SettingsForm = ({
 					visibleCategories={visibleCategories}
 				/>
 
-				<StickyBottomButtons>
-					<div className="btn-group">
-						<button
-							className={classNames(
-								"btn",
-								godMode ? "btn-secondary" : "btn-god-mode",
-							)}
-							onClick={handleGodModeToggle}
-							type="button"
-							disabled={submitting}
-						>
-							{godMode ? "Disable God Mode" : "Enable God Mode"}
-						</button>
-						{showGodModeSettingsButton ? (
-							<GodModeSettingsButton
-								className="d-none d-sm-block"
-								godMode={godMode}
+				<StickyBottomButtons isInsideModal={isInsideModal}>
+					{!hideGodModeToggle ? (
+						<div className="btn-group">
+							<button
+								className={classNames(
+									"btn",
+									godMode ? "btn-secondary" : "btn-god-mode",
+								)}
+								onClick={handleGodModeToggle}
+								type="button"
 								disabled={submitting}
-								onClick={toggleGodModeSettings}
 							>
-								{showGodModeSettings ? "Hide" : "Show"} God Mode settings
-							</GodModeSettingsButton>
-						) : null}
-					</div>
+								{godMode ? "Disable God Mode" : "Enable God Mode"}
+							</button>
+							{showGodModeSettingsButton ? (
+								<GodModeSettingsButton
+									className="d-none d-sm-block"
+									godMode={godMode}
+									disabled={submitting}
+									onClick={toggleGodModeSettings}
+								>
+									{showGodModeSettings ? "Hide" : "Show"} God Mode settings
+								</GodModeSettingsButton>
+							) : null}
+						</div>
+					) : null}
 					<div className="btn-group ms-auto">
 						{onCancel ? (
 							<button

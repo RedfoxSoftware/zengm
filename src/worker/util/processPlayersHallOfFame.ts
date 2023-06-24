@@ -4,8 +4,15 @@ import { bySport } from "../../common";
 const processPlayersHallOfFame = <
 	T extends {
 		careerStats: any;
-		ratings: any[];
+		ratings: any;
 		stats: any[];
+
+		// For most.ts
+		most?: {
+			extra?: {
+				bestSeasonOverride?: number | undefined;
+			};
+		};
 	},
 >(
 	players: T[],
@@ -16,11 +23,14 @@ const processPlayersHallOfFame = <
 })[] => {
 	return players.map(p => {
 		let peakOvr = 0;
-		for (const pr of p.ratings) {
-			if (pr.ovr > peakOvr) {
-				peakOvr = pr.ovr;
+		if (Array.isArray(p.ratings)) {
+			for (const pr of p.ratings) {
+				if (pr.ovr > peakOvr) {
+					peakOvr = pr.ovr;
+				}
 			}
 		}
+		const bestSeasonOverride = p.most?.extra?.bestSeasonOverride;
 
 		const hasSeasonWithGamesPlayed = p.stats.some(ps => ps.gp > 0);
 
@@ -30,17 +40,24 @@ const processPlayersHallOfFame = <
 		for (const ps of p.stats) {
 			const tid = ps.tid;
 			const ewa = bySport({
+				baseball: ps.war,
 				basketball: ps.ewa,
 				football: ps.av,
 				hockey: ps.ps,
 			});
-			if (ewa > bestEWA) {
-				if (!hasSeasonWithGamesPlayed || ps.gp > 0) {
+			if (bestSeasonOverride !== undefined) {
+				if (ps.season === bestSeasonOverride) {
 					bestStats = ps;
-					bestEWA = ewa;
+				}
+			} else {
+				if (ewa > bestEWA) {
+					if (!hasSeasonWithGamesPlayed || ps.gp > 0) {
+						bestStats = ps;
+						bestEWA = ewa;
+					}
 				}
 			}
-			if (teamSums.hasOwnProperty(tid)) {
+			if (Object.hasOwn(teamSums, tid)) {
 				teamSums[tid] += ewa;
 			} else {
 				teamSums[tid] = ewa;

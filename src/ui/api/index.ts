@@ -1,5 +1,6 @@
 import {
 	ads,
+	analyticsEvent,
 	autoPlayDialog,
 	confirm,
 	confirmDeleteAllLeagues,
@@ -16,51 +17,29 @@ import type {
 	UpdateEvents,
 	GameAttributesLeague,
 } from "../../common/types";
-import { AD_DIVS, GRACE_PERIOD } from "../../common";
+import { AD_DIVS, MOBILE_AD_BOTTOM_MARGIN } from "../../common";
 import { updateSkyscraperDisplay } from "../components/Skyscraper";
 
-/**
- * Ping a counter at basketball-gm.com.
- *
- * This should only do something if it isn't being run from a unit test and it's actually on basketball-gm.com.
- */
-const bbgmPing = (
-	type: "customizePlayers" | "league" | "season" | "version",
-	arg?: any,
-) => {
-	if (window.enableLogging && window.gtag) {
-		if (type === "league") {
-			window.gtag("event", "New league", {
-				event_category: arg[1],
-				event_label: String(arg[0]),
-			});
-		} else if (type === "season") {
-			window.gtag("event", "Completed season", {
-				event_category: "BBGM",
-				event_label: String(arg),
-			});
-		} else if (type === "version") {
-			window.gtag("event", "Version", {
-				event_category: "BBGM",
-				event_label: window.bbgmVersion,
-			});
-		}
+let accountChecked = false;
+let uiRendered = false;
+const initAds = (type: "accountChecked" | "uiRendered") => {
+	// Prevent race condition by assuring we run this only after the account has been checked and the UI has been rendered, otherwise (especially when opening a 2nd tab) this was sometimes running before the UI was rendered, which resulted in no ads being displayed
+	if (accountChecked && uiRendered) {
+		// Must have already ran somehow?
+		return;
 	}
-};
-
-// Read from goldUntil rather than local because this is called before local is updated
-const initAds = (goldUntil: number | undefined) => {
-	let hideAds = false; // No ads for Gold members
-
-	const currentTimestamp = Math.floor(Date.now() / 1000) - GRACE_PERIOD;
-
-	if (goldUntil === undefined || currentTimestamp < goldUntil) {
-		hideAds = true;
+	if (type === "accountChecked") {
+		accountChecked = true;
+	} else if (type === "uiRendered") {
+		uiRendered = true;
+	}
+	if (!accountChecked || !uiRendered) {
+		return;
 	}
 
-	const mobile = window.screen.width < 768;
+	const gold = local.getState().gold;
 
-	if (!hideAds) {
+	if (!gold) {
 		// _disabled names are to hide from Blockthrough, so it doesn't leak through for Gold subscribers. Run this regardless of window.freestar, so Blockthrough can still work for some users.
 		const divsAll = [
 			AD_DIVS.mobile,
@@ -84,7 +63,7 @@ const initAds = (goldUntil: number | undefined) => {
 				AD_DIVS.rectangle1,
 				AD_DIVS.rectangle2,
 			];
-			const divs = mobile ? divsMobile : divsDesktop;
+			const divs = window.mobile ? divsMobile : divsDesktop;
 
 			for (const id of divs) {
 				const div = document.getElementById(id);
@@ -116,7 +95,7 @@ const initAds = (goldUntil: number | undefined) => {
 				// Add margin to footer - do this manually rather than using stickyFooterAd so <Footer> does not have to re-render
 				const footer = document.getElementById("main-footer");
 				if (footer) {
-					footer.style.paddingBottom = "52px";
+					footer.style.paddingBottom = `${MOBILE_AD_BOTTOM_MARGIN}px`;
 				}
 
 				// Hack to hopefully stop the Microsoft ad from breaking everything
@@ -133,7 +112,7 @@ const initAds = (goldUntil: number | undefined) => {
 				});
 			}
 
-			if (!mobile) {
+			if (!window.mobile) {
 				// Show the logo too
 				const logo = document.getElementById("bbgm-ads-logo");
 
@@ -195,12 +174,6 @@ const initGold = () => {
 				div.id = `${id}_disabled`;
 			}
 		}
-		console.log(
-			"initGold end",
-			"display",
-			document.getElementById("basketball-gm_mobile_leaderboard")?.style
-				.display,
-		);
 	});
 };
 
@@ -273,14 +246,12 @@ const showModal = () => {
 		!window.freestar.refreshAllSlots ||
 		!window.googletag ||
 		!window.googletag.pubads;
-	if (adBlock && r < 0.11) {
+	if (adBlock && r < 0.1) {
 		ads.showModal();
 		return;
 	}
 
-	if (r < 0.1) {
-		ads.showGcs();
-	} else if (r < 0.11) {
+	if (r < 0.01) {
 		ads.showModal();
 	}
 };
@@ -314,8 +285,8 @@ const updateTeamOvrs = (ovrs: number[]) => {
 };
 
 export default {
+	analyticsEvent,
 	autoPlayDialog,
-	bbgmPing,
 	confirm,
 	confirmDeleteAllLeagues,
 	deleteGames,

@@ -10,7 +10,17 @@ const shouldRetire = (
 	p: Player<MinimalPlayerRatings> | PlayerWithoutKey<MinimalPlayerRatings>,
 ): boolean => {
 	const age = g.get("season") - p.born.year;
-	const { ovr, pos } = p.ratings.at(-1);
+
+	const forceRetireAge = g.get("forceRetireAge");
+	if (forceRetireAge >= g.get("draftAges")[1] && age >= forceRetireAge) {
+		return true;
+	}
+
+	if (age < g.get("minRetireAge")) {
+		return false;
+	}
+
+	const { ovr, pos } = p.ratings.at(-1)!;
 
 	// Originally this used pot, but pot is about 1.1*value, and value is consistent in leagues with different ratings distributions
 	const pot = 1.1 * p.value;
@@ -56,6 +66,7 @@ const shouldRetire = (
 		}
 	} else {
 		const maxAge = bySport({
+			baseball: 36,
 			basketball: 0,
 			football: pos === "QB" || pos === "P" || pos === "K" ? 35 : 32,
 			hockey: 36,
@@ -76,11 +87,6 @@ const shouldRetire = (
 				return true;
 			}
 		}
-	}
-
-	const forceRetireAge = g.get("forceRetireAge");
-	if (forceRetireAge >= g.get("draftAges")[1] && age >= forceRetireAge) {
-		return true;
 	}
 
 	return false;

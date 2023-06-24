@@ -1,24 +1,19 @@
-import PropTypes from "prop-types";
 import {
 	useEffect,
 	useReducer,
 	useRef,
 	useState,
-	ChangeEvent,
-	MouseEvent,
+	type ChangeEvent,
+	type MouseEvent,
 } from "react";
 import { ProgressBarText } from ".";
-import {
-	MAX_SUPPORTED_LEAGUE_VERSION,
-	GAME_NAME,
-	WEBSITE_ROOT,
-} from "../../common";
+import { LEAGUE_DATABASE_VERSION, GAME_NAME, WEBSITE_ROOT } from "../../common";
 import type { BasicInfo } from "../../worker/api/leagueFileUpload";
 import {
 	localActions,
 	resetFileInput,
 	toWorker,
-	useLocalShallow,
+	useLocalPartial,
 } from "../util";
 
 const ErrorMessage = ({ error }: { error: Error | null }) => {
@@ -126,10 +121,10 @@ const LeagueFileUpload = ({
 	}, []);
 
 	const leagueCreationID = useRef(Math.random());
-	const { leagueCreation, leagueCreationPercent } = useLocalShallow(state => ({
-		leagueCreation: state.leagueCreation,
-		leagueCreationPercent: state.leagueCreationPercent,
-	}));
+	const { leagueCreation, leagueCreationPercent } = useLocalPartial([
+		"leagueCreation",
+		"leagueCreationPercent",
+	]);
 
 	// Reset status when switching between file upload
 	useEffect(() => {
@@ -162,16 +157,16 @@ const LeagueFileUpload = ({
 		if (
 			basicInfo &&
 			typeof (basicInfo as any).version === "number" &&
-			(basicInfo as any).version > MAX_SUPPORTED_LEAGUE_VERSION
+			(basicInfo as any).version > LEAGUE_DATABASE_VERSION
 		) {
 			const error = new Error(
 				`This league file is a newer format (version ${
 					(basicInfo as any).version
-				}) than is supported by your version of ${GAME_NAME} (version ${MAX_SUPPORTED_LEAGUE_VERSION}).`,
+				}) than is supported by your version of ${GAME_NAME} (version ${LEAGUE_DATABASE_VERSION}).`,
 			);
 			(error as any).version = true;
 
-			if (isMounted) {
+			if (isMounted.current) {
 				dispatch({
 					type: "error",
 					error,
@@ -188,7 +183,7 @@ const LeagueFileUpload = ({
 				url,
 			});
 		} catch (error) {
-			if (isMounted) {
+			if (isMounted.current) {
 				dispatch({
 					type: "error",
 					error,
@@ -198,7 +193,7 @@ const LeagueFileUpload = ({
 			return;
 		}
 
-		if (isMounted) {
+		if (isMounted.current) {
 			dispatch({
 				type: "done",
 			});
@@ -218,9 +213,11 @@ const LeagueFileUpload = ({
 			const { basicInfo, schemaErrors } = await toWorker(
 				"leagueFileUpload",
 				"initialCheck",
-				url,
-				includePlayersInBasicInfo,
-				leagueCreationID.current,
+				{
+					file: url,
+					includePlayersInBasicInfo,
+					leagueCreationID: leagueCreationID.current,
+				},
 			);
 
 			await afterCheck({
@@ -234,7 +231,7 @@ const LeagueFileUpload = ({
 				leagueCreationPercent: undefined,
 			});
 		} catch (error) {
-			if (isMounted) {
+			if (isMounted.current) {
 				dispatch({
 					type: "error",
 					error,
@@ -265,9 +262,11 @@ const LeagueFileUpload = ({
 			const { basicInfo, schemaErrors } = await toWorker(
 				"leagueFileUpload",
 				"initialCheck",
-				file,
-				includePlayersInBasicInfo,
-				leagueCreationID.current,
+				{
+					file,
+					includePlayersInBasicInfo,
+					leagueCreationID: leagueCreationID.current,
+				},
 			);
 
 			await afterCheck({
@@ -276,7 +275,7 @@ const LeagueFileUpload = ({
 				schemaErrors,
 			});
 		} catch (error) {
-			if (isMounted) {
+			if (isMounted.current) {
 				dispatch({
 					type: "error",
 					error,
@@ -357,13 +356,6 @@ const LeagueFileUpload = ({
 			</div>
 		</>
 	);
-};
-
-LeagueFileUpload.propTypes = {
-	disabled: PropTypes.bool,
-	enterURL: PropTypes.bool,
-	onLoading: PropTypes.func,
-	onDone: PropTypes.func.isRequired,
 };
 
 export default LeagueFileUpload;

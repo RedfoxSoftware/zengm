@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import sampleTiebreakers from "../../../test/fixtures/sampleTiebreakers";
 import testHelpers from "../../../test/helpers";
 import { draft } from "..";
@@ -16,11 +16,11 @@ const getDraftTids = async () => {
 const loadTeamSeasons = async () => {
 	testHelpers.resetG();
 	await testHelpers.resetCache();
-	g.setWithoutSavingToDB("draftType", "nba1994"); // Load static data
+	g.setWithoutSavingToDB("draftType", "nba1994");
 
 	for (const st of sampleTiebreakers) {
 		const copied = helpers.deepCopy(st);
-		// @ts-ignore
+		// @ts-expect-error
 		delete copied.stats;
 		const { seasons, ...partialT } = copied;
 
@@ -31,6 +31,7 @@ const loadTeamSeasons = async () => {
 			keepRosterSorted: true,
 			colors: ["#000000", "#000000", "#000000"],
 			playThroughInjuries: [0, 0],
+			initialBudget: partialT.budget,
 		} as Team;
 
 		const teamSeasons = seasons.map(teamSeason => ({

@@ -1,6 +1,5 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
-import { useCallback, useState, CSSProperties } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import { Dropdown } from "react-bootstrap";
 
 import ago from "s-ago";
@@ -16,11 +15,16 @@ import useTitleBar from "../hooks/useTitleBar";
 import { confirm, getCols, logEvent, toWorker } from "../util";
 import type { View } from "../../common/types";
 
+// Would be better to use random.choice, but it is in worker only
+const choice = <T extends unknown>(array: T[]): T =>
+	array[Math.floor(Math.random() * array.length)];
+
 // Re-rendering caused this to run multiple times after "Play" click, even with useRef or useMemo
 const randomOtherSport = bySport({
-	basketball: Math.random() < 0.5 ? "football" : "hockey",
-	football: Math.random() < 0.5 ? "basketball" : "hockey",
-	hockey: Math.random() < 0.5 ? "basketball" : "football",
+	baseball: choice(["basketball", "football", "hockey"]),
+	basketball: choice(["baseball", "football", "hockey"]),
+	football: choice(["baseball", "basketball", "hockey"]),
+	hockey: choice(["baseball", "basketball", "football"]),
 });
 
 const difficultyText = (difficulty: number | undefined) => {
@@ -79,10 +83,6 @@ const DifficultyText = ({
 	);
 };
 
-DifficultyText.propTypes = {
-	children: PropTypes.number,
-};
-
 const PlayButton = ({
 	lid,
 	disabled,
@@ -130,8 +130,11 @@ const Star = ({ lid, starred }: { lid: number; starred?: boolean }) => {
 	const [actuallyStarred, setActuallyStarred] = useState<boolean>(!!starred);
 	const toggle = useCallback(async () => {
 		setActuallyStarred(!actuallyStarred);
-		await toWorker("main", "updateLeague", lid, {
-			starred: !actuallyStarred,
+		await toWorker("main", "updateLeague", {
+			lid,
+			obj: {
+				starred: !actuallyStarred,
+			},
 		});
 	}, [actuallyStarred, lid]);
 
@@ -148,7 +151,7 @@ const Star = ({ lid, starred }: { lid: number; starred?: boolean }) => {
 
 	return (
 		<span
-			className="glyphicon glyphicon-star-empty p-1 text-muted"
+			className="glyphicon glyphicon-star-empty p-1 text-body-secondary"
 			data-no-row-highlight="true"
 			onClick={toggle}
 			style={glyphiconStyle}
@@ -300,7 +303,7 @@ const Dashboard = ({ leagues }: View<"dashboard">) => {
 						title="Actions"
 					>
 						<span
-							className="glyphicon glyphicon-option-vertical text-muted p-2"
+							className="glyphicon glyphicon-option-vertical text-body-secondary p-2"
 							data-no-row-highlight="true"
 						/>
 					</Dropdown.Toggle>
@@ -323,8 +326,11 @@ const Dashboard = ({ leagues }: View<"dashboard">) => {
 									});
 
 									if (typeof newName === "string") {
-										await toWorker("main", "updateLeague", league.lid, {
-											name: newName,
+										await toWorker("main", "updateLeague", {
+											lid: league.lid,
+											obj: {
+												name: newName,
+											},
 										});
 									}
 								}}
@@ -393,12 +399,6 @@ const Dashboard = ({ leagues }: View<"dashboard">) => {
 
 	const pagination = rows.length > 100;
 
-	const otherSportsText = bySport({
-		basketball: "football and hockey",
-		football: "basketball and hockey",
-		hockey: "basketball and football",
-	});
-
 	return (
 		<>
 			{location.host.indexOf("beta") === 0 ? (
@@ -413,11 +413,7 @@ const Dashboard = ({ leagues }: View<"dashboard">) => {
 					<a href={`https://${WEBSITE_PLAY}/`}>the main site</a>.
 				</p>
 			) : null}
-			<div
-				className={
-					SPORT_HAS_REAL_PLAYERS ? "mt-2 dashboard-top-wrapper" : "mt-2"
-				}
-			>
+			<div className="dashboard-top-wrapper">
 				{SPORT_HAS_REAL_PLAYERS ? (
 					<>
 						<a
@@ -456,33 +452,50 @@ const Dashboard = ({ leagues }: View<"dashboard">) => {
 							<span className="dashboard-top-link-small">» Custom</span>
 						</a>
 						<div className="d-sm-none" />
+						<a
+							href="/exhibition"
+							className="btn btn-secondary dashboard-top-link dashboard-top-link-new me-3 mb-3"
+						>
+							Exhibition game
+						</a>
 					</>
 				) : (
-					<a
-						href="/new_league"
-						className="btn btn-primary dashboard-top-link dashboard-top-link-new me-3 mb-3"
-					>
-						Create new
-						<br />
-						league
-					</a>
+					<>
+						<a
+							href="/new_league"
+							className="btn btn-primary dashboard-top-link dashboard-top-link-new me-3 mb-3"
+						>
+							Create new
+							<br />
+							league
+						</a>
+						<a
+							href="/exhibition"
+							className="btn btn-secondary dashboard-top-link dashboard-top-link-new me-sm-3 mb-3"
+						>
+							Exhibition game
+						</a>
+						<div className="d-sm-none" />
+					</>
 				)}
-
 				<a
 					href="https://zengm.com/"
-					className={`btn btn-light-bordered dashboard-top-link dashboard-top-link-other mb-3 dashboard-top-link-other-${randomOtherSport}`}
+					className={`btn btn-light-bordered dashboard-top-link dashboard-top-link-other mb-3 dashboard-top-link-other-${randomOtherSport}${
+						SPORT_HAS_REAL_PLAYERS ? "" : " dashboard-top-link-flatten"
+					}`}
 				>
-					Try our {otherSportsText} games!
+					Try our other sports sim
+					<br /> games!
 				</a>
 			</div>
 
 			{rows.length > 0 ? (
 				<DataTable
-					bordered={false}
 					cols={cols}
-					className="dashboard-table align-middle"
+					className="dashboard-table"
 					disableSettingsCache
 					defaultSort={[7, "desc"]}
+					defaultStickyCols={1}
 					name="Dashboard"
 					pagination={pagination}
 					small={false}
@@ -491,22 +504,6 @@ const Dashboard = ({ leagues }: View<"dashboard">) => {
 			) : null}
 		</>
 	);
-};
-
-Dashboard.propTypes = {
-	leagues: PropTypes.arrayOf(
-		PropTypes.shape({
-			created: PropTypes.instanceOf(Date),
-			lastPlayed: PropTypes.instanceOf(Date),
-			difficulty: PropTypes.number,
-			lid: PropTypes.number.isRequired,
-			name: PropTypes.string.isRequired,
-			phaseText: PropTypes.string.isRequired,
-			starred: PropTypes.bool,
-			teamName: PropTypes.string.isRequired,
-			teamRegion: PropTypes.string.isRequired,
-		}),
-	).isRequired,
 };
 
 export default Dashboard;

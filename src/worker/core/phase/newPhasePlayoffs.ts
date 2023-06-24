@@ -11,7 +11,7 @@ const newPhasePlayoffs = async (
 	conditions: Conditions,
 	liveGameSim: boolean = false,
 ): Promise<PhaseReturn> => {
-	achievement.check("afterRegularSeason", conditions);
+	await achievement.check("afterRegularSeason", conditions);
 
 	// In case this was somehow set already
 	local.playingUntilEndOfRound = false;
@@ -96,7 +96,7 @@ const newPhasePlayoffs = async (
 			teamSeason.tid,
 		);
 		const players = await idb.getCopies.playersPlus(playersRaw, {
-			attrs: ["age", "value"],
+			attrs: ["age", "value", "pid"],
 			fuzz: true,
 			stats: ["gp", "min"],
 			ratings: ["ovr", "pos", "ovrs"],
@@ -126,13 +126,16 @@ const newPhasePlayoffs = async (
 	await team.updateClinchedPlayoffs(true, conditions);
 
 	// Don't redirect if we're viewing a live game now
-	let url;
+	let redirect;
 	if (!liveGameSim) {
-		url = helpers.leagueUrl(["playoffs"]);
+		redirect = {
+			url: helpers.leagueUrl(["playoffs"]),
+			text: "View playoff bracket",
+		};
 	}
 
 	return {
-		url,
+		redirect,
 		updateEvents: ["teamFinances"],
 	};
 };

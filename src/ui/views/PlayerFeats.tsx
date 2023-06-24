@@ -1,9 +1,9 @@
-import PropTypes from "prop-types";
-import { DataTable, PlayerNameLabels } from "../components";
+import { DataTable } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import type { View } from "../../common/types";
 import { bySport, isSport } from "../../common";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const PlayerFeats = ({
 	abbrev,
@@ -36,12 +36,11 @@ const PlayerFeats = ({
 		return {
 			key: p.fid,
 			data: [
-				<PlayerNameLabels
-					pid={p.pid}
-					season={typeof season === "number" ? season : undefined}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					season: typeof season === "number" ? season : undefined,
+					legacyName: p.name,
+				}),
 				p.pos,
 				<a
 					href={helpers.leagueUrl(["roster", `${p.abbrev}_${p.tid}`, p.season])}
@@ -132,6 +131,19 @@ const PlayerFeats = ({
 	return (
 		<>
 			{bySport({
+				baseball: (
+					<p>
+						This lists all games where a player got {scaleMinimum(3)} home runs,{" "}
+						{scaleMinimum(5)} hits, {scaleMinimum(6)} RBIs, {scaleMinimum(4)}{" "}
+						runs, {scaleMinimum(3)} stolen bases, {scaleMinimum(15)} strikeouts,
+						a no hitter, a shutout, or hit for the cycle
+						{quarterLengthFactor !== 1
+							? " (cutoffs are scaled due to a non-default period length)"
+							: null}
+						. Statistical feats from your players are{" "}
+						<span className="text-info">highlighted in blue</span>.
+					</p>
+				),
 				basketball: (
 					<p>
 						This lists all games where a player got a{" "}
@@ -178,6 +190,7 @@ const PlayerFeats = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[23, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="PlayerFeats"
 				rows={rows}
 				superCols={superCols}
@@ -185,14 +198,6 @@ const PlayerFeats = ({
 			/>
 		</>
 	);
-};
-
-PlayerFeats.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	feats: PropTypes.arrayOf(PropTypes.object).isRequired,
-	season: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default PlayerFeats;

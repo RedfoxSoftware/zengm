@@ -36,15 +36,15 @@ const assessPayrollMinLuxury = async () => {
 
 		// Assess minimum payroll tax and luxury tax
 		if (payroll < g.get("minPayroll")) {
-			teamSeason.expenses.minTax.amount = g.get("minPayroll") - payroll;
-			teamSeason.cash -= teamSeason.expenses.minTax.amount;
+			teamSeason.expenses.minTax = g.get("minPayroll") - payroll;
+			teamSeason.cash -= teamSeason.expenses.minTax;
 
 			logEvent({
 				type: "minPayroll",
 				text: `The ${rosterLink(
 					tid,
 				)} paid a minimum payroll penalty of ${helpers.formatCurrency(
-					teamSeason.expenses.minTax.amount / 1000,
+					teamSeason.expenses.minTax / 1000,
 					"M",
 				)} for having a payroll under ${helpers.formatCurrency(
 					g.get("minPayroll") / 1000,
@@ -54,12 +54,15 @@ const assessPayrollMinLuxury = async () => {
 				showNotification: tid === g.get("userTid"),
 				score: 10,
 			});
-		} else if (payroll > g.get("luxuryPayroll") && !g.get("hardCap")) {
+		} else if (
+			payroll > g.get("luxuryPayroll") &&
+			g.get("salaryCapType") !== "hard"
+		) {
 			// Only apply luxury tax if hard cap is disabled!
 			const amount = g.get("luxuryTax") * (payroll - g.get("luxuryPayroll"));
 			collectedTax += amount;
-			teamSeason.expenses.luxuryTax.amount = amount;
-			teamSeason.cash -= teamSeason.expenses.luxuryTax.amount;
+			teamSeason.expenses.luxuryTax = amount;
+			teamSeason.cash -= teamSeason.expenses.luxuryTax;
 
 			logEvent({
 				type: "luxuryTax",
@@ -79,9 +82,13 @@ const assessPayrollMinLuxury = async () => {
 		}
 	}
 
-	const defaultRank = (g.get("numActiveTeams") + 1) / 2;
+	const payrollCutoff =
+		g.get("salaryCapType") === "none"
+			? g.get("luxuryPayroll")
+			: g.get("salaryCap");
+
 	const payteams = Object.values(payrolls).filter(
-		x => x !== undefined && x <= g.get("salaryCap"),
+		x => x !== undefined && x <= payrollCutoff,
 	);
 
 	if (payteams.length > 0 && collectedTax > 0) {
@@ -94,22 +101,19 @@ const assessPayrollMinLuxury = async () => {
 				throw new Error(`No payroll found for team ${tid}`);
 			}
 
-			if (payroll <= g.get("salaryCap")) {
-				teamSeason.revenues.luxuryTaxShare = {
-					amount: distribute,
-					rank: defaultRank,
-				};
+			if (payroll <= payrollCutoff) {
+				teamSeason.revenues.luxuryTaxShare = distribute;
 				teamSeason.cash += distribute;
 
 				logEvent({
 					type: "luxuryTaxDist",
 					text: `The ${rosterLink(
 						tid,
-					)} recieved a luxury tax distribution of ${helpers.formatCurrency(
+					)} received a luxury tax distribution of ${helpers.formatCurrency(
 						distribute / 1000,
 						"M",
 					)} for having a payroll under ${helpers.formatCurrency(
-						g.get("salaryCap") / 1000,
+						payrollCutoff / 1000,
 						"M",
 					)}.`,
 					tids: [tid],
@@ -117,10 +121,7 @@ const assessPayrollMinLuxury = async () => {
 					score: 10,
 				});
 			} else {
-				teamSeason.revenues.luxuryTaxShare = {
-					amount: 0,
-					rank: defaultRank,
-				};
+				teamSeason.revenues.luxuryTaxShare = 0;
 			}
 		}
 	}

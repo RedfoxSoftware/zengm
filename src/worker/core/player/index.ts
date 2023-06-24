@@ -9,6 +9,7 @@ import checkStatisticalFeat from "./checkStatisticalFeat";
 import compositeRating from "./compositeRating";
 import contractSeasonsRemaining from "./contractSeasonsRemaining";
 import develop from "./develop";
+import developSeason from "./developSeason";
 import fuzzRating from "./fuzzRating";
 import fuzzOvrs from "./fuzzOvrs";
 import genContract from "./genContract";
@@ -18,6 +19,7 @@ import genMoodTraits from "./genMoodTraits";
 import genRandomFreeAgent from "./genRandomFreeAgent";
 import genWeight from "./genWeight";
 import generate from "./generate";
+import getLeaders from "../player/getLeaders";
 import getPlayerFakeAge from "./getPlayerFakeAge";
 import heightToRating from "./heightToRating";
 import injury from "./injury";
@@ -54,6 +56,7 @@ export default {
 	compositeRating,
 	contractSeasonsRemaining,
 	develop,
+	developSeason,
 	fuzzRating,
 	fuzzOvrs,
 	genContract,
@@ -63,6 +66,7 @@ export default {
 	genMoodTraits,
 	genWeight,
 	generate,
+	getLeaders,
 	getPlayerFakeAge,
 	heightToRating,
 	injury,

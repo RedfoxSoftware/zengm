@@ -1,4 +1,4 @@
-import { bySport, PHASE } from "../../common";
+import { bySport, PHASE, SIMPLE_AWARDS } from "../../common";
 import { idb } from "../db";
 import { g } from "../util";
 import type { UpdateEvents, PlayoffSeriesTeam } from "../../common/types";
@@ -82,6 +82,8 @@ const updateHistory = async (inputs: unknown, updateEvents: UpdateEvents) => {
 				roy: addAbbrev(a.roy, teams, a.season),
 				oroy: addAbbrev(a.oroy, teams, a.season),
 				droy: addAbbrev(a.droy, teams, a.season),
+				poy: addAbbrev(a.poy, teams, a.season),
+				rpoy: addAbbrev(a.rpoy, teams, a.season),
 				runnerUp: undefined,
 				champ: undefined,
 			};
@@ -98,7 +100,7 @@ const updateHistory = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			// Only check for finals result for seasons that are over
 			const series = playoffSeries.find(ps => ps.season === season);
 
-			type MyTeam = typeof teams[number];
+			type MyTeam = (typeof teams)[number];
 			const formatTeam = (t: MyTeam, seed: number) => {
 				const tid = t.tid;
 
@@ -140,7 +142,7 @@ const updateHistory = async (inputs: unknown, updateEvents: UpdateEvents) => {
 						seasons[i].champ = formatTeam(t, 1);
 					}
 				} else {
-					const finals = series.series.at(-1)[0];
+					const finals = series.series.at(-1)![0];
 
 					// eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
 					if (!finals || !finals.away) {
@@ -174,33 +176,14 @@ const updateHistory = async (inputs: unknown, updateEvents: UpdateEvents) => {
 
 		// Count up number of championships/awards per tid/pid
 		const counts: Record<string, Record<number, number>> = {
-			finalsMvp: {},
-			mvp: {},
-			dpoy: {},
-			dfoy: {},
-			goy: {},
-			smoy: {},
-			mip: {},
-			roy: {},
-			oroy: {},
-			droy: {},
 			runnerUp: {},
 			champ: {},
 		};
+		for (const award of SIMPLE_AWARDS) {
+			counts[award] = {};
+		}
 
 		const teamCategories = ["champ", "runnerUp"];
-		const playerCategories = [
-			"finalsMvp",
-			"mvp",
-			"dpoy",
-			"dfoy",
-			"goy",
-			"smoy",
-			"mip",
-			"roy",
-			"oroy",
-			"droy",
-		];
 		for (const row of seasons) {
 			for (const category of teamCategories) {
 				if (!row[category]) {
@@ -215,7 +198,7 @@ const updateHistory = async (inputs: unknown, updateEvents: UpdateEvents) => {
 				row[category].count = counts[category][tid];
 			}
 
-			for (const category of playerCategories) {
+			for (const category of SIMPLE_AWARDS) {
 				if (!row[category]) {
 					continue;
 				}
@@ -230,6 +213,7 @@ const updateHistory = async (inputs: unknown, updateEvents: UpdateEvents) => {
 		}
 
 		const awardNames = bySport({
+			baseball: ["finalsMvp", "mvp", "poy", "rpoy", "roy"],
 			basketball: ["finalsMvp", "mvp", "dpoy", "smoy", "mip", "roy"],
 			football: ["finalsMvp", "mvp", "dpoy", "oroy", "droy"],
 			hockey: ["finalsMvp", "mvp", "dpoy", "dfoy", "goy", "roy"],

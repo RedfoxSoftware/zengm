@@ -3,7 +3,7 @@ import {
 	getTopPlayers,
 	leagueLeaders,
 	teamAwards,
-	AwardsByPlayer,
+	type AwardsByPlayer,
 	addSimpleAndTeamAwardsToAwardsByPlayer,
 	saveAwardsByPlayer,
 } from "./awards";
@@ -53,10 +53,7 @@ const getTopByPos = (
 	}
 };
 
-export const makeTeams = (
-	players: AwardPlayer[],
-	rookie: boolean = false,
-): any => {
+const makeTeams = (players: AwardPlayer[], rookie: boolean = false): any => {
 	const usedPids = new Set<number>();
 	const teamPositions = [["C"], ["W"], ["W"], ["D"], ["D"], ["G"]];
 
@@ -84,6 +81,8 @@ export const makeTeams = (
 	return teams;
 };
 
+const GOALIE_ADJUSTMENT = 0.225;
+
 export const mvpScore = (p: PlayerFiltered) => {
 	let teamFactor = 0;
 	if (p.currentStats.gp >= 20) {
@@ -94,13 +93,15 @@ export const mvpScore = (p: PlayerFiltered) => {
 	return (
 		p.currentStats.pts / 25 +
 		p.currentStats.ps -
-		0.225 * p.currentStats.gps +
+		GOALIE_ADJUSTMENT * p.currentStats.gps +
 		teamFactor
 	);
 };
 
 export const royScore = (p: PlayerFiltered) =>
-	p.currentStats.pts / 25 + p.currentStats.ps;
+	p.currentStats.pts / 25 +
+	p.currentStats.ps -
+	GOALIE_ADJUSTMENT * p.currentStats.gps;
 
 export const dpoyScore = (p: PlayerFiltered) =>
 	p.currentStats.tk / 25 + p.currentStats.hit / 25 + p.currentStats.dps;
@@ -174,7 +175,17 @@ const doAwards = async (conditions: Conditions) => {
 	];
 	leagueLeaders(players, categories, awardsByPlayer);
 
-	const mvpPlayers = getTopPlayers(
+	const dpoyPlayers = getTopPlayers(
+		{
+			allowNone: true,
+			amount: 1,
+			score: dpoyScore,
+		},
+		players,
+	).map(getPlayerInfo);
+	const dpoy = dpoyPlayers[0];
+
+	let mvpPlayers = getTopPlayers(
 		{
 			allowNone: true,
 			amount: Infinity,
@@ -183,6 +194,10 @@ const doAwards = async (conditions: Conditions) => {
 		players,
 	).map(getPlayerInfo);
 	const mvp = mvpPlayers[0];
+
+	// Move dpoy to top, so he's always on All-League team
+	mvpPlayers = [dpoy, ...mvpPlayers.filter(p => p.pid !== dpoy.pid)];
+
 	const allLeague = makeTeams(mvpPlayers);
 	const royPlayers = getTopPlayers(
 		{
@@ -197,16 +212,6 @@ const doAwards = async (conditions: Conditions) => {
 	// Unlike mvp and allLeague, roy can be undefined and allRookie can be any length <= 5
 	const roy = royPlayers[0];
 	const allRookie = makeTeams(royPlayers, true);
-
-	const dpoyPlayers = getTopPlayers(
-		{
-			allowNone: true,
-			amount: 1,
-			score: dpoyScore,
-		},
-		players,
-	).map(getPlayerInfo);
-	const dpoy = dpoyPlayers[0];
 
 	const dfoyPlayers = getTopPlayers(
 		{

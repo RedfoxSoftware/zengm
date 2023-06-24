@@ -45,8 +45,6 @@ window.themeCSSLink = loadCSS("gen/" + getTheme() + ".css");
 window.enableLogging = location.host.indexOf("GOOGLE_ANALYTICS_COOKIE_DOMAIN") >= 0;
 
 if (window.enableLogging) {
-  window.googleAnalyticsID = "GOOGLE_ANALYTICS_ID";
-
   var s = document.createElement("script");
   s.async = true;
   s.src = "https://www.googletagmanager.com/gtag/js?id=GOOGLE_ANALYTICS_ID";
@@ -56,24 +54,8 @@ if (window.enableLogging) {
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
   gtag('config', 'GOOGLE_ANALYTICS_ID', {
-    'cookie_domain': 'GOOGLE_ANALYTICS_COOKIE_DOMAIN'
+    cookie_domain: 'GOOGLE_ANALYTICS_COOKIE_DOMAIN'
   });
-
-  // Google Consumer Surveys
-  var TriggerPrompt = function(articleUrl, contentId) {
-    var ARTICLE_URL = articleUrl;
-    var CONTENT_ID = contentId || '';
-    var el = document.createElement('script');
-    var url = 'https://survey.g.doubleclick.net/survey?site=GOOGLE_SURVEYS_ID' +
-              '&url=' + encodeURIComponent(ARTICLE_URL) +
-              (CONTENT_ID ? '&cid=' + encodeURIComponent(CONTENT_ID) : '') +
-              '&random=' + (new Date).getTime() +
-              '&after=1';
-    el.setAttribute('src', url);
-    var head = document.getElementsByTagName('head')[0] ||
-        document.getElementsByTagName('body')[0];
-    head.appendChild(el);
-  };
 }
 
 window.releaseStage = "unknown";
@@ -88,8 +70,6 @@ if (location.host.indexOf("localhost") === 0) {
 window.bugsnagKey = "BUGSNAG_API_KEY";
     </script>
 BANNER_ADS_CODE
-QUANTCAST_CODE
-FACEBOOK_PIXEL_CODE
   </head>
 
   <body class="h-100" style="padding-top: 52px">
@@ -128,12 +108,17 @@ var timeoutID = setTimeout(function () {
 }, 6000);
 
 function checkModern() {
-  try {
-    eval("var x = {}; x ?? x?.y;");
-    return true;
-  } catch (err) {
+  // Chrome 97, Firefox 104, Safari 15.4
+  if (Array.prototype.findLast === undefined) {
     return false;
   }
+
+  // Chrome 71, Firefox 105, Safari 14.1
+  if (typeof TextDecoderStream === "undefined") {
+    return false;
+  }
+
+  return true;
 };
 
 function withGoodBrowser() {
@@ -150,7 +135,7 @@ function withGoodBrowser() {
   } else  {
     // Need SystemJS for chunk loading
     var systemJsLoaderTag = document.createElement("script");
-    systemJsLoaderTag.src = "https://unpkg.com/systemjs@6.11.0/dist/s.min.js";
+    systemJsLoaderTag.src = "https://unpkg.com/systemjs@6.14.1/dist/s.min.js";
     systemJsLoaderTag.addEventListener("load", function () {
       System.import("/gen/ui-legacy-" + bbgmVersion + ".js");
     });
@@ -174,16 +159,10 @@ function withGoodWorker() {
   }
 }
 
-// Browser compatibility checks! https://gist.github.com/jensarps/15f270874889e1717b3d
+// Browser compatibility checks! Used to be like https://gist.github.com/jensarps/15f270874889e1717b3d but now the buggy old IE/Safari IndexedDB implementations are not supported for other reasons, like checkBrowser.
 function goodIDB(cb) {
-  try {
-    if (typeof window.indexedDB === "undefined") {
-      cb("bad");
-      return;
-    }
-  } catch (err) {
-    console.error(err);
-    cb("open-failed");
+  if (typeof indexedDB === "undefined") {
+    cb("bad");
     return;
   }
 
@@ -192,14 +171,7 @@ function goodIDB(cb) {
     return;
   }
 
-  try {
-    window.IDBKeyRange.only([1]);
-  } catch (e) {
-    cb("bad");
-    return;
-  }
-
-  var openRequest = window.indexedDB.open('__detectIDB_test2', 1);
+  var openRequest = indexedDB.open('__detectIDB_test2', 1);
 
   openRequest.onerror = function (evt) {
     console.error(evt.target.error);
@@ -211,52 +183,16 @@ function goodIDB(cb) {
     }
   }
 
-  openRequest.onupgradeneeded = function (evt) {
-    var db = evt.target.result;
-    var one = db.createObjectStore('one', {
-      autoIncrement: true,
-      keyPath: 'key'
-    });
-    one.createIndex('one', 'one');
-    one.add({one: 1});
-    var two = db.createObjectStore('two', {
-      autoIncrement: true,
-      keyPath: 'key'
-    });
-    two.createIndex ('two', 'two');
-    two.add({two: 2});
-  };
-
   openRequest.onsuccess = function (evt) {
-    var db = evt.target.result;
-    var transaction;
-    try {
-      transaction = db.transaction(['one', 'two'], 'readwrite');
-    } catch (e) {
-      cb("bad");
-      return;
-    }
-
-    var count = 0;
-    transaction.objectStore('one').index('one').openCursor().onsuccess = function (evt) {
-      cursor = evt.target.result;
-      if (cursor) {
-        count += 1;
-        cursor.continue();
-      }
-    };
-
-    transaction.oncomplete = function () {
-      db.close();
-      cb(count === 1 ? "good" : "bad"); // Will be 2 in Safari 10 https://bugs.webkit.org/show_bug.cgi?id=158833
-    };
+    cb("good");
   };
 };
 
 function checkBrowser() {
   try {
     // Safari 10 https://bugs.webkit.org/show_bug.cgi?id=171041
-    eval("const s = Symbol(); let e = (e) => { for (let e of []) {}; }");
+    // async is for Chrome 54 and lower
+    eval("const s = Symbol(); let e = async (e) => { for (let e of []) {}; }");
     return true;
   } catch (err) {
     return false;
@@ -269,7 +205,7 @@ goodIDB(function (idbResult) {
     if (idbResult === "open-failed") {
       errorMsg = '<p><b>Error!</b> Cannot store data.</p><p>If you have disabled cookies in your browser, you must enable them to play GAME_NAME.</p><p>If you\'re using Firefox\'s Private Browsing mode, there is currently a bug in Firefox that prevents GAME_NAME from running. Either load GAME_NAME outside of Private Browsing mode, or try using <a href="https://www.google.com/chrome/">Google Chrome</a> instead.</p>';
     } else {
-      errorMsg = '<p><b>Error!</b> Your browser is not modern enough to run GAME_NAME. The latest versions of <a href="https://www.google.com/chrome/">Google Chrome</a> and <a href="https://www.mozilla.org/en-US/firefox/">Mozilla Firefox</a> work best.</p>';
+      errorMsg = '<p><b>Error!</b> Your browser is not modern enough to run GAME_NAME. Current supported browsers include:</p><ul class="list-unstyled mb-0"><li>Chrome 55+</li><li>Firefox 78+</li><li>Safari 12+</li></ul>';
     }
 
     // Special error for Apple's mobile devices, as that's the only platform that is totally unsupported (no alternative browser to install)

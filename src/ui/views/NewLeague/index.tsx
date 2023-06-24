@@ -1,6 +1,5 @@
 import { m, AnimatePresence } from "framer-motion";
 import orderBy from "lodash-es/orderBy";
-import PropTypes from "prop-types";
 import { useState, useReducer, useRef } from "react";
 import {
 	DIFFICULTY,
@@ -14,7 +13,7 @@ import {
 	gameAttributesArrayToObject,
 	WEBSITE_ROOT,
 	unwrapGameAttribute,
-	MAX_SUPPORTED_LEAGUE_VERSION,
+	LEAGUE_DATABASE_VERSION,
 } from "../../../common";
 import {
 	ActionButton,
@@ -32,7 +31,8 @@ import {
 	realtimeUpdate,
 	toWorker,
 	safeLocalStorage,
-	useLocalShallow,
+	useLocalPartial,
+	analyticsEvent,
 } from "../../util";
 import type {
 	View,
@@ -40,6 +40,7 @@ import type {
 	GetLeagueOptions,
 	Div,
 	Conf,
+	GameAttributesLeague,
 } from "../../../common/types";
 import classNames from "classnames";
 import { descriptions } from "../Settings/settings";
@@ -57,34 +58,24 @@ const animationVariants = {
 		transition: { duration: 0.25, ease: "easeInOut" },
 	},
 	left: {
-		x: "-75vw",
+		x: "-100vw",
 		transition: { duration: 0.25, ease: "easeInOut" },
 	},
 	right: {
-		x: "75vw",
+		x: "100vw",
 		transition: { duration: 0.25, ease: "easeInOut" },
 	},
 };
 
-const onAnimationCompleteHack = (definition: string) => {
-	// HACK HACK HACK
-	// CustomizeSettings has a sticky div inside it, and mobile Chrome (and maybe others) get confused by the `transform: translateX(0vw) translateZ(0px);` CSS that framer-motion leaves hanging around
-	if (definition === "visible") {
-		const parent = document.getElementById("actual-actual-content");
-		if (parent) {
-			const animatedDiv = parent.children[0] as HTMLDivElement | undefined;
-			if (animatedDiv) {
-				animatedDiv.style.transform = "";
-			}
-		}
-	}
-};
-
-const applyRealTeamInfos = (
-	teams: NewLeagueTeam[],
+export const applyRealTeamInfos = <
+	T extends Parameters<typeof applyRealTeamInfo>[0] & {
+		season?: number;
+	},
+>(
+	teams: T[],
 	realTeamInfo: RealTeamInfo | undefined,
-	season: number = new Date().getFullYear(),
-) => {
+	season: number | "inTeamObject" = new Date().getFullYear(),
+): T[] => {
 	if (!realTeamInfo) {
 		return teams;
 	}
@@ -92,7 +83,19 @@ const applyRealTeamInfos = (
 	return teams.map(t => {
 		if (t.srID && realTeamInfo[t.srID]) {
 			const t2 = helpers.deepCopy(t);
-			applyRealTeamInfo(t2, realTeamInfo, season);
+
+			let teamSeason;
+			if (season === "inTeamObject") {
+				teamSeason = t2.season;
+				if (teamSeason === undefined) {
+					throw new Error("Missing season");
+				}
+			} else {
+				teamSeason = season;
+			}
+
+			applyRealTeamInfo(t2, realTeamInfo, teamSeason);
+
 			return t2;
 		}
 
@@ -135,8 +138,9 @@ const initKeptKeys = ({
 	};
 };
 
-const MIN_SEASON = 1947;
-const MAX_SEASON = 2022;
+export const MIN_SEASON = 1947;
+export const MAX_SEASON = 2023;
+const MAX_PHASE = PHASE.DRAFT;
 
 const seasons: { key: string; value: string }[] = [];
 for (let i = MAX_SEASON; i >= MIN_SEASON; i--) {
@@ -148,38 +152,39 @@ for (let i = MAX_SEASON; i >= MIN_SEASON; i--) {
 
 const legends = [
 	{
-		key: "all",
+		key: "all" as const,
 		value: "All Time",
 	},
 	{
-		key: "2010s",
+		key: "2010s" as const,
 		value: "2010s",
 	},
 	{
-		key: "2000s",
+		key: "2000s" as const,
 		value: "2000s",
 	},
 	{
-		key: "1990s",
+		key: "1990s" as const,
 		value: "1990s",
 	},
 	{
-		key: "1980s",
+		key: "1980s" as const,
 		value: "1980s",
 	},
 	{
-		key: "1970s",
+		key: "1970s" as const,
 		value: "1970s",
 	},
 	{
-		key: "1960s",
+		key: "1960s" as const,
 		value: "1960s",
 	},
 	{
-		key: "1950s",
+		key: "1950s" as const,
 		value: "1950s",
 	},
 ];
+type LegendKey = (typeof legends)[number]["key"];
 
 const phases = [
 	{
@@ -227,7 +232,6 @@ type State = {
 	pendingInitialLeagueInfo: boolean;
 	allKeys: string[];
 	keptKeys: string[];
-	expandOptions: boolean;
 	settings: Omit<Settings, "numActiveTeams">;
 	rebuildAbbrevPending?: string;
 };
@@ -299,9 +303,6 @@ type Action =
 			gameAttributes: Record<string, unknown>;
 			defaultSettings: State["settings"];
 			startingSeason: number;
-	  }
-	| {
-			type: "toggleExpandOptions";
 	  };
 
 const getTeamRegionName = (teams: NewLeagueTeam[], tid: number) => {
@@ -313,10 +314,30 @@ const getTeamRegionName = (teams: NewLeagueTeam[], tid: number) => {
 };
 
 const getNewTid = (prevTeamRegionName: string, newTeams: NewLeagueTeam[]) => {
-	const newTeamsSorted = orderBy(newTeams, ["region", "name"]);
-	const closestNewTeam = newTeamsSorted.find(
-		t => prevTeamRegionName <= `${t.region} ${t.name}`,
+	const newTeamsSorted = orderBy(
+		newTeams.filter(t => !t.disabled),
+		["region", "name"],
 	);
+
+	// First look for exact match
+	let closestNewTeam = newTeamsSorted.find(
+		t => prevTeamRegionName === `${t.region} ${t.name}`,
+	);
+
+	// Second look for exact region match
+	if (!closestNewTeam) {
+		closestNewTeam = newTeamsSorted.find(t =>
+			prevTeamRegionName.startsWith(t.region),
+		);
+	}
+
+	// Fallback, just get me something close
+	if (!closestNewTeam) {
+		closestNewTeam = newTeamsSorted.find(
+			t => prevTeamRegionName <= `${t.region} ${t.name}`,
+		);
+	}
+
 	return closestNewTeam ? closestNewTeam.tid : newTeams.length - 1;
 };
 
@@ -331,7 +352,8 @@ const getSettingsFromGameAttributes = (
 			if (
 				key === "noStartingInjuries" ||
 				key === "randomization" ||
-				key === "realStats"
+				key === "realStats" ||
+				key === "giveMeWorstRoster"
 			) {
 				continue;
 			}
@@ -545,7 +567,7 @@ const reducer = (state: State, action: Action): State => {
 					hasRookieContracts: true,
 					startingSeason: action.startingSeason,
 					teams: action.teams,
-					version: MAX_SUPPORTED_LEAGUE_VERSION,
+					version: LEAGUE_DATABASE_VERSION,
 				},
 				file: undefined,
 				url: undefined,
@@ -560,12 +582,6 @@ const reducer = (state: State, action: Action): State => {
 				rebuildAbbrevPending: undefined,
 			};
 		}
-
-		case "toggleExpandOptions":
-			return {
-				...state,
-				expandOptions: !state.expandOptions,
-			};
 
 		default:
 			throw new Error();
@@ -587,6 +603,15 @@ const getRebuildInfo = () => {
 	}
 };
 
+const getGenderOverride = (): GameAttributesLeague["gender"] | undefined => {
+	if (location.hash.startsWith("#gender=")) {
+		const gender = location.hash.replace("#gender=", "");
+		if (gender === "male" || gender === "female") {
+			return gender;
+		}
+	}
+};
+
 const NewLeague = (props: View<"newLeague">) => {
 	const [startingSeason, setStartingSeason] = useState(
 		String(new Date().getFullYear()),
@@ -596,10 +621,10 @@ const NewLeague = (props: View<"newLeague">) => {
 	>("default");
 
 	const leagueCreationID = useRef(Math.random());
-	const { leagueCreation, leagueCreationPercent } = useLocalShallow(state => ({
-		leagueCreation: state.leagueCreation,
-		leagueCreationPercent: state.leagueCreationPercent,
-	}));
+	const { leagueCreation, leagueCreationPercent } = useLocalPartial([
+		"leagueCreation",
+		"leagueCreationPercent",
+	]);
 
 	const importing = props.lid !== undefined;
 
@@ -637,12 +662,23 @@ const NewLeague = (props: View<"newLeague">) => {
 			} else {
 				season = parseInt(safeLocalStorage.getItem("prevSeason") as any);
 				if (Number.isNaN(season)) {
-					season = 2022;
+					season = MAX_SEASON;
 				}
 				phase = parseInt(safeLocalStorage.getItem("prevPhase") as any);
 				if (Number.isNaN(phase)) {
 					phase = PHASE.PRESEASON;
 				}
+			}
+
+			let settings;
+			const genderOverride = getGenderOverride();
+			if (genderOverride) {
+				settings = {
+					...props.defaultSettings,
+					gender: genderOverride,
+				};
+			} else {
+				settings = props.defaultSettings;
 			}
 
 			const { allKeys, keptKeys } = initKeptKeys({
@@ -668,8 +704,7 @@ const NewLeague = (props: View<"newLeague">) => {
 				pendingInitialLeagueInfo: true,
 				allKeys,
 				keptKeys,
-				expandOptions: false,
-				settings: props.defaultSettings,
+				settings,
 				rebuildAbbrevPending: rebuildInfo?.abbrev,
 			};
 		},
@@ -741,7 +776,7 @@ const NewLeague = (props: View<"newLeague">) => {
 			} else if (state.customize === "legends") {
 				getLeagueOptions = {
 					type: "legends",
-					decade: state.legend as any,
+					decade: state.legend as LegendKey,
 				};
 			}
 
@@ -787,13 +822,11 @@ const NewLeague = (props: View<"newLeague">) => {
 			if (type === "legends") {
 				type = String(state.legend);
 			}
-			if (window.enableLogging && window.gtag) {
-				window.gtag("event", "new_league", {
-					event_category: type,
-					event_label: teamRegionName,
-					value: lid,
-				});
-			}
+			analyticsEvent("new_league", {
+				league_type: type,
+				team: teamRegionName,
+				league_id: lid,
+			});
 
 			realtimeUpdate([], `/l/${lid}`);
 		} catch (err) {
@@ -825,7 +858,7 @@ const NewLeague = (props: View<"newLeague">) => {
 		if (newTeams) {
 			for (const t of newTeams) {
 				// Is pop hidden in season, like in manageTeams import?
-				if (!t.hasOwnProperty("pop") && t.hasOwnProperty("seasons")) {
+				if (!Object.hasOwn(t, "pop") && t.seasons && t.seasons.length > 0) {
 					t.pop = t.seasons.at(-1).pop;
 				}
 
@@ -924,7 +957,6 @@ const NewLeague = (props: View<"newLeague">) => {
 				initial="right"
 				animate="visible"
 				exit="right"
-				onAnimationComplete={onAnimationCompleteHack}
 			>
 				<CustomizeTeams
 					onCancel={() => {
@@ -950,6 +982,7 @@ const NewLeague = (props: View<"newLeague">) => {
 						};
 					}}
 					godModeLimits={props.godModeLimits}
+					realTeamInfo={props.realTeamInfo}
 				/>
 			</m.div>
 		);
@@ -965,7 +998,6 @@ const NewLeague = (props: View<"newLeague">) => {
 				initial="right"
 				animate="visible"
 				exit="right"
-				onAnimationComplete={onAnimationCompleteHack}
 			>
 				<CustomizeSettings
 					onCancel={() => {
@@ -1016,16 +1048,16 @@ const NewLeague = (props: View<"newLeague">) => {
 		invalidSeasonPhaseMessage =
 			"Starting after the playoffs is not yet supported for seasons where league mergers occurred.";
 	}
-	if (state.season === 2022 && state.phase > PHASE.PRESEASON) {
-		invalidSeasonPhaseMessage =
-			"Sorry, I'm not allowed to share the results of the 2022 season yet.";
+	if (state.season === MAX_SEASON && state.phase > MAX_PHASE) {
+		invalidSeasonPhaseMessage = `Sorry, I'm not allowed to share the results of the ${MAX_SEASON} ${
+			(PHASE_TEXT as any)[MAX_PHASE]
+		} yet.`;
 	}
 
 	const sortedDisplayedTeams = orderBy(displayedTeams, ["region", "name"]);
 
-	// exitBeforeEnter sucks (makes transition slower) but otherwise it jumps at the end because it stacks the divs vertically, and I couldn't figure out how to work around that
 	return (
-		<AnimatePresence exitBeforeEnter initial={false}>
+		<AnimatePresence mode="popLayout" initial={false}>
 			{subPage ? (
 				subPage
 			) : (
@@ -1091,6 +1123,7 @@ const NewLeague = (props: View<"newLeague">) => {
 										onChange={event => {
 											setStartingSeason(event.target.value);
 										}}
+										inputMode="numeric"
 									/>
 								</div>
 							) : null}
@@ -1101,18 +1134,26 @@ const NewLeague = (props: View<"newLeague">) => {
 										<LeagueMenu
 											value={String(state.season)}
 											values={seasons}
-											getLeagueInfo={(value, value2) =>
-												toWorker("main", "getLeagueInfo", {
-													type: "real",
-													season: parseInt(value),
-													phase: value2,
-													randomDebuts:
-														state.settings.randomization === "debuts" ||
-														state.settings.randomization === "debutsForever",
-													realDraftRatings: state.settings.realDraftRatings,
-													realStats: state.settings.realStats,
-												})
-											}
+											getLeagueInfo={async (value, value2) => {
+												const leagueInfo = await toWorker(
+													"main",
+													"getLeagueInfo",
+													{
+														type: "real",
+														season: parseInt(value),
+														phase: value2,
+														randomDebuts:
+															state.settings.randomization === "debuts" ||
+															state.settings.randomization === "debutsForever",
+														realDraftRatings: state.settings.realDraftRatings,
+
+														// Adding historical seasons just screws up tid
+														realStats: "none",
+													},
+												);
+
+												return leagueInfo;
+											}}
 											onLoading={value => {
 												const season = parseInt(value);
 												dispatch({ type: "setSeason", season });
@@ -1124,7 +1165,7 @@ const NewLeague = (props: View<"newLeague">) => {
 												"1984",
 												"1996",
 												"2003",
-												"2022",
+												`${MAX_SEASON}`,
 											]}
 											value2={state.phase}
 											values2={phases}
@@ -1140,7 +1181,7 @@ const NewLeague = (props: View<"newLeague">) => {
 												{invalidSeasonPhaseMessage}
 											</div>
 										) : (
-											<div className="text-muted mt-1">
+											<div className="text-body-secondary mt-1">
 												{state.season} in BBGM is the {state.season - 1}-
 												{String(state.season).slice(2)} season.
 											</div>
@@ -1154,12 +1195,18 @@ const NewLeague = (props: View<"newLeague">) => {
 									<LeagueMenu
 										value={state.legend}
 										values={legends}
-										getLeagueInfo={value =>
-											toWorker("main", "getLeagueInfo", {
-												type: "legends",
-												decade: value,
-											})
-										}
+										getLeagueInfo={async value => {
+											const leagueInfo = await toWorker(
+												"main",
+												"getLeagueInfo",
+												{
+													type: "legends",
+													decade: value as LegendKey,
+												},
+											);
+
+											return leagueInfo;
+										}}
 										onLoading={legend => {
 											dispatch({ type: "setLegend", legend });
 										}}
@@ -1237,17 +1284,13 @@ const NewLeague = (props: View<"newLeague">) => {
 								</div>
 								{!state.settings.equalizeRegions ? (
 									<PopText
-										className="text-muted"
+										className="text-body-secondary"
 										tid={state.tid}
 										teams={displayedTeams}
 										numActiveTeams={displayedTeams.length}
 									/>
 								) : (
-									<span className="text-muted">
-										Region population: equal
-										<br />
-										Size: normal
-									</span>
+									<span className="text-body-secondary">Population: equal</span>
 								)}
 							</div>
 
@@ -1277,7 +1320,9 @@ const NewLeague = (props: View<"newLeague">) => {
 										</option>
 									) : null}
 								</select>
-								<span className="text-muted">{descriptions.difficulty}</span>
+								<span className="text-body-secondary">
+									{descriptions.difficulty}
+								</span>
 							</div>
 
 							<div className="text-center mt-3">
@@ -1476,13 +1521,6 @@ const NewLeague = (props: View<"newLeague">) => {
 			)}
 		</AnimatePresence>
 	);
-};
-
-NewLeague.propTypes = {
-	difficulty: PropTypes.number,
-	lid: PropTypes.number,
-	name: PropTypes.string.isRequired,
-	type: PropTypes.string.isRequired,
 };
 
 export default NewLeague;

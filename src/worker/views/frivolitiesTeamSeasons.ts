@@ -54,6 +54,8 @@ export const getMostXTeamSeasons = async ({
 		},
 	);
 
+	const challengeNoRatings = g.get("challengeNoRatings");
+
 	const teamSeasons = await Promise.all(
 		teamSeasonsAll.map(async ts => {
 			return {
@@ -79,6 +81,7 @@ export const getMostXTeamSeasons = async ({
 				pts: 0,
 				oppPts: 0,
 				most: after ? await after(ts.most) : ts.most,
+				ovr: !challengeNoRatings ? ts.ovrEnd : undefined,
 			};
 		}),
 	);
@@ -108,7 +111,7 @@ export const getMostXTeamSeasons = async ({
 			const playoffSeries = await tx
 				.objectStore("playoffSeries")
 				.get(ts.season);
-			if (playoffSeries) {
+			if (playoffSeries && playoffSeries.series.length > 0) {
 				const matchups = playoffSeries.series[0];
 				for (const matchup of matchups) {
 					if (matchup.home.tid === ts.tid) {
@@ -131,7 +134,7 @@ export const getMostXTeamSeasons = async ({
 	return ordered;
 };
 
-const getRoundsWonText = (ts: TeamSeason) => {
+export const getRoundsWonText = (ts: TeamSeason) => {
 	const numPlayoffRounds = g.get("numGamesPlayoffSeries", ts.season).length;
 	const numConfs = g.get("confs", ts.season).length;
 
@@ -246,7 +249,7 @@ const updateFrivolitiesTeamSeasons = async (
 				["desc", "asc"],
 			];
 		} else if (type === "worst_champ") {
-			title = "Worst Champion Teams";
+			title = "Worst Championship Teams";
 			description =
 				"These are the worst seasons from teams that somehow won the title.";
 			extraCols.push(
@@ -314,6 +317,48 @@ const updateFrivolitiesTeamSeasons = async (
 			sortParams = [
 				["most.value", "mov"],
 				["desc", "asc"],
+			];
+		} else if (type === "old_champ" || type === "young_champ") {
+			title = `${
+				type === "old_champ" ? "Oldest" : "Youngest"
+			} Championship Teams`;
+			description = `These are ${
+				type === "old_champ" ? "oldest" : "youngest"
+			} teams that won the title.`;
+			extraCols.push(
+				{
+					key: ["most", "avgAge"],
+					colName: "AvgAge",
+				},
+				{
+					key: "seed",
+					colName: "Seed",
+				},
+			);
+
+			filter = ts =>
+				ts.avgAge !== undefined &&
+				ts.playoffRoundsWon >= 0 &&
+				(season > ts.season || phase > PHASE.PLAYOFFS);
+			getValue = ts => {
+				const roundsWonText = getRoundsWonText(ts);
+
+				// Keep in sync with helpers.roundsWonText
+				const validTexts = ["League champs"];
+				if (!validTexts.includes(roundsWonText)) {
+					return;
+				}
+
+				const avgAge = ts.avgAge ?? 0;
+
+				return {
+					avgAge,
+					value: type === "old_champ" ? avgAge : -avgAge,
+				};
+			};
+			sortParams = [
+				["most.value", "winp"],
+				["desc", "desc"],
 			];
 		} else {
 			throw new Error(`Unknown type "${type}"`);

@@ -3,7 +3,6 @@ import {
 	PLAYER_STATS_TABLES,
 	RATINGS,
 	PLAYER_SUMMARY,
-	isSport,
 	DEFAULT_JERSEY,
 } from "../../common";
 import { player } from "../core";
@@ -27,7 +26,6 @@ import type {
 	ViewInput,
 } from "../../common/types";
 import orderBy from "lodash-es/orderBy";
-import findLast from "lodash-es/findLast";
 
 const fixRatingsStatsAbbrevs = async (p: {
 	ratings?: {
@@ -58,6 +56,15 @@ const fixRatingsStatsAbbrevs = async (p: {
 	}
 };
 
+export const getPlayerProfileStats = () => {
+	const stats = [];
+	for (const info of Object.values(PLAYER_STATS_TABLES)) {
+		stats.push(...info.stats);
+	}
+
+	return Array.from(new Set(stats));
+};
+
 export const getCommon = async (pid?: number, season?: number) => {
 	if (pid === undefined) {
 		// https://stackoverflow.com/a/59923262/786644
@@ -71,31 +78,7 @@ export const getCommon = async (pid?: number, season?: number) => {
 	const statSummary = Object.values(PLAYER_SUMMARY);
 
 	const statTables = Object.values(PLAYER_STATS_TABLES);
-	let stats = Array.from(
-		new Set(
-			statTables.reduce<string[]>((allStats, currentStats) => {
-				return allStats.concat(currentStats.stats);
-			}, []),
-		),
-	);
-
-	// Needed because shot locations tables are "special" for now, unfortunately
-	if (isSport("basketball")) {
-		stats = stats.concat([
-			"fgAtRim",
-			"fgaAtRim",
-			"fgpAtRim",
-			"fgLowPost",
-			"fgaLowPost",
-			"fgpLowPost",
-			"fgMidRange",
-			"fgaMidRange",
-			"fgpMidRange",
-			"tp",
-			"tpa",
-			"tpp",
-		]);
-	}
+	const stats = getPlayerProfileStats();
 
 	const pRaw = await idb.getCopy.players(
 		{
@@ -141,6 +124,7 @@ export const getCommon = async (pid?: number, season?: number) => {
 				| "college"
 				| "relatives"
 				| "awards"
+				| "srID"
 		  > & {
 				age: number;
 				ageAtDeath: number | null;
@@ -167,7 +151,7 @@ export const getCommon = async (pid?: number, season?: number) => {
 				jerseyNumber?: string;
 				experience: number;
 				note?: string;
-				watch: boolean;
+				watch: number;
 		  })
 		| undefined = await idb.getCopy.playersPlus(pRaw, {
 		attrs: [
@@ -198,6 +182,7 @@ export const getCommon = async (pid?: number, season?: number) => {
 			"jerseyNumber",
 			"experience",
 			"note",
+			"srID",
 		],
 		ratings: [
 			"season",
@@ -215,6 +200,7 @@ export const getCommon = async (pid?: number, season?: number) => {
 		playoffs: true,
 		showRookies: true,
 		fuzz: true,
+		mergeStats: "totAndTeams",
 	});
 
 	if (!p) {
@@ -275,12 +261,12 @@ export const getCommon = async (pid?: number, season?: number) => {
 			name: string;
 			region: string;
 		};
-		retired: boolean;
+		retiredIndex: number;
 	}[] = [];
 	let prevKey: string = "";
 	for (const ps of p.stats) {
 		const jerseyNumber = ps.jerseyNumber;
-		if (jerseyNumber === undefined || ps.gp === 0) {
+		if (jerseyNumber === undefined || ps.gp === 0 || ps.tid === PLAYER.TOT) {
 			continue;
 		}
 
@@ -306,23 +292,21 @@ export const getCommon = async (pid?: number, season?: number) => {
 		]);
 
 		if (key === prevKey) {
-			const prev = jerseyNumberInfos.at(-1);
+			const prev = jerseyNumberInfos.at(-1)!;
 			prev.end = ps.season;
 		} else {
-			let retired = false;
 			const t2 = teams[ps.tid];
-			if (t2 && t2.retiredJerseyNumbers) {
-				retired = t2.retiredJerseyNumbers.some(
+			const retiredIndex =
+				t2?.retiredJerseyNumbers?.findIndex(
 					info => info.pid === pid && info.number === jerseyNumber,
-				);
-			}
+				) ?? -1;
 
 			jerseyNumberInfos.push({
 				number: jerseyNumber,
 				start: ps.season,
 				end: ps.season,
 				t,
-				retired,
+				retiredIndex,
 			});
 		}
 
@@ -439,12 +423,11 @@ export const getCommon = async (pid?: number, season?: number) => {
 		if (p.stats.length > 0) {
 			const offset = season - g.get("season");
 			p.age = Math.max(0, p.age + offset);
-			const offset2 = season - p.stats.at(-1).season;
+			const offset2 = season - p.stats.at(-1)!.season;
 			p.experience = Math.max(0, p.experience + offset2);
 
 			// Jersey number
-			const stats = findLast(
-				p.stats,
+			const stats = p.stats.findLast(
 				row => row.season === season && !row.playoffs,
 			);
 			if (stats) {
@@ -473,9 +456,11 @@ export const getCommon = async (pid?: number, season?: number) => {
 		currentSeason: g.get("season"),
 		customMenu,
 		freeAgent: p.tid === PLAYER.FREE_AGENT,
+		gender: g.get("gender"),
 		godMode: g.get("godMode"),
 		injured: p.injury.gamesRemaining > 0,
 		jerseyNumberInfos,
+		pRaw,
 		phase: g.get("phase"),
 		pid, // Needed for state.pid check
 		player: p,
@@ -494,6 +479,7 @@ export const getCommon = async (pid?: number, season?: number) => {
 		teamJersey,
 		teamName,
 		teamURL,
+		userTid,
 		willingToSign,
 	};
 };
@@ -572,10 +558,13 @@ const updatePlayer = async (
 			});
 		}
 
+		const leaders = await player.getLeaders(topStuff.pRaw);
+
 		return {
 			...topStuff,
 			events,
 			feats,
+			leaders,
 			ratings: RATINGS,
 		};
 	}

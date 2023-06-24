@@ -16,11 +16,13 @@ const countPositions = async () => {
 	} = {};
 
 	for (const p of players) {
-		const r = p.ratings.at(-1); // Dynamically recompute, to make dev easier when changing position formula
+		const r = p.ratings.at(-1)!;
 
+		// Dynamically recompute, to make dev easier when changing position formula
 		const position = player.pos(r);
 
 		const ovr = player.ovr(r, position);
+		// const ovr = g.get("season") - p.born.year;
 
 		if (posCounts[position] === undefined) {
 			posCounts[position] = 0;

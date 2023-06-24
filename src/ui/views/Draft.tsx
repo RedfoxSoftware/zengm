@@ -1,5 +1,4 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import { useState } from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import { confirm, getCols, helpers, toWorker, useLocal } from "../util";
@@ -7,10 +6,14 @@ import {
 	DataTable,
 	DraftAbbrev,
 	MoreLinks,
-	PlayerNameLabels,
 	RosterComposition,
 } from "../components";
 import type { View } from "../../common/types";
+import {
+	wrappedContractAmount,
+	wrappedContractExp,
+} from "../components/contract";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const DraftButtons = ({
 	spectator,
@@ -27,7 +30,7 @@ const DraftButtons = ({
 				className="btn btn-light-bordered"
 				disabled={usersTurn && !spectator}
 				onClick={async () => {
-					await toWorker("playMenu", "onePick");
+					await toWorker("playMenu", "onePick", undefined);
 				}}
 			>
 				Sim one pick
@@ -37,7 +40,7 @@ const DraftButtons = ({
 					className="btn btn-light-bordered"
 					disabled={usersTurn && !spectator}
 					onClick={async () => {
-						await toWorker("playMenu", "untilYourNextPick");
+						await toWorker("playMenu", "untilYourNextPick", undefined);
 					}}
 				>
 					To your next pick
@@ -59,18 +62,13 @@ const DraftButtons = ({
 							return;
 						}
 					}
-					await toWorker("playMenu", "untilEnd");
+					await toWorker("playMenu", "untilEnd", undefined);
 				}}
 			>
 				To end of draft
 			</button>
 		</div>
 	);
-};
-
-DraftButtons.propTypes = {
-	userRemaining: PropTypes.bool.isRequired,
-	usersTurn: PropTypes.bool.isRequired,
 };
 
 const Draft = ({
@@ -85,6 +83,7 @@ const Draft = ({
 	stats,
 	undrafted,
 	userPlayers,
+	userTid,
 	userTids,
 }: View<"draft">) => {
 	const [drafting, setDrafting] = useState(false);
@@ -95,7 +94,7 @@ const Draft = ({
 		setDrafting(false);
 
 		if (simToNextUserPick) {
-			await toWorker("playMenu", "untilYourNextPick");
+			await toWorker("playMenu", "untilYourNextPick", undefined);
 		}
 	};
 
@@ -136,14 +135,15 @@ const Draft = ({
 	const rowsUndrafted = undrafted.map(p => {
 		const data = [
 			p.rank,
-			<PlayerNameLabels
-				pid={p.pid}
-				injury={p.injury}
-				skills={p.ratings.skills}
-				watch={p.watch}
-			>
-				{p.name}
-			</PlayerNameLabels>,
+			wrappedPlayerNameLabels({
+				pid: p.pid,
+				injury: p.injury,
+				skills: p.ratings.skills,
+				watch: p.watch,
+				firstName: p.firstName,
+				firstNameShort: p.firstNameShort,
+				lastName: p.lastName,
+			}),
 			p.ratings.pos,
 			p.age,
 			!challengeNoRatings ? p.ratings.ovr : null,
@@ -179,8 +179,8 @@ const Draft = ({
 			data.splice(
 				6,
 				0,
-				helpers.formatCurrency(p.contract.amount, "M"),
-				p.contract.exp,
+				wrappedContractAmount(p),
+				wrappedContractExp(p),
 				...stats.map(stat =>
 					p.pid >= 0 && p.stats && typeof p.stats[stat] === "number"
 						? helpers.roundStat(p.stats[stat], stat)
@@ -229,14 +229,15 @@ const Draft = ({
 				),
 			},
 			p.pid >= 0 ? (
-				<PlayerNameLabels
-					pid={p.pid}
-					injury={p.injury}
-					skills={p.ratings.skills}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					skills: p.ratings.skills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				})
 			) : (
 				<>
 					<button
@@ -250,7 +251,7 @@ const Draft = ({
 										break;
 									}
 
-									if (userTids.includes(p2.draft.tid)) {
+									if (p2.pid === -1 && userTids.includes(p2.draft.tid)) {
 										numUserPicksBefore += 1;
 									}
 								}
@@ -284,22 +285,33 @@ const Draft = ({
 					>
 						Sim to pick
 					</button>
-					{!fantasyDraft &&
-					!expansionDraft &&
-					!userTids.includes(p.draft.tid) &&
-					!spectator ? (
-						<button
-							className="btn btn-xs btn-light-bordered ms-2"
-							disabled={drafting}
-							onClick={async () => {
-								await toWorker("actions", "tradeFor", {
-									dpid: p.draft.dpid,
-									tid: p.draft.tid,
-								});
-							}}
-						>
-							Trade for pick
-						</button>
+					{!fantasyDraft && !expansionDraft && !spectator ? (
+						userTid === p.draft.tid ? (
+							<button
+								className="btn btn-xs btn-light-bordered ms-2"
+								disabled={drafting}
+								onClick={async () => {
+									await toWorker("actions", "addToTradingBlock", {
+										dpid: p.draft.dpid,
+									});
+								}}
+							>
+								Trade away pick
+							</button>
+						) : (
+							<button
+								className="btn btn-xs btn-light-bordered ms-2"
+								disabled={drafting}
+								onClick={async () => {
+									await toWorker("actions", "tradeFor", {
+										dpid: p.draft.dpid,
+										tid: p.draft.tid,
+									});
+								}}
+							>
+								Trade for pick
+							</button>
+						)
 					) : null}
 				</>
 			),
@@ -439,6 +451,7 @@ const Draft = ({
 					<DataTable
 						cols={colsUndrafted}
 						defaultSort={[0, "asc"]}
+						defaultStickyCols={window.mobile ? 1 : 2}
 						name="Draft:Undrafted"
 						pagination={rowsDrafted.length > 100}
 						rows={rowsUndrafted}
@@ -469,6 +482,7 @@ const Draft = ({
 					<DataTable
 						cols={colsDrafted}
 						defaultSort={[0, "asc"]}
+						defaultStickyCols={window.mobile ? 1 : 2}
 						name="Draft:Drafted"
 						pagination={rowsDrafted.length > 100}
 						rows={rowsDrafted}
@@ -477,15 +491,6 @@ const Draft = ({
 			</div>
 		</>
 	);
-};
-
-Draft.propTypes = {
-	draftType: PropTypes.string,
-	drafted: PropTypes.arrayOf(PropTypes.object).isRequired,
-	fantasyDraft: PropTypes.bool.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	undrafted: PropTypes.arrayOf(PropTypes.object).isRequired,
-	userTids: PropTypes.arrayOf(PropTypes.number).isRequired,
 };
 
 export default Draft;

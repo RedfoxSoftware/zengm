@@ -1,8 +1,84 @@
 import { idb } from "../db";
 import type { UpdateEvents, ViewInput } from "../../common/types"; // Keep in sync with Dropdown.js
 import { bySport } from "../../common";
+import addFirstNameShort from "../util/addFirstNameShort";
 
+// Sync with useDropdownOptions
 const optionsTmp = bySport({
+	baseball: [
+		{
+			val: "Won Championship",
+			key: "champion",
+		},
+		{
+			val: "Most Valuable Player",
+			key: "mvp",
+		},
+		{
+			val: "Finals MVP",
+			key: "finals_mvp",
+		},
+		{
+			val: "Pitcher of the Year",
+			key: "poy",
+		},
+		{
+			val: "Relief Pitcher of the Year",
+			key: "rpoy",
+		},
+		{
+			val: "Rookie of the Year",
+			key: "roy",
+		},
+		{
+			val: "All-Offensive",
+			key: "all_off",
+		},
+		{
+			val: "All-Defensive",
+			key: "all_def",
+		},
+		{
+			val: "All-Star",
+			key: "all_star",
+		},
+		{
+			val: "All-Star MVP",
+			key: "all_star_mvp",
+		},
+		{
+			val: "League HR Leader",
+			key: "hr_leader",
+		},
+		{
+			val: "League RBI Leader",
+			key: "rbi_leader",
+		},
+		{
+			val: "League Runs Leader",
+			key: "r_leader",
+		},
+		{
+			val: "League Stolen Bases Leader",
+			key: "sb_leader",
+		},
+		{
+			val: "League Walks Leader",
+			key: "bb_leader",
+		},
+		{
+			val: "League Wins Leader",
+			key: "w_leader",
+		},
+		{
+			val: "League Strikeouts Leader",
+			key: "soPit_leader",
+		},
+		{
+			val: "League WAR Leader",
+			key: "war_leader",
+		},
+	],
 	basketball: [
 		{
 			val: "Won Championship",
@@ -15,6 +91,10 @@ const optionsTmp = bySport({
 		{
 			val: "Finals MVP",
 			key: "finals_mvp",
+		},
+		{
+			val: "Semifinals MVP",
+			key: "sfmvp",
 		},
 		{
 			val: "Defensive Player of the Year",
@@ -139,6 +219,14 @@ const optionsTmp = bySport({
 			key: "all_league",
 		},
 		{
+			val: "All-Star",
+			key: "all_star",
+		},
+		{
+			val: "All-Star MVP",
+			key: "all_star_mvp",
+		},
+		{
 			val: "League Passing Leader",
 			key: "pss_leader",
 		},
@@ -197,6 +285,14 @@ const optionsTmp = bySport({
 			key: "all_league",
 		},
 		{
+			val: "All-Star",
+			key: "all_star",
+		},
+		{
+			val: "All-Star MVP",
+			key: "all_star_mvp",
+		},
+		{
 			val: "League Points Leader",
 			key: "pts_leader",
 		},
@@ -253,8 +349,13 @@ function getPlayerAwards(p: LocalPlayer, awardType: string) {
 			return (
 				a.type === o.first_def ||
 				a.type === o.second_def ||
-				a.type === o.third_def
+				a.type === o.third_def ||
+				a.type === "All-Defensive Team"
 			);
+		};
+	} else if (awardType === "all_off") {
+		filter = (a: LocalPlayerAward) => {
+			return a.type === "All-Offensive Team";
 		};
 	} else {
 		filter = (a: LocalPlayerAward) => a.type === aType;
@@ -263,11 +364,7 @@ function getPlayerAwards(p: LocalPlayer, awardType: string) {
 	const getTeam = (season: number) => {
 		const stats = p.stats.filter(s => s.season === season);
 
-		if (stats.length > 0) {
-			return stats.at(-1).abbrev;
-		}
-
-		return "???";
+		return stats.at(-1)?.abbrev ?? "???";
 	};
 
 	const awards = p.awards.filter(filter);
@@ -279,7 +376,8 @@ function getPlayerAwards(p: LocalPlayer, awardType: string) {
 	});
 	const lastYear = Math.max(...years.map(y => y.season)).toString();
 	return {
-		name: `${p.firstName} ${p.lastName}`,
+		firstName: p.firstName,
+		lastName: p.lastName,
 		pid: p.pid,
 		count: awards.length,
 		countText: awards.length.toString(),
@@ -320,9 +418,10 @@ const updateAwardsRecords = async (
 			return returnValue;
 		}
 
-		const awardsRecords = players
-			.map(p => getPlayerAwards(p, awardType))
-			.filter(o => o.count > 0);
+		const awardsRecords = addFirstNameShort(
+			players.map(p => getPlayerAwards(p, awardType)).filter(o => o.count > 0),
+		);
+
 		return {
 			awardsRecords,
 			playerCount: awardsRecords.length,

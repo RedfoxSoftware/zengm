@@ -1,18 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { Dropdown, Modal } from "react-bootstrap";
-import { downloadFile, helpers, resetFileInput, toWorker } from "../../util";
+import { Dropdown } from "react-bootstrap";
+import { downloadFile, helpers, resetFileInput } from "../../util";
 import classNames from "classnames";
 import {
-	Defaults,
+	type Defaults,
 	formatPlayerBioInfoState,
 	isInvalidNumber,
-	PageInfo,
+	type PageInfo,
 	parseAndValidate,
-	PlayerBioInfoState,
+	type PlayerBioInfoState,
 	prune,
 } from "./PlayerBioInfo";
+import PlayerBioInfoSortButton from "./PlayerBioInfoSortButton";
 import { IMPORT_FILE_STYLE } from "./RowsEditor";
 import { CountryFlag } from "../../components";
+import Modal from "../../components/Modal";
+import orderBy from "lodash-es/orderBy";
 
 export const smallColStyle = {
 	marginLeft: 10,
@@ -80,7 +83,7 @@ const ImportButton = ({
 
 				reader.onload = async event2 => {
 					try {
-						// @ts-ignore
+						// @ts-expect-error
 						const info = JSON.parse(event2.currentTarget.result);
 						setInfoState(
 							formatPlayerBioInfoState(
@@ -122,7 +125,7 @@ const ExportButton = ({
 	</button>
 );
 
-type SetInfoState = (
+export type SetInfoState = (
 	infoState:
 		| PlayerBioInfoState
 		| ((infoState: PlayerBioInfoState) => PlayerBioInfoState),
@@ -226,7 +229,7 @@ const Controls = ({
 					</Dropdown>
 					<Dropdown>
 						<Dropdown.Toggle
-							className="btn-light-bordered btn-light-bordered-group-right"
+							className="btn-light-bordered btn-light-bordered-group-left btn-light-bordered-group-right"
 							variant="foo"
 							id="dropdown-countries-reset"
 						>
@@ -236,12 +239,7 @@ const Controls = ({
 						<Dropdown.Menu>
 							<Dropdown.Item
 								onClick={async () => {
-									setInfoState(
-										formatPlayerBioInfoState(
-											await toWorker("main", "getDefaultInjuries"),
-											defaults,
-										),
-									);
+									setInfoState(formatPlayerBioInfoState(undefined, defaults));
 								}}
 							>
 								Default
@@ -258,6 +256,25 @@ const Controls = ({
 							</Dropdown.Item>
 						</Dropdown.Menu>
 					</Dropdown>
+					<PlayerBioInfoSortButton
+						type="countries"
+						onClick={(field, direction) => {
+							let countries: (typeof infoState)["countries"];
+							if (field === "country") {
+								countries = orderBy(infoState.countries, field, direction);
+							} else {
+								countries = orderBy(
+									infoState.countries,
+									row => parseInt(row.frequency),
+									direction,
+								);
+							}
+							setInfoState(data => ({
+								...data,
+								countries,
+							}));
+						}}
+					/>
 				</div>
 				<div className="btn-group">
 					<ImportButton

@@ -2,9 +2,9 @@ import Account from "./Account";
 import AccountUpdateCard from "./AccountUpdateCard";
 import Achievements from "./Achievements";
 import AllStar from "./AllStar";
-import AllStarDraft from "./AllStarDraft";
 import AllStarDunk from "./AllStarDunk";
 import AllStarHistory from "./AllStarHistory";
+import AllStarTeams from "./AllStarTeams";
 import AllStarThree from "./AllStarThree";
 import AwardRaces from "./AwardRaces";
 import AwardsRecords from "./AwardsRecords";
@@ -24,6 +24,8 @@ import DraftHistory from "./DraftHistory";
 import DraftTeamHistory from "./DraftTeamHistory";
 import Dropbox from "./Dropbox";
 import EditAwards from "./EditAwards";
+import Exhibition from "./Exhibition";
+import ExhibitionGame from "./ExhibitionGame";
 import ExpansionDraft from "./ExpansionDraft";
 import ExportLeague from "./ExportLeague";
 import ExportPlayers from "./ExportPlayers";
@@ -49,9 +51,12 @@ import ImportPlayers from "./ImportPlayers";
 import Inbox from "./Inbox";
 import Injuries from "./Injuries";
 import Leaders from "./Leaders";
+import LeadersProgressive from "./LeadersProgressive";
+import LeadersYears from "./LeadersYears";
 import LeagueDashboard from "./LeagueDashboard";
 import LeagueFinances from "./LeagueFinances";
 import LeagueStats from "./LeagueStats";
+// eslint-disable-next-line import/no-named-as-default
 import LiveGame from "./LiveGame";
 import LoginOrRegister from "./LoginOrRegister";
 import LostPassword from "./LostPassword";
@@ -72,6 +77,7 @@ import PlayerGameLog from "./PlayerGameLog";
 import PlayerRatingDists from "./PlayerRatingDists";
 import PlayerRatings from "./PlayerRatings";
 import PlayerStatDists from "./PlayerStatDists";
+import PlayerGraphs from "./PlayerGraphs";
 import PlayerStats from "./PlayerStats";
 import Playoffs from "./Playoffs";
 import PowerRankings from "./PowerRankings";
@@ -92,6 +98,7 @@ import TeamStatDists from "./TeamStatDists";
 import TeamStats from "./TeamStats";
 import TragicDeaths from "./TragicDeaths";
 import Trade from "./Trade";
+import TradeProposals from "./TradeProposals";
 import TradeSummary from "./TradeSummary";
 import TradingBlock from "./TradingBlock";
 import Transactions from "./Transactions";
@@ -103,9 +110,9 @@ export default {
 	AccountUpdateCard,
 	Achievements,
 	AllStar,
-	AllStarDraft,
 	AllStarDunk,
 	AllStarHistory,
+	AllStarTeams,
 	AllStarThree,
 	AwardRaces,
 	AwardsRecords,
@@ -125,6 +132,8 @@ export default {
 	DraftTeamHistory,
 	Dropbox,
 	EditAwards,
+	Exhibition,
+	ExhibitionGame,
 	ExpansionDraft,
 	ExportLeague,
 	ExportPlayers,
@@ -150,6 +159,8 @@ export default {
 	Inbox,
 	Injuries,
 	Leaders,
+	LeadersProgressive,
+	LeadersYears,
 	LeagueDashboard,
 	LeagueFinances,
 	LeagueStats,
@@ -173,6 +184,7 @@ export default {
 	PlayerRatingDists,
 	PlayerRatings,
 	PlayerStatDists,
+	PlayerGraphs: PlayerGraphs,
 	PlayerStats,
 	Playoffs,
 	PowerRankings,
@@ -192,6 +204,7 @@ export default {
 	TeamStatDists,
 	TeamStats,
 	Trade,
+	TradeProposals,
 	TradeSummary,
 	TradingBlock,
 	TragicDeaths,

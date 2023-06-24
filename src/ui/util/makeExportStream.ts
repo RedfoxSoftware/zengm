@@ -2,9 +2,12 @@ import { openDB } from "idb";
 import type { IDBPCursorWithValue } from "idb";
 import {
 	gameAttributesArrayToObject,
-	MAX_SUPPORTED_LEAGUE_VERSION,
+	LEAGUE_DATABASE_VERSION,
 } from "../../common";
-import { gameAttributesCache } from "../../common/defaultGameAttributes";
+import {
+	gameAttributesCache,
+	gameAttributesKeysOtherSports,
+} from "../../common/defaultGameAttributes";
 import { local } from "./local";
 import toWorker from "./toWorker";
 import type { LeagueDB } from "../../worker/db/connectLeague";
@@ -72,7 +75,7 @@ const makeExportStream = async (
 	// Don't worry about upgrades or anything, because this function will only be called if the league database already exists
 	const leagueDB = await openDB<LeagueDB>(
 		`league${lid}`,
-		MAX_SUPPORTED_LEAGUE_VERSION,
+		LEAGUE_DATABASE_VERSION,
 		{
 			blocking() {
 				leagueDB.close();
@@ -81,7 +84,7 @@ const makeExportStream = async (
 	);
 
 	// Always flush before export, so export is current!
-	await toWorker("main", "idbCacheFlush");
+	await toWorker("main", "idbCacheFlush", undefined);
 
 	const space = compressed ? "" : " ";
 	const tab = compressed ? "" : " ".repeat(NUM_SPACES_IN_TAB);
@@ -108,6 +111,7 @@ const makeExportStream = async (
 		object: any,
 	) =>
 		controller.enqueue(
+			// @ts-expect-error Typescript 4.9 bug I think
 			`,${newline}${tab}"${name}":${space}${jsonStringify(object, 1)}`,
 		);
 
@@ -146,7 +150,7 @@ const makeExportStream = async (
 				}
 
 				await controller.enqueue(
-					`{${newline}${tab}"version":${space}${MAX_SUPPORTED_LEAGUE_VERSION}`,
+					`{${newline}${tab}"version":${space}${LEAGUE_DATABASE_VERSION}`,
 				);
 
 				// If name is specified, include it in meta object. Currently this is only used when importing leagues, to set the name
@@ -200,6 +204,12 @@ const makeExportStream = async (
 					if (filter[store]) {
 						rows = rows.filter(filter[store]);
 					}
+
+					// No need to include settings that don't apply to this sport
+
+					rows = rows.filter(
+						row => !gameAttributesKeysOtherSports.has(row.key),
+					);
 
 					if (forEach[store]) {
 						for (const row of rows) {

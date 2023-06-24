@@ -1,9 +1,11 @@
 import classNames from "classnames";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { useLocalShallow, safeLocalStorage } from "../util";
+import { useLocalPartial, safeLocalStorage } from "../util";
 import ScoreBox from "./ScoreBox";
+import { emitter } from "./Modal";
 
 const Toggle = ({ show, toggle }: { show: boolean; toggle: () => void }) => {
+	// container-fluid is needed to make this account for scrollbar width when modal is open
 	return (
 		<button
 			className="btn btn-secondary p-0 league-top-bar-toggle"
@@ -21,17 +23,17 @@ const Toggle = ({ show, toggle }: { show: boolean; toggle: () => void }) => {
 };
 
 const hiddenStyle = {
-	marginBottom: -12,
+	height: 0,
 };
 
 const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const LeagueTopBar = memo(() => {
-	const { games, lid, liveGameInProgress } = useLocalShallow(state => ({
-		games: state.games,
-		lid: state.lid,
-		liveGameInProgress: state.liveGameInProgress,
-	}));
+	const { games, lid, liveGameInProgress } = useLocalPartial([
+		"games",
+		"lid",
+		"liveGameInProgress",
+	]);
 
 	const [show, setShow] = useState(() => {
 		const showTemp = safeLocalStorage.getItem("bbgmShowLeagueTopBar");
@@ -68,6 +70,10 @@ const LeagueTopBar = memo(() => {
 			});
 		}
 	}, [wrapperElement]);
+
+	useEffect(() => {
+		return emitter.on("keepScrollToRight", keepScrolledToRightIfNecessary);
+	}, [keepScrolledToRightIfNecessary]);
 
 	useEffect(() => {
 		if (!wrapperElement || !show) {
@@ -109,7 +115,7 @@ const LeagueTopBar = memo(() => {
 			}
 
 			// Keep track of if we're scrolled to the right or not
-			const FUDGE_FACTOR = 15; // Off by a few pixels? That's fine!
+			const FUDGE_FACTOR = 50; // Off by a few pixels? That's fine!
 			keepScrollToRightRef.current =
 				wrapperElement.scrollLeft + wrapperElement.offsetWidth >=
 				wrapperElement.scrollWidth - FUDGE_FACTOR;
@@ -118,18 +124,14 @@ const LeagueTopBar = memo(() => {
 		wrapperElement.addEventListener("wheel", handleWheel, { passive: false });
 		wrapperElement.addEventListener("scroll", handleScroll, { passive: false });
 
-		let resizeObserver: ResizeObserver | undefined;
-		// Chrome 64 and Safari 13.1 support ResizeObserver
-		if (typeof ResizeObserver !== "undefined") {
-			// This works better than the global "resize" event because it also handles when the div size changes due to other reasons, like the window's scrollbar appearing or disappearing
-			resizeObserver = new ResizeObserver(keepScrolledToRightIfNecessary);
-			resizeObserver.observe(wrapperElement);
-		}
+		// This works better than the global "resize" event because it also handles when the div size changes due to other reasons, like the window's scrollbar appearing or disappearing
+		const resizeObserver = new ResizeObserver(keepScrolledToRightIfNecessary);
+		resizeObserver.observe(wrapperElement);
 
 		return () => {
 			wrapperElement.removeEventListener("wheel", handleWheel);
 			wrapperElement.removeEventListener("scroll", handleScroll);
-			resizeObserver?.unobserve(wrapperElement);
+			resizeObserver.unobserve(wrapperElement);
 		};
 	}, [keepScrolledToRightIfNecessary, show, wrapperElement]);
 
@@ -140,7 +142,7 @@ const LeagueTopBar = memo(() => {
 		games[0].teams[1].tid === -2;
 
 	if (lid === undefined || games.length === 0 || onlyAllStarGame) {
-		return null;
+		return <div className="mt-2" />;
 	}
 
 	// Don't show any new games if liveGameInProgress
@@ -170,7 +172,7 @@ const LeagueTopBar = memo(() => {
 		<div
 			className={`league-top-bar${
 				IS_SAFARI ? " league-top-bar-safari" : ""
-			} flex-shrink-0 d-flex overflow-auto flex-row ps-1 pb-1 mt-2`}
+			} flex-shrink-0 d-flex overflow-auto small-scrollbar flex-row ps-1 mt-2`}
 			style={show ? undefined : hiddenStyle}
 			ref={element => {
 				setWrapperElement(element);

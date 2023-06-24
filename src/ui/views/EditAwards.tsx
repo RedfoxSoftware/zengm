@@ -1,9 +1,10 @@
-import { FormEvent, useState, useEffect } from "react";
+import { type FormEvent, useState, useEffect } from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import type { View } from "../../common/types";
 import { logEvent, toWorker, helpers, realtimeUpdate } from "../util";
 import SelectMultiple from "../components/SelectMultiple";
 import { AWARD_NAMES, bySport, isSport, SIMPLE_AWARDS } from "../../common";
+import range from "lodash-es/range";
 
 const Position = ({ index, p }: { index: number; p: any }) => {
 	if (!isSport("football")) {
@@ -35,6 +36,10 @@ const makeAwardPlayer = (
 		tid: p.stats.tid,
 		abbrev: p.stats.abbrev,
 		...bySport<any>({
+			baseball: {
+				pos: pos ?? p.ratings.pos,
+				keyStats: p.stats.keyStats,
+			},
 			basketball:
 				type === "defense"
 					? {
@@ -87,7 +92,6 @@ const EditAwards = ({
 	const handleChange =
 		(type: string, teamNumber = 0, playerNumber = 0) =>
 		(p: any) => {
-			console.log("handleChange", type, teamNumber, playerNumber, p);
 			let error = false;
 
 			const newAwards = { ...aws };
@@ -99,8 +103,11 @@ const EditAwards = ({
 				type == "roy" ||
 				type == "mip" ||
 				type == "oroy" ||
-				type == "droy"
+				type == "droy" ||
+				type == "poy" ||
+				type == "rpoy"
 			) {
+				// All these == and != undefined checks are because when exporting a league, undefined is changed to null
 				if (p?.pid == undefined) {
 					newAwards[type] = undefined;
 				} else {
@@ -121,7 +128,7 @@ const EditAwards = ({
 					const arrayPids: number[] = [];
 					for (const team of newAwards[type]) {
 						for (const element of team.players) {
-							if (element !== undefined) {
+							if (element != undefined) {
 								arrayPids.push(element.pid);
 							}
 						}
@@ -150,7 +157,7 @@ const EditAwards = ({
 					const arrayPids: number[] = [];
 					for (const team of newAwards[type]) {
 						for (const element of team.players) {
-							if (element !== undefined) {
+							if (element != undefined) {
 								arrayPids.push(element.pid);
 							}
 						}
@@ -171,13 +178,18 @@ const EditAwards = ({
 						);
 					}
 				}
-			} else if (type == "allRookie") {
+			} else if (
+				type == "allRookie" ||
+				(isSport("baseball") &&
+					(type === "allOffense" || type === "allDefense")) ||
+				type === "sfmvp"
+			) {
 				if (p?.pid == undefined) {
 					newAwards[type][playerNumber] = undefined;
 				} else {
 					const arrayPids: number[] = [];
 					for (const element of newAwards[type]) {
-						if (element !== undefined) {
+						if (element != undefined) {
 							arrayPids.push(element.pid);
 						}
 					}
@@ -197,7 +209,6 @@ const EditAwards = ({
 			}
 
 			if (!error) {
-				console.log("newAwards", newAwards);
 				setAws({ ...newAwards });
 			}
 
@@ -266,34 +277,61 @@ const EditAwards = ({
 							/>
 						</div>
 					))}
+					{isSport("basketball") ? (
+						<div className="col-lg-4 col-md-6 mb-3">
+							<label className="form-label">{AWARD_NAMES.sfmvp}s</label>
+							{range(2).map(i => {
+								const player = aws.sfmvp[i];
+								return (
+									<div className="d-flex" key={i}>
+										<Position index={i} p={player} />
+										<div className="mb-3 flex-grow-1">
+											<SelectMultiple
+												options={players}
+												key={season}
+												value={getPlayer(player)}
+												getOptionLabel={getOptionLabel("sfmvp")}
+												getOptionValue={p => String(p.pid)}
+												onChange={handleChange("sfmvp", undefined, i)}
+											/>
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					) : null}
 				</div>
 				<div className="row">
-					{aws.allLeague.map((element: any, i: number) => {
-						const teamSelect = element.players.map((player: any, j: number) => {
-							return (
-								<div className="d-flex" key={j}>
-									<Position index={j} p={player} />
-									<div className="mb-3 flex-grow-1">
-										<SelectMultiple
-											key={season}
-											options={players}
-											value={getPlayer(player)}
-											getOptionLabel={getOptionLabel("allLeague")}
-											getOptionValue={p => String(p.pid)}
-											onChange={handleChange("allLeague", i, j)}
-										/>
-									</div>
-								</div>
-							);
-						});
+					{!isSport("baseball")
+						? aws.allLeague.map((element: any, i: number) => {
+								const teamSelect = element.players.map(
+									(player: any, j: number) => {
+										return (
+											<div className="d-flex" key={j}>
+												<Position index={j} p={player} />
+												<div className="mb-3 flex-grow-1">
+													<SelectMultiple
+														key={season}
+														options={players}
+														value={getPlayer(player)}
+														getOptionLabel={getOptionLabel("allLeague")}
+														getOptionValue={p => String(p.pid)}
+														onChange={handleChange("allLeague", i, j)}
+													/>
+												</div>
+											</div>
+										);
+									},
+								);
 
-						return [
-							<div className="col-lg-4 col-md-6" key={i}>
-								<h3 className="mt-4">{element.title} All-League</h3>
-								{teamSelect}
-							</div>,
-						];
-					})}
+								return [
+									<div className="col-lg-4 col-md-6" key={i}>
+										<h3 className="mt-4">{element.title} All-League</h3>
+										{teamSelect}
+									</div>,
+								];
+						  })
+						: null}
 
 					{isSport("basketball") ? (
 						<>
@@ -322,6 +360,52 @@ const EditAwards = ({
 									</div>,
 								];
 							})}
+						</>
+					) : null}
+
+					{isSport("baseball") ? (
+						<>
+							<div className="col-md-4 col-6">
+								<h3 className="mt-4">All-Offensive Team</h3>
+								{aws.allOffense.map((player: any, i: number) => {
+									return (
+										<div className="d-flex" key={i}>
+											<Position index={i} p={player} />
+											<div className="mb-3 flex-grow-1">
+												<SelectMultiple
+													options={players}
+													key={season}
+													value={getPlayer(player)}
+													getOptionLabel={getOptionLabel("allOffense")}
+													getOptionValue={p => String(p.pid)}
+													onChange={handleChange("allOffense", undefined, i)}
+												/>
+											</div>
+										</div>
+									);
+								})}
+							</div>
+
+							<div className="col-md-4 col-6">
+								<h3 className="mt-4">All-Defensive Team</h3>
+								{aws.allDefense.map((player: any, i: number) => {
+									return (
+										<div className="d-flex" key={i}>
+											<Position index={i} p={player} />
+											<div className="mb-3 flex-grow-1">
+												<SelectMultiple
+													options={players}
+													key={season}
+													value={getPlayer(player)}
+													getOptionLabel={getOptionLabel("allDefense")}
+													getOptionValue={p => String(p.pid)}
+													onChange={handleChange("allDefense", undefined, i)}
+												/>
+											</div>
+										</div>
+									);
+								})}
+							</div>
 						</>
 					) : null}
 

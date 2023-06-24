@@ -1,12 +1,14 @@
-const bySport = <T>(
+const bySport = <T extends unknown>(
 	object:
 		| {
+				baseball: T;
 				basketball: T;
 				football: T;
 				hockey: T;
 				default?: T;
 		  }
 		| {
+				baseball?: T;
 				basketball?: T;
 				football?: T;
 				hockey?: T;
@@ -14,15 +16,15 @@ const bySport = <T>(
 		  },
 ): T => {
 	const sport = process.env.SPORT;
-	if (object.hasOwnProperty(sport)) {
+	if (Object.hasOwn(object, sport)) {
 		// https://github.com/microsoft/TypeScript/issues/21732
-		// @ts-ignore
+		// @ts-expect-error
 		return object[sport];
 	}
 
-	if (object.hasOwnProperty("default")) {
+	if (Object.hasOwn(object, "default")) {
 		// https://github.com/microsoft/TypeScript/issues/21732
-		// @ts-ignore
+		// @ts-expect-error
 		return object.default;
 	}
 

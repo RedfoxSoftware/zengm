@@ -3,14 +3,15 @@ import accountUpdateCard from "./accountUpdateCard";
 import achievements from "./achievements";
 import allStar from "./allStar";
 import allStarDunk from "./allStarDunk";
-import allStarDraft from "./allStarDraft";
 import allStarHistory from "./allStarHistory";
+import allStarTeams from "./allStarTeams";
 import allStarThree from "./allStarThree";
 import awardRaces from "./awardRaces";
 import awardsRecords from "./awardsRecords";
 import colleges from "./colleges";
 import countries from "./countries";
 import customizePlayer from "./customizePlayer";
+import dailySchedule from "./dailySchedule";
 import dangerZone from "./dangerZone";
 import dashboard from "./dashboard";
 import defaultNewLeagueSettings from "./defaultNewLeagueSettings";
@@ -21,6 +22,8 @@ import draftScouting from "./draftScouting";
 import draftHistory from "./draftHistory";
 import draftTeamHistory from "./draftTeamHistory";
 import editAwards from "./editAwards";
+import exhibition from "./exhibition";
+import exhibitionGame from "./exhibitionGame";
 import expansionDraft from "./expansionDraft";
 import exportLeague from "./exportLeague";
 import exportPlayers from "./exportPlayers";
@@ -45,9 +48,10 @@ import importPlayers from "./importPlayers";
 import inbox from "./inbox";
 import injuries from "./injuries";
 import leaders from "./leaders";
+import leadersProgressive from "./leadersProgressive";
+import leadersYears from "./leadersYears";
 import leagueDashboard from "./leagueDashboard";
 import leagueFinances from "./leagueFinances";
-import dailySchedule from "./dailySchedule";
 import leagueStats from "./leagueStats";
 import liveGame from "./liveGame";
 import manageConfs from "./manageConfs";
@@ -67,6 +71,7 @@ import playerGameLog from "./playerGameLog";
 import playerRatingDists from "./playerRatingDists";
 import playerRatings from "./playerRatings";
 import playerStatDists from "./playerStatDists";
+import playerGraphs from "./playerGraphs";
 import playerStats from "./playerStats";
 import playoffs from "./playoffs";
 import powerRankings from "./powerRankings";
@@ -86,6 +91,7 @@ import teamRecords from "./teamRecords";
 import teamStatDists from "./teamStatDists";
 import teamStats from "./teamStats";
 import trade from "./trade";
+import tradeProposals from "./tradeProposals";
 import tradeSummary from "./tradeSummary";
 import tradingBlock from "./tradingBlock";
 import tragicDeaths from "./tragicDeaths";
@@ -98,15 +104,16 @@ export default {
 	accountUpdateCard,
 	achievements,
 	allStar,
-	allStarDraft,
 	allStarDunk,
 	allStarHistory,
+	allStarTeams,
 	allStarThree,
 	awardRaces,
 	awardsRecords,
 	colleges,
 	countries,
 	customizePlayer,
+	dailySchedule,
 	dangerZone,
 	dashboard,
 	defaultNewLeagueSettings,
@@ -117,6 +124,8 @@ export default {
 	draftHistory,
 	draftTeamHistory,
 	editAwards,
+	exhibition,
+	exhibitionGame,
 	expansionDraft,
 	exportLeague,
 	exportPlayers,
@@ -141,9 +150,10 @@ export default {
 	injuries,
 	inbox,
 	leaders,
+	leadersProgressive,
+	leadersYears,
 	leagueDashboard,
 	leagueFinances,
-	dailySchedule,
 	leagueStats,
 	liveGame,
 	manageConfs,
@@ -164,6 +174,7 @@ export default {
 	playerRatings,
 	playerStatDists,
 	playerStats,
+	playerGraphs,
 	playoffs,
 	powerRankings,
 	protectPlayers,
@@ -182,6 +193,7 @@ export default {
 	teamStatDists,
 	teamStats,
 	trade,
+	tradeProposals,
 	tradeSummary,
 	tradingBlock,
 	tragicDeaths,

@@ -1,7 +1,7 @@
 import { LazyMotion } from "framer-motion";
-import PropTypes from "prop-types";
 import { memo, useCallback, useEffect } from "react";
-import { localActions, useLocalShallow } from "../util";
+import { localActions, useLocalPartial } from "../util";
+import CommandPalette from "./CommandPalette";
 import ErrorBoundary from "./ErrorBoundary";
 import Footer from "./Footer";
 import Header from "./Header";
@@ -14,28 +14,11 @@ import SideBar from "./SideBar";
 import Skyscraper from "./Skyscraper";
 import TitleBar from "./TitleBar";
 import { useViewData } from "../util/viewManager";
+import { isSport } from "../../common";
+import api from "../api";
 
 const loadFramerMotionFeatures = () =>
 	import("../util/framerMotionFeatures").then(res => res.default);
-
-type LeagueContentProps = {
-	children: any;
-	updating: boolean;
-};
-const LeagueContent = memo(
-	(props: LeagueContentProps) => {
-		return props.children;
-	},
-	(prevProps: LeagueContentProps, nextProps: LeagueContentProps) => {
-		// No point in rendering while updating contents
-		return nextProps.updating;
-	},
-);
-
-// @ts-ignore
-LeagueContent.propTypes = {
-	updating: PropTypes.bool.isRequired,
-};
 
 const minHeight100 = {
 	// Just using h-100 class here results in the sticky ad in the skyscraper becoming unstuck after scrolling down 100% of the viewport, for some reason
@@ -47,13 +30,27 @@ const minWidth0 = {
 	minWidth: 0,
 };
 
+type KeepPreviousRenderWhileUpdatingProps = {
+	children: any;
+	updating: boolean;
+};
+const KeepPreviousRenderWhileUpdating = memo(
+	(props: KeepPreviousRenderWhileUpdatingProps) => {
+		return props.children;
+	},
+	(
+		prevProps: KeepPreviousRenderWhileUpdatingProps,
+		nextProps: KeepPreviousRenderWhileUpdatingProps,
+	) => {
+		// No point in rendering while updating contents
+		return nextProps.updating;
+	},
+);
+
 const Controller = () => {
 	const state = useViewData();
 
-	const { popup, showNagModal } = useLocalShallow(state2 => ({
-		popup: state2.popup,
-		showNagModal: state2.showNagModal,
-	}));
+	const { popup, showNagModal } = useLocalPartial(["popup", "showNagModal"]);
 
 	const closeNagModal = useCallback(() => {
 		localActions.update({
@@ -70,6 +67,11 @@ const Controller = () => {
 		}
 	}, [popup]);
 
+	useEffect(() => {
+		// Try to show ads on initial render
+		api.initAds("uiRendered");
+	}, []);
+
 	const {
 		Component,
 		data,
@@ -77,45 +79,53 @@ const Controller = () => {
 		idLoaded,
 		inLeague,
 		loading: updating,
+		scrollToTop,
 	} = state;
-	const pageID = idLoading ?? idLoaded; // Optimistically pick idLoading before it renders
 
-	let contents;
-	if (!Component) {
-		contents = null;
-	} else if (!inLeague) {
-		contents = <Component {...data} />;
-	} else {
-		contents = (
-			<>
-				<LeagueContent updating={updating}>
-					<Component {...data} />
-				</LeagueContent>
-				<MultiTeamMenu />
-			</>
-		);
-	}
+	// Optimistically use idLoading before it renders, for UI responsiveness in the sidebar
+	const sidebarPageID = idLoading ?? idLoaded;
+
+	const pathname = isSport("baseball") ? document.location.pathname : undefined;
+
+	// Scroll to top if this load came from user clicking a link to a new page
+	useEffect(() => {
+		if (scrollToTop) {
+			window.scrollTo(window.pageXOffset, 0);
+		}
+	}, [idLoaded, scrollToTop]);
 
 	return (
 		<LazyMotion strict features={loadFramerMotionFeatures}>
 			<NavBar updating={updating} />
-			<LeagueTopBar />
-			<TitleBar />
-			<div className="bbgm-container position-relative mt-2 flex-grow-1 h-100">
-				<SideBar pageID={pageID} />
-				<div className="d-flex" style={minHeight100}>
-					<div className="w-100 d-flex flex-column" style={minWidth0}>
-						<Header />
-						<main className="p402_premium" id="actual-content">
-							<div id="actual-actual-content" className="clearfix">
-								<ErrorBoundary key={pageID}>{contents}</ErrorBoundary>
+			<div className="h-100 d-flex">
+				<SideBar pageID={sidebarPageID} pathname={pathname} />
+				<div className="h-100 w-100 d-flex flex-column" style={minWidth0}>
+					<LeagueTopBar />
+					<TitleBar />
+					<div className="container-fluid position-relative mt-2 flex-grow-1 h-100">
+						<div className="d-flex" style={minHeight100}>
+							<div className="w-100 d-flex flex-column" style={minWidth0}>
+								<Header />
+								<main className="p402_premium">
+									<div id="actual-actual-content" className="clearfix">
+										<ErrorBoundary key={idLoaded}>
+											{Component ? (
+												<KeepPreviousRenderWhileUpdating updating={updating}>
+													<Component {...data} />
+												</KeepPreviousRenderWhileUpdating>
+											) : null}
+											{inLeague ? <MultiTeamMenu /> : null}
+										</ErrorBoundary>
+									</div>
+								</main>
+								<Footer />
 							</div>
-						</main>
-						<Footer />
+							<Skyscraper />
+						</div>
+						<CommandPalette />
+						<NagModal close={closeNagModal} show={showNagModal} />
 					</div>
-					<Skyscraper />
 				</div>
-				<NagModal close={closeNagModal} show={showNagModal} />
 			</div>
 			<Notifications />
 		</LazyMotion>

@@ -1,11 +1,10 @@
 import classNames from "classnames";
-import PropTypes from "prop-types";
 import { BoxScoreRow, BoxScoreWrapper, MoreLinks } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
-import { helpers, useLocalShallow } from "../util";
+import { helpers, useLocalPartial } from "../util";
 import useClickable from "../hooks/useClickable";
 import type { View, Game } from "../../common/types";
-import { bySport } from "../../common";
+import { bySport, isSport } from "../../common";
 
 const StatsRow = ({ p, ...props }: { i: number; p: any }) => {
 	const { clicked, toggleClicked } = useClickable();
@@ -16,10 +15,6 @@ const StatsRow = ({ p, ...props }: { i: number; p: any }) => {
 	return (
 		<BoxScoreRow className={classes} onClick={toggleClicked} p={p} {...props} />
 	);
-};
-
-StatsRow.propTypes = {
-	p: PropTypes.object.isRequired,
 };
 
 const findPrevNextGids = (games: Game[], currentGid: number) => {
@@ -78,16 +73,14 @@ const GamesList = ({
 	season: number;
 	tid: number;
 }) => {
-	const { teamInfoCache } = useLocalShallow(state => ({
-		teamInfoCache: state.teamInfoCache,
-	}));
+	const { teamInfoCache } = useLocalPartial(["teamInfoCache"]);
 
 	if (season < currentSeason && gamesList.games.length === 0) {
 		return <NoGamesMessage warnAboutDelete />;
 	}
 
 	return (
-		<table className="table table-striped table-bordered table-sm game-log-list">
+		<table className="table table-striped table-borderless table-sm game-log-list">
 			<thead>
 				<tr>
 					<th>Opp</th>
@@ -115,14 +108,16 @@ const GamesList = ({
 							result = "T";
 						}
 
-						let overtimes;
-						if (gm.overtimes !== undefined && gm.overtimes > 0) {
-							if (gm.overtimes === 1) {
-								overtimes = "OT";
-							} else if (gm.overtimes > 1) {
-								overtimes = `${gm.overtimes}OT`;
-							}
-						}
+						const overtimeText = helpers.overtimeText(
+							gm.overtimes,
+							gm.numPeriods,
+						);
+						const overtimes =
+							overtimeText === ""
+								? ""
+								: isSport("baseball")
+								? ` (${overtimeText})`
+								: ` ${overtimeText}`;
 
 						const oppAbbrev =
 							abbrev === "special"
@@ -171,7 +166,8 @@ const GamesList = ({
 											gm.gid,
 										])}
 									>
-										{gm.teams[user].pts}-{gm.teams[other].pts} {overtimes}
+										{gm.teams[user].pts}-{gm.teams[other].pts}
+										{overtimes}
 									</a>
 								</td>
 							</tr>
@@ -183,15 +179,6 @@ const GamesList = ({
 	);
 };
 
-GamesList.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	currentSeason: PropTypes.number.isRequired,
-	gid: PropTypes.number,
-	gamesList: PropTypes.object.isRequired,
-	season: PropTypes.number.isRequired,
-	tid: PropTypes.number.isRequired,
-};
-
 const GameLog = ({
 	abbrev,
 	boxScore,
@@ -201,6 +188,7 @@ const GameLog = ({
 	tid,
 }: View<"gameLog">) => {
 	const dropdownTeamsKey = bySport({
+		baseball: "teams",
 		basketball: "teamsAndSpecial",
 		football: "teams",
 		hockey: "teams",
@@ -258,6 +246,7 @@ const GameLog = ({
 									nextGid={nextGid}
 									prevGid={prevGid}
 									showNextPrev
+									sportState={undefined}
 									tid={tid}
 									Row={StatsRow}
 								/>
@@ -266,7 +255,7 @@ const GameLog = ({
 							)}
 						</div>
 
-						<div className="col-md-2">
+						<div className="col-md-2 mt-3 mt-md-0">
 							<GamesList
 								abbrev={abbrev}
 								currentSeason={currentSeason}
@@ -281,15 +270,6 @@ const GameLog = ({
 			)}
 		</>
 	);
-};
-
-GameLog.propTypes = {
-	abbrev: PropTypes.string.isRequired,
-	boxScore: PropTypes.object.isRequired,
-	currentSeason: PropTypes.number.isRequired,
-	gamesList: PropTypes.object.isRequired,
-	season: PropTypes.number.isRequired,
-	tid: PropTypes.number.isRequired,
 };
 
 export default GameLog;

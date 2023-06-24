@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from "node:assert/strict";
 import { getDraftTids, loadTeamSeasons } from "./testHelpers";
 import testHelpers from "../../../test/helpers";
 import { idb } from "../../db";
@@ -11,7 +11,7 @@ describe("worker/core/draft/genOrder", () => {
 		await loadTeamSeasons();
 	});
 	afterAll(() => {
-		// @ts-ignore
+		// @ts-expect-error
 		idb.league = undefined;
 	});
 

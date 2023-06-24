@@ -9,6 +9,7 @@ import {
 	mvpScore,
 } from "../core/season/doAwards.football";
 import advStatsSave from "./advStatsSave";
+import { groupByUnique } from "../../common/groupBy";
 
 type Team = TeamFiltered<
 	["tid"],
@@ -102,11 +103,12 @@ const calculateAV = (players: any[], teamsInput: Team[], league: any) => {
 			},
 		};
 	});
+	const teamsByTid = groupByUnique(teams, "tid");
 
 	const individualPts = players.map(p => {
 		let score = 0;
 
-		const t = teams.find(t => t.tid === p.tid);
+		const t = teamsByTid[p.tid];
 
 		if (t === undefined) {
 			throw new Error("Should never happen");
@@ -143,7 +145,7 @@ const calculateAV = (players: any[], teamsInput: Team[], league: any) => {
 				4 * p.stats.defInt +
 				5 * (p.stats.defIntTD + p.stats.defFmbTD) +
 				// https://github.com/microsoft/TypeScript/issues/21732
-				// @ts-ignore
+				// @ts-expect-error
 				TCK_CONSTANT[p.ratings.pos] * p.stats.defTck +
 				(allProLevel * 80 * t.stats.gp) / g.get("numGames");
 
@@ -160,7 +162,7 @@ const calculateAV = (players: any[], teamsInput: Team[], league: any) => {
 	const av = players.map((p, i) => {
 		let score = 0;
 
-		const t = teams.find(t => t.tid === p.tid);
+		const t = teamsByTid[p.tid];
 
 		if (t === undefined) {
 			throw new Error("Should never happen");
@@ -184,14 +186,6 @@ const calculateAV = (players: any[], teamsInput: Team[], league: any) => {
 
 		// Receiving
 		score += (p.stats.recYds / t.stats.recYds) * t.stats.ptsRec;
-
-		if (p.stats.rec / p.stats.gp >= 70 / 16) {
-			if (p.stats.recYdsPerAtt > league.recYdsPerAtt) {
-				score += 0.5 * (p.stats.recYdsPerAtt - league.recYdsPerAtt);
-			} else {
-				score += 2 * (p.stats.recYdsPerAtt - league.recYdsPerAtt);
-			}
-		}
 
 		// Passing
 		score += (p.stats.pssYds / t.stats.pssYds) * t.stats.ptsPss;
@@ -294,7 +288,6 @@ const advStats = async () => {
 			"rusYdsPerAtt",
 			"rec",
 			"recYds",
-			"recYdsPerAtt",
 			"defSk",
 			"defFmbRec",
 			"defInt",
@@ -369,7 +362,7 @@ const advStats = async () => {
 	);
 	const league: any = teams.reduce((memo: any, t) => {
 		for (const key of teamStats) {
-			if (memo.hasOwnProperty(key)) {
+			if (Object.hasOwn(memo, key)) {
 				memo[key] += t.stats[key];
 			} else {
 				memo[key] = t.stats[key];
@@ -382,7 +375,6 @@ const advStats = async () => {
 	league.pssAdjYdsPerAtt =
 		(league.pssYds + 20 * league.pssTD - 45 * league.pssInt) / league.pss;
 	league.rusYdsPerAtt = league.rusYds / league.rus;
-	league.recYdsPerAtt = league.recYds / league.rec;
 	league.fgp0 = league.fg0 / league.fga0;
 	league.fgp20 = league.fg20 / league.fga20;
 	league.fgp30 = league.fg30 / league.fga30;

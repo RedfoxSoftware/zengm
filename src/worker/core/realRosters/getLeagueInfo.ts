@@ -3,6 +3,7 @@ import formatScheduledEvents from "./formatScheduledEvents";
 import { isSport } from "../../../common";
 import getGameAttributes from "./getGameAttributes";
 import type { GetLeagueOptions } from "../../../common/types";
+import addSeasonInfoToTeams from "./addSeasonInfoToTeams";
 
 export const legendsInfo = {
 	"1950s": {
@@ -63,19 +64,45 @@ const getLeagueInfo = async (options: GetLeagueOptions) => {
 
 		const stores =
 			options.season >= 2020
-				? ["teams", "players", "gameAttributes", "startingSeason", "draftPicks"]
+				? [
+						"teams",
+						"players",
+						"gameAttributes",
+						"startingSeason",
+						"seasonLeaders",
+						"draftPicks",
+				  ]
 				: [
 						"teams",
 						"players",
 						"gameAttributes",
 						"startingSeason",
+						"seasonLeaders",
 						"scheduledEvents",
 				  ];
+
+		const gameAttributes = getGameAttributes(initialGameAttributes, options);
+		const teams = initialTeams.filter(t => !t.disabled);
+
+		if (options.includeSeasonInfo) {
+			return {
+				gameAttributes,
+				startingSeason: options.season,
+				stores,
+				teams: await addSeasonInfoToTeams(
+					teams,
+					basketball,
+					gameAttributes,
+					options,
+				),
+			};
+		}
+
 		return {
-			gameAttributes: getGameAttributes(initialGameAttributes, options),
+			gameAttributes,
 			startingSeason: options.season,
 			stores,
-			teams: initialTeams.filter(t => !t.disabled),
+			teams,
 		};
 	}
 
@@ -101,7 +128,7 @@ const getLeagueInfo = async (options: GetLeagueOptions) => {
 		};
 	}
 
-	// @ts-ignore
+	// @ts-expect-error
 	throw new Error(`Unknown type "${options.type}"`);
 };
 

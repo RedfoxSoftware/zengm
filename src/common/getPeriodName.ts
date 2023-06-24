@@ -1,13 +1,19 @@
-const getPeriodName = (numPeriods: number) => {
+import isSport from "./isSport";
+
+const getPeriodName = (numPeriods: number, short?: boolean) => {
+	if (isSport("baseball")) {
+		return short ? "Inn" : "inning";
+	}
+
 	if (numPeriods === 2) {
-		return "half";
+		return short ? "H" : "half";
 	}
 
 	if (numPeriods === 4) {
-		return "quarter";
+		return short ? "Q" : "quarter";
 	}
 
-	return "period";
+	return short ? "P" : "period";
 };
 
 export default getPeriodName;

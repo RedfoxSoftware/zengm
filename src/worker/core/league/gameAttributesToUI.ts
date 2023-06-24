@@ -13,11 +13,13 @@ const gameAttributesToUI = async (
 	const keys = [
 		"challengeNoRatings",
 		"fantasyPoints",
+		"gender",
 		"godMode",
 		"hideDisabledTeams",
 		"homeCourtAdvantage",
 		"lid",
 		"numPeriods",
+		"numWatchColors",
 		"phase",
 		"quarterLength",
 		"season",
@@ -31,7 +33,7 @@ const gameAttributesToUI = async (
 	const update: Partial<GameAttributesLeague> = {};
 	let updated = false;
 	for (const key of keys) {
-		if (gameAttributes.hasOwnProperty(key)) {
+		if (Object.hasOwn(gameAttributes, key)) {
 			(update as any)[key] = unwrapGameAttribute(gameAttributes, key);
 			updated = true;
 		}

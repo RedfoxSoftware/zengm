@@ -1,5 +1,4 @@
-import PropTypes from "prop-types";
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import {
 	CountryFlag,
@@ -10,6 +9,7 @@ import {
 	Weight,
 	JerseyNumber,
 	Mood,
+	InjuryIcon,
 } from "../../components";
 import {
 	confirm,
@@ -18,7 +18,12 @@ import {
 	realtimeUpdate,
 	getCols,
 } from "../../util";
-import type { Phase, Player, View } from "../../../common/types";
+import type {
+	GameAttributesLeague,
+	Phase,
+	Player,
+	View,
+} from "../../../common/types";
 import { bySport, isSport, PHASE, PLAYER } from "../../../common";
 import classNames from "classnames";
 import AwardsSummary from "./AwardsSummary";
@@ -26,38 +31,53 @@ import RatingsOverview from "./RatingsOverview";
 import Note from "./Note";
 
 const Relatives = ({
+	gender,
 	pid,
 	relatives,
 }: {
+	gender: GameAttributesLeague["gender"];
 	pid: number;
 	relatives: Player["relatives"];
 }) => {
+	const [showAll, setShowAll] = useState(false);
+
 	if (relatives.length === 0) {
 		return null;
 	}
 
+	const numToShow = showAll || relatives.length <= 3 ? relatives.length : 2;
+	const numToHide = relatives.length - numToShow;
+
 	return (
 		<>
-			{relatives.map(rel => {
+			{relatives.slice(0, numToShow).map(rel => {
 				return (
 					<Fragment key={rel.pid}>
-						{helpers.upperCaseFirstLetter(rel.type)}:{" "}
+						{helpers.getRelativeType(gender, rel.type)}:{" "}
 						<a href={helpers.leagueUrl(["player", rel.pid])}>{rel.name}</a>
 						<br />
 					</Fragment>
 				);
 			})}
+			{numToHide > 0 ? (
+				<>
+					<button
+						className="btn btn-link p-0 m-0 border-0"
+						onClick={() => {
+							setShowAll(true);
+						}}
+					>
+						...show {numToHide} more relatives
+					</button>
+					<br />
+				</>
+			) : null}
 			<a href={helpers.leagueUrl(["frivolities", "relatives", pid])}>
 				(Family details)
 			</a>
 			<br />
 		</>
 	);
-};
-
-Relatives.propTypes = {
-	pid: PropTypes.number.isRequired,
-	relatives: PropTypes.arrayOf(PropTypes.object).isRequired,
 };
 
 const StatsSummary = ({
@@ -85,7 +105,7 @@ const StatsSummary = ({
 		}
 	}
 
-	let ps: typeof p["stats"][number] | undefined;
+	let ps: (typeof p)["stats"][number] | undefined;
 	if (season !== undefined) {
 		// Specific season was requested
 		const playerStats = p.stats.filter(
@@ -104,6 +124,7 @@ const StatsSummary = ({
 				}
 
 				const value = bySport({
+					baseball: row.war,
 					basketball: row.ws,
 					football: row.av,
 					hockey: row.ps,
@@ -128,12 +149,13 @@ const StatsSummary = ({
 	const cols = getCols(["Summary", ...stats.map(stat => `stat:${stat}`)]);
 
 	if (name === "Shot Locations") {
-		cols[cols.length - 3].title = "M";
-		cols[cols.length - 2].title = "A";
-		cols.at(-1).title = "%";
+		cols.at(-3)!.title = "M";
+		cols.at(-2)!.title = "A";
+		cols.at(-1)!.title = "%";
 	}
 
 	const separatorAfter = bySport({
+		baseball: onlyShowIf?.includes("SP") ? [0, 4, 7] : [0, 5, 8],
 		basketball: [0, 4, 8],
 		football: [0, 2],
 		hockey: onlyShowIf?.includes("G") ? [0, 3] : [0, 5],
@@ -142,8 +164,8 @@ const StatsSummary = ({
 	const showPeakSeason = p.tid === PLAYER.RETIRED && season === undefined;
 
 	return (
-		<div className="player-stats-summary">
-			<table className="table table-sm table-borderless table-nonfluid text-center mt-3 mb-0">
+		<div className="player-stats-summary small-scrollbar">
+			<table className="table table-sm table-borderless border-top-0 table-nonfluid text-center mt-3 mb-0">
 				<thead>
 					<tr>
 						{cols.map((col, i) => {
@@ -212,18 +234,10 @@ const StatsSummary = ({
 	);
 };
 
-StatsSummary.propTypes = {
-	name: PropTypes.string.isRequired,
-	onlyShowIf: PropTypes.arrayOf(PropTypes.string),
-	retired: PropTypes.bool,
-	p: PropTypes.object.isRequired,
-	playoffs: PropTypes.bool,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-};
-
 const TopStuff = ({
 	currentSeason,
 	freeAgent,
+	gender,
 	godMode,
 	injured,
 	jerseyNumberInfos,
@@ -241,11 +255,13 @@ const TopStuff = ({
 	teamJersey,
 	teamName,
 	teamURL,
+	userTid,
 	willingToSign,
 }: Pick<
 	View<"player">,
 	| "currentSeason"
 	| "freeAgent"
+	| "gender"
 	| "godMode"
 	| "injured"
 	| "jerseyNumberInfos"
@@ -262,6 +278,7 @@ const TopStuff = ({
 	| "teamJersey"
 	| "teamName"
 	| "teamURL"
+	| "userTid"
 	| "willingToSign"
 > & {
 	season?: number;
@@ -333,29 +350,18 @@ const TopStuff = ({
 			</div>
 		);
 	} else {
-		const gameOrWeek = bySport({ default: "game", football: "week" });
-
 		let skills;
 		if (season !== undefined) {
 			skills = player.ratings.find(row => row.season === season)?.skills;
 		}
 		if (!skills) {
-			skills = player.ratings.at(-1).skills;
+			skills = player.ratings.at(-1)!.skills;
 		}
 
 		statusInfo = (
 			<div className="d-flex align-items-center">
 				{injured ? (
-					<span
-						className="badge bg-danger badge-injury ms-0"
-						title={`${player.injury.type} (out ${
-							player.injury.gamesRemaining
-						} more ${
-							player.injury.gamesRemaining === 1 ? gameOrWeek : `${gameOrWeek}s`
-						})`}
-					>
-						{player.injury.gamesRemaining}
-					</span>
+					<InjuryIcon className="ms-0" injury={player.injury} />
 				) : null}
 				<SkillsBlock
 					className={injured ? undefined : "skills-alone"}
@@ -380,12 +386,8 @@ const TopStuff = ({
 		);
 	}
 
-	// https://github.com/DefinitelyTyped/DefinitelyTyped/issues/20544
-	// @ts-ignore
 	const height = <Height inches={player.hgt} />;
 
-	// https://github.com/DefinitelyTyped/DefinitelyTyped/issues/20544
-	// @ts-ignore
 	const weight = <Weight pounds={player.weight} />;
 
 	const college =
@@ -401,7 +403,7 @@ const TopStuff = ({
 						if (showTradeFor) {
 							toWorker("actions", "tradeFor", { pid: player.pid });
 						} else {
-							toWorker("actions", "addToTradingBlock", player.pid);
+							toWorker("actions", "addToTradingBlock", { pid: player.pid });
 						}
 					}}
 					title={player.untradableMsg}
@@ -430,7 +432,7 @@ const TopStuff = ({
 
 	return (
 		<div className="mb-3">
-			<div className="d-sm-flex">
+			<div className="d-sm-flex align-items-start">
 				<div className="player-bio">
 					<div className="d-flex">
 						<div
@@ -448,7 +450,7 @@ const TopStuff = ({
 						</div>
 						<div>
 							<strong>
-								{player.ratings.at(-1).pos},{" "}
+								{player.ratings.at(-1)!.pos},{" "}
 								{teamURL ? <a href={teamURL}>{teamName}</a> : teamName}
 								{player.jerseyNumber ? (
 									<>
@@ -468,6 +470,17 @@ const TopStuff = ({
 							</strong>
 							<br />
 							{height}, {weight}
+							{player.srID && !player.srID.startsWith("dp_") ? (
+								<>
+									{" "}
+									-{" "}
+									<a
+										href={`https://www.basketball-reference.com/players/${player.srID[0]}/${player.srID}.html`}
+									>
+										BBRef
+									</a>
+								</>
+							) : null}
 							<br />
 							Born: {player.born.year} -{" "}
 							<a
@@ -495,7 +508,11 @@ const TopStuff = ({
 									<br />
 								</>
 							)}
-							<Relatives pid={player.pid} relatives={player.relatives} />
+							<Relatives
+								gender={gender}
+								pid={player.pid}
+								relatives={player.relatives}
+							/>
 							{draftInfo}
 							{isSport("hockey") && college === "None" ? null : (
 								<>
@@ -571,7 +588,7 @@ const TopStuff = ({
 							<button
 								className="btn btn-outline-god-mode"
 								onClick={async () => {
-									await toWorker("main", "clearInjury", player.pid);
+									await toWorker("main", "clearInjuries", [player.pid]);
 								}}
 							>
 								Heal Injury
@@ -589,7 +606,7 @@ const TopStuff = ({
 									key={name}
 									name={name}
 									onlyShowIf={onlyShowIf}
-									position={player.ratings.at(-1).pos}
+									position={player.ratings.at(-1)!.pos}
 									phase={phase}
 									currentSeason={currentSeason}
 									season={season}
@@ -601,7 +618,7 @@ const TopStuff = ({
 					) : null}
 				</div>
 
-				<div className="mt-3 mt-sm-0 text-nowrap">
+				<div className="mt-3 mt-sm-0 text-nowrap overflow-auto small-scrollbar">
 					{showRatingsOverview ? (
 						<RatingsOverview ratings={player.ratings} season={season} />
 					) : null}
@@ -614,9 +631,50 @@ const TopStuff = ({
 								gap: "0.5em",
 							}}
 						>
-							{jerseyNumberInfos.map((info, i) => (
-								<JerseyNumber key={i} {...info} />
-							))}
+							{jerseyNumberInfos.map((info, i) => {
+								let onClick;
+								let extraText;
+								const t = info.t;
+								if (t && (t.tid === userTid || godMode)) {
+									const isCurrentTeamAndNumber =
+										info.end >= currentSeason && t.tid === player.tid;
+
+									// Don't allow retiring current number, cause it behaves weirdly
+									if (!isCurrentTeamAndNumber) {
+										onClick = async () => {
+											if (info.retiredIndex >= 0) {
+												await toWorker("main", "retiredJerseyNumberDelete", {
+													tid: t.tid,
+													i: info.retiredIndex,
+												});
+											} else {
+												await toWorker("main", "retiredJerseyNumberUpsert", {
+													tid: t.tid,
+													info: {
+														number: info.number,
+														seasonRetired: currentSeason,
+														seasonTeamInfo: info.end,
+														pid: player.pid,
+														text: "",
+													},
+												});
+											}
+										};
+										extraText = `click to ${
+											info.retiredIndex >= 0 ? "unretire" : "retire"
+										} jersey`;
+									}
+								}
+								return (
+									<JerseyNumber
+										key={i}
+										onClick={onClick}
+										extraText={extraText}
+										retired={info.retiredIndex >= 0}
+										{...info}
+									/>
+								);
+							})}
 						</div>
 					) : null}
 				</div>

@@ -1,11 +1,11 @@
-import PropTypes from "prop-types";
-import { Fragment, useReducer, ChangeEvent, FormEvent } from "react";
+import { Fragment, useReducer, type FormEvent } from "react";
 import useTitleBar from "../../hooks/useTitleBar";
 import { helpers, logEvent, toWorker } from "../../util";
 import AddRemove from "./AddRemove";
 import type { View } from "../../../common/types";
 import { PHASE } from "../../../common";
 import TeamForm from "./TeamForm";
+import { groupBy } from "../../../common/groupBy";
 
 const nextSeasonWarning =
 	"Because the regular season is already over, changes will not be fully applied until next season.";
@@ -53,14 +53,14 @@ const reducer = (state: State, action: Action) => {
 			}
 
 			if (action.field.startsWith("colors")) {
-				// @ts-ignore
+				// @ts-expect-error
 				t.colors[action.field.replace("colors", "")] = action.value;
 			} else if (action.field === "did") {
 				t[action.field] = parseInt(action.value);
 			} else if (action.field === "disabled") {
 				t[action.field] = action.value === "1";
 			} else {
-				// @ts-ignore
+				// @ts-expect-error
 				t[action.field] = action.value;
 			}
 			return {
@@ -76,6 +76,49 @@ const reducer = (state: State, action: Action) => {
 	}
 };
 
+const getUniqueAbbrevsErrorMessage = (teams: { abbrev: string }[]) => {
+	const grouped = groupBy(teams, "abbrev");
+
+	const duplicateInfos = [];
+
+	for (const [abbrev, teams] of Object.entries(grouped)) {
+		const count = teams.length;
+		if (count > 1) {
+			duplicateInfos.push({
+				abbrev,
+				count,
+			});
+		}
+	}
+
+	if (duplicateInfos.length === 0) {
+		return;
+	}
+
+	if (duplicateInfos.length === 1) {
+		const { abbrev, count } = duplicateInfos[0];
+		return (
+			<>
+				{count} teams have the same abbrev <b>{abbrev}</b> which can cause
+				problems in the UI.
+			</>
+		);
+	}
+
+	return (
+		<>
+			Some teams have the same abbrev (
+			{duplicateInfos.map(({ abbrev, count }, i) => (
+				<Fragment key={abbrev}>
+					{i > 0 ? ", " : null}
+					<b>{abbrev}:</b> {count}
+				</Fragment>
+			))}
+			) which can cause problems in the UI.
+		</>
+	);
+};
+
 const ManageTeams = (props: View<"manageTeams">) => {
 	const [state, dispatch] = useReducer(reducer, {
 		saving: false,
@@ -83,11 +126,7 @@ const ManageTeams = (props: View<"manageTeams">) => {
 	});
 
 	const handleInputChange =
-		(tid: number) =>
-		(
-			field: string,
-			event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-		) => {
+		(tid: number) => (field: string, event: { target: { value: string } }) => {
 			const value = event.target.value;
 
 			dispatch({ type: "updateTeam", tid, field, value });
@@ -136,6 +175,8 @@ const ManageTeams = (props: View<"manageTeams">) => {
 		].includes(props.phase);
 
 	const { saving, teams } = state;
+
+	const uniqueAbbrevsErrorMessage = getUniqueAbbrevsErrorMessage(teams);
 
 	return (
 		<>
@@ -225,6 +266,7 @@ const ManageTeams = (props: View<"manageTeams">) => {
 									"col-6 col-lg-1",
 									"col-6 col-lg-2",
 									"col-6 col-lg-1",
+									"d-none",
 								]}
 								classNameLabel="d-lg-none"
 								confs={props.confs}
@@ -233,6 +275,7 @@ const ManageTeams = (props: View<"manageTeams">) => {
 								disablePop={!props.godMode}
 								disableStatus={disableStatus}
 								disableStadiumCapacity={!props.godMode}
+								moveButton
 								t={t}
 							/>
 							<div className="col-12 d-lg-none" style={{ marginTop: -12 }}>
@@ -242,22 +285,20 @@ const ManageTeams = (props: View<"manageTeams">) => {
 					))}
 				</div>
 				<div className="text-center">
-					<button type="submit" className="btn btn-primary" disabled={saving}>
-						Update Team Info
-					</button>
+					{uniqueAbbrevsErrorMessage ? (
+						<div className="alert alert-danger d-inline-block">
+							<b>Warning:</b> {uniqueAbbrevsErrorMessage}
+						</div>
+					) : null}
+					<div>
+						<button type="submit" className="btn btn-primary" disabled={saving}>
+							Update Team Info
+						</button>
+					</div>
 				</div>
 			</form>
 		</>
 	);
-};
-
-ManageTeams.propTypes = {
-	defaultStadiumCapacity: PropTypes.number.isRequired,
-	confs: PropTypes.arrayOf(PropTypes.object).isRequired,
-	divs: PropTypes.arrayOf(PropTypes.object).isRequired,
-	godMode: PropTypes.bool.isRequired,
-	phase: PropTypes.number.isRequired,
-	teams: PropTypes.arrayOf(PropTypes.object).isRequired,
 };
 
 export default ManageTeams;

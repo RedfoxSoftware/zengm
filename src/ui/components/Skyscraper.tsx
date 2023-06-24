@@ -10,13 +10,7 @@ export const updateSkyscraperDisplay = () => {
 	if (div) {
 		const gold = !!div.dataset.gold;
 
-		const documentElement = document.documentElement;
-
-		if (
-			documentElement &&
-			documentElement.clientWidth >= widthCutoff &&
-			!gold
-		) {
+		if (document.documentElement.clientWidth >= widthCutoff && !gold) {
 			if (!displayed) {
 				window.freestar.queue.push(() => {
 					div.style.display = "block";
@@ -58,13 +52,15 @@ const resizeListener = () => {
 
 const Skyscraper = memo(() => {
 	useEffect(() => {
-		updateSkyscraperDisplay();
-		window.addEventListener("resize", resizeListener);
-		window.addEventListener("optimizedResize", updateSkyscraperDisplay);
-		return () => {
-			window.removeEventListener("resize", resizeListener);
-			window.removeEventListener("optimizedResize", updateSkyscraperDisplay);
-		};
+		if (!window.mobile) {
+			updateSkyscraperDisplay();
+			window.addEventListener("resize", resizeListener);
+			window.addEventListener("optimizedResize", updateSkyscraperDisplay);
+			return () => {
+				window.removeEventListener("resize", resizeListener);
+				window.removeEventListener("optimizedResize", updateSkyscraperDisplay);
+			};
+		}
 	}, []);
 
 	return (

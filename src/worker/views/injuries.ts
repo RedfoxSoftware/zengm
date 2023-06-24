@@ -2,6 +2,7 @@ import { bySport, PHASE } from "../../common";
 import { g } from "../util";
 import type { UpdateEvents, ViewInput } from "../../common/types";
 import { getPlayers } from "./playerRatings";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updateInjuries = async (
 	inputs: ViewInput<"injuries">,
@@ -17,6 +18,7 @@ const updateInjuries = async (
 		inputs.abbrev !== state.abbrev
 	) {
 		const stats = bySport({
+			baseball: ["gp", "keyStats"],
 			basketball: ["gp", "pts", "trb", "ast"],
 			football: ["gp", "keyStats"],
 			hockey: ["gp", "keyStats"],
@@ -64,8 +66,9 @@ const updateInjuries = async (
 		return {
 			abbrev: inputs.abbrev,
 			challengeNoRatings: g.get("challengeNoRatings"),
+			currentSeason: g.get("season"),
 			godMode: g.get("godMode"),
-			injuries,
+			injuries: addFirstNameShort(injuries),
 			season: inputs.season,
 			stats,
 			userTid,

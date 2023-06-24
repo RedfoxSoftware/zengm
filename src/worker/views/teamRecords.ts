@@ -2,6 +2,7 @@ import { idb } from "../db";
 import { g, helpers } from "../util";
 import type { UpdateEvents, AllStars, ViewInput } from "../../common/types";
 import orderBy from "lodash-es/orderBy";
+import { isSport } from "../../common";
 
 const sumBy = <Key extends string, T extends Record<Key, number>>(
 	records: T[],
@@ -20,7 +21,8 @@ const minBy = <Key extends string, T extends Record<Key, number | undefined>>(
 ) => {
 	let min: undefined | number;
 	for (const record of records) {
-		if (record[key] !== undefined && (min === undefined || record[key] < min)) {
+		const value = record[key];
+		if (value !== undefined && (min === undefined || value < min)) {
 			min = record[key];
 		}
 	}
@@ -33,8 +35,9 @@ const maxBy = <Key extends string, T extends Record<Key, number | undefined>>(
 ) => {
 	let max: undefined | number;
 	for (const record of records) {
-		if (record[key] !== undefined && (max === undefined || record[key] > max)) {
-			max = record[key];
+		const value = record[key];
+		if (value !== undefined && (max === undefined || value > max)) {
+			max = value;
 		}
 	}
 	return max;
@@ -56,8 +59,11 @@ const tallyAwards = (
 		roy: 0,
 		oroy: 0,
 		droy: 0,
+		poy: 0,
+		rpoy: 0,
 		allLeague: 0,
 		allDefense: 0,
+		allOffense: 0,
 		allRookie: 0,
 		allStar: 0,
 		allStarMVP: 0,
@@ -110,6 +116,16 @@ const tallyAwards = (
 			teamAwards.droy++;
 		}
 
+		if (isSport("baseball")) {
+			if (a.poy && a.poy.tid === tid) {
+				teamAwards.poy++;
+			}
+
+			if (a.rpoy && a.rpoy.tid === tid) {
+				teamAwards.rpoy++;
+			}
+		}
+
 		if (a.bre && a.brw) {
 			// For old league files, this format is obsolete now
 			if (a.bre.tid === tid) {
@@ -148,19 +164,32 @@ const tallyAwards = (
 			}
 		}
 
-		for (let i = 0; i < a.allLeague.length; i++) {
-			for (const p of a.allLeague[i].players) {
+		if (isSport("baseball")) {
+			for (const p of a.allDefense) {
 				if (p && p.tid === tid) {
-					teamAwards.allLeague++;
+					teamAwards.allDefense++;
 				}
 			}
-		}
-
-		if (a.allDefensive) {
-			for (let i = 0; i < a.allDefensive.length; i++) {
-				for (const p of a.allDefensive[i].players) {
+			for (const p of a.allOffense) {
+				if (p && p.tid === tid) {
+					teamAwards.allOffense++;
+				}
+			}
+		} else {
+			for (let i = 0; i < a.allLeague.length; i++) {
+				for (const p of a.allLeague[i].players) {
 					if (p && p.tid === tid) {
-						teamAwards.allDefense++;
+						teamAwards.allLeague++;
+					}
+				}
+			}
+
+			if (a.allDefensive) {
+				for (let i = 0; i < a.allDefensive.length; i++) {
+					for (const p of a.allDefensive[i].players) {
+						if (p && p.tid === tid) {
+							teamAwards.allDefense++;
+						}
 					}
 				}
 			}
@@ -363,7 +392,17 @@ const updateTeamRecords = async (
 		const teamsAll = orderBy(
 			await idb.getCopies.teamsPlus(
 				{
-					attrs: ["tid", "abbrev", "region", "name", "cid", "did", "disabled"],
+					attrs: [
+						"tid",
+						"abbrev",
+						"region",
+						"name",
+						"cid",
+						"did",
+						"disabled",
+						"imgURL",
+						"imgURLSmall",
+					],
 					seasonAttrs: [
 						"abbrev",
 						"region",
@@ -399,6 +438,8 @@ const updateTeamRecords = async (
 				abbrev: t.abbrev,
 				region: t.region,
 				name: t.name,
+				imgURL: t.imgURL,
+				imgURLSmall: t.imgURLSmall,
 				...getRowInfo(t.tid, seasonAttrsFiltered, awards, allStars),
 				sortValue: teams.length,
 			};

@@ -1,21 +1,19 @@
 import useTitleBar from "../hooks/useTitleBar";
 import { helpers } from "../util";
 import type { View } from "../../common/types";
-import { isSport } from "../../common";
 
 const style = { maxWidth: "18rem" };
 
 const AllStar = ({
+	allStarType,
 	numPlayersDunk,
 	numPlayersThree,
 	showDunk,
 	showThree,
 }: View<"allStar">) => {
-	if (!isSport("basketball")) {
-		throw new Error("Not implemented");
-	}
-
-	useTitleBar({ title: "All-Star Events" });
+	useTitleBar({
+		title: `All-Star ${showDunk || showThree ? "Events" : "Game"}`,
+	});
 
 	return (
 		<div
@@ -58,21 +56,56 @@ const AllStar = ({
 					</div>
 				</div>
 			) : null}
-			<div className="card" style={style}>
-				<div className="card-body">
-					<h3 className="card-title">All-Star Draft</h3>
-					<p className="card-text">
-						The top 2 players in the league get to pick their team before the
-						All-Star Game.
-					</p>
-					<a
-						href={helpers.leagueUrl(["all_star", "draft"])}
-						className="btn btn-primary stretched-link"
-					>
-						Start the draft
-					</a>
+			{allStarType === "draft" ? (
+				<div className="card" style={style}>
+					<div className="card-body">
+						<h3 className="card-title">All-Star Draft</h3>
+						<p className="card-text">
+							The top 2 players in the league get to pick their team before the
+							All-Star Game.
+						</p>
+						<a
+							href={helpers.leagueUrl(["all_star", "teams"])}
+							className="btn btn-primary stretched-link"
+						>
+							Start the draft
+						</a>
+					</div>
 				</div>
-			</div>
+			) : (
+				<>
+					<div className="card" style={style}>
+						<div className="card-body">
+							<h3 className="card-title">All-Star Teams</h3>
+							<p className="card-text">
+								See which players made the All-Star teams.
+							</p>
+							<a
+								href={helpers.leagueUrl(["all_star", "teams"])}
+								className="btn btn-primary stretched-link"
+							>
+								View the teams
+							</a>
+						</div>
+					</div>
+					<div className="card" style={style}>
+						<div className="card-body">
+							<h3 className="card-title">All-Star Game</h3>
+							<p className="card-text">
+								The best players in{" "}
+								{allStarType === "byConf" ? "each conference" : "the league"}{" "}
+								face off in an exhibition game.
+							</p>
+							<a
+								href={helpers.leagueUrl(["daily_schedule"])}
+								className="btn btn-primary stretched-link"
+							>
+								Watch the game
+							</a>
+						</div>
+					</div>
+				</>
+			)}
 			<div className="card" style={style}>
 				<div className="card-body">
 					<h3 className="card-title">All-Star History</h3>

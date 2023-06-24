@@ -1,5 +1,4 @@
-import PropTypes from "prop-types";
-import { useEffect, useState, ChangeEvent, FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import {
 	ACCOUNT_API_URL,
 	STRIPE_PUBLISHABLE_KEY,
@@ -57,9 +56,9 @@ const AccountUpdateCard = (props: View<"accountUpdateCard">) => {
 			{
 				number: state.number,
 				cvc: state.cvc,
-				// @ts-ignore
+				// @ts-expect-error
 				exp_month: state.exp_month,
-				// @ts-ignore
+				// @ts-expect-error
 				exp_year: state.exp_year,
 			},
 			async (status: number, response: stripe.StripeCardTokenResponse) => {
@@ -202,14 +201,6 @@ const AccountUpdateCard = (props: View<"accountUpdateCard">) => {
 			</form>
 		</>
 	);
-};
-
-AccountUpdateCard.propTypes = {
-	goldCancelled: PropTypes.bool.isRequired,
-	expMonth: PropTypes.number.isRequired,
-	expYear: PropTypes.number.isRequired,
-	last4: PropTypes.string.isRequired,
-	username: PropTypes.string,
 };
 
 export default AccountUpdateCard;

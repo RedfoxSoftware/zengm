@@ -1,6 +1,5 @@
-import PropTypes from "prop-types";
-import { useState } from "react";
-import { DataTable, SafeHtml, SkillsBlock } from "../../components";
+import { type ReactNode, useState } from "react";
+import { DataTable, InjuryIcon, SafeHtml, SkillsBlock } from "../../components";
 import Injuries from "./Injuries";
 import useTitleBar from "../../hooks/useTitleBar";
 import { getCols, helpers, groupAwards } from "../../util";
@@ -9,13 +8,35 @@ import classNames from "classnames";
 import { formatStatGameHigh } from "../PlayerStats";
 import SeasonIcons from "./SeasonIcons";
 import TopStuff from "./TopStuff";
-import { PLAYER } from "../../../common";
+import { isSport, PLAYER } from "../../../common";
+import { expandFieldingStats } from "../../util/expandFieldingStats.baseball";
+import TeamAbbrevLink from "../../components/TeamAbbrevLink";
+import hideableSectionFactory from "../../components/hideableSectionFactory";
 
-const SeasonLink = ({ pid, season }: { pid: number; season: number }) => {
+const SeasonLink = ({
+	className,
+	pid,
+	season,
+}: {
+	className?: string;
+	pid: number;
+	season: number;
+}) => {
 	return (
-		<a href={helpers.leagueUrl(["player_game_log", pid, season])}>{season}</a>
+		<a
+			className={className}
+			href={helpers.leagueUrl(["player_game_log", pid, season])}
+		>
+			{season}
+		</a>
 	);
 };
+
+const highlightLeaderText = (
+	<>
+		<span className="highlight-leader">Bold</span> indicates league leader
+	</>
+);
 
 const StatsTable = ({
 	name,
@@ -23,12 +44,16 @@ const StatsTable = ({
 	p,
 	stats,
 	superCols,
+	HideableSection,
+	leaders,
 }: {
 	name: string;
 	onlyShowIf?: string[];
 	p: View<"player">["player"];
 	stats: string[];
 	superCols?: any[];
+	HideableSection: ReturnType<typeof hideableSectionFactory>;
+	leaders: View<"player">["leaders"];
 }) => {
 	const hasRegularSeasonStats = p.careerStats.gp > 0;
 	const hasPlayoffStats = p.careerStatsPlayoffs.gp > 0;
@@ -48,13 +73,17 @@ const StatsTable = ({
 		return null;
 	}
 
-	const playerStats = p.stats.filter(ps => ps.playoffs === playoffs);
+	let playerStats = p.stats.filter(ps => ps.playoffs === playoffs);
 	const careerStats = playoffs ? p.careerStatsPlayoffs : p.careerStats;
 
 	if (onlyShowIf !== undefined) {
 		let display = false;
 		for (const stat of onlyShowIf) {
-			if (careerStats[stat] > 0) {
+			if (
+				careerStats[stat] > 0 ||
+				(Array.isArray(careerStats[stat]) &&
+					(careerStats[stat] as any).length > 0)
+			) {
 				display = true;
 				break;
 			}
@@ -69,8 +98,10 @@ const StatsTable = ({
 		"Year",
 		"Team",
 		"Age",
-		...stats.map(
-			stat => `stat:${stat.endsWith("Max") ? stat.replace("Max", "") : stat}`,
+		...stats.map(stat =>
+			stat === "pos"
+				? "Pos"
+				: `stat:${stat.endsWith("Max") ? stat.replace("Max", "") : stat}`,
 		),
 	]);
 
@@ -81,46 +112,89 @@ const StatsTable = ({
 		superCols[0].colspan -= 1;
 	}
 
-	if (name === "Shot Locations") {
-		cols[cols.length - 3].title = "M";
-		cols[cols.length - 2].title = "A";
-		cols.at(-1).title = "%";
+	if (isSport("basketball") && name === "Shot Locations") {
+		cols.at(-3)!.title = "M";
+		cols.at(-2)!.title = "A";
+		cols.at(-1)!.title = "%";
+	}
+
+	let footer;
+	if (isSport("baseball") && name === "Fielding") {
+		playerStats = expandFieldingStats({
+			rows: playerStats,
+			stats,
+		});
+
+		footer = expandFieldingStats({
+			rows: [careerStats],
+			stats,
+			addDummyPosIndex: true,
+		}).map((object, i) => [
+			i === 0 ? "Career" : null,
+			null,
+			null,
+			...stats.map(stat => formatStatGameHigh(object, stat)),
+		]);
+	} else {
+		footer = [
+			"Career",
+			null,
+			null,
+			...stats.map(stat => formatStatGameHigh(careerStats, stat)),
+		];
+	}
+
+	const leadersType = playoffs ? "playoffs" : "regularSeason";
+
+	let hasLeader = false;
+	LEADERS_LOOP: for (const row of Object.values(leaders)) {
+		if (row?.attrs.has("age")) {
+			hasLeader = true;
+			break;
+		}
+
+		for (const stat of stats) {
+			if (row?.[leadersType].has(stat)) {
+				hasLeader = true;
+				break LEADERS_LOOP;
+			}
+		}
 	}
 
 	return (
-		<>
-			<h2>{name}</h2>
+		<HideableSection
+			title={name}
+			description={hasLeader ? highlightLeaderText : null}
+		>
 			<ul className="nav nav-tabs border-bottom-0">
 				{hasRegularSeasonStats ? (
 					<li className="nav-item">
-						<a
+						<button
 							className={classNames("nav-link", {
 								active: !playoffs,
 								"border-bottom": !playoffs,
 							})}
-							onClick={event => {
-								event.preventDefault();
+							onClick={() => {
 								setPlayoffs(false);
 							}}
 						>
 							Regular Season
-						</a>
+						</button>
 					</li>
 				) : null}
 				{hasPlayoffStats ? (
 					<li className="nav-item">
-						<a
+						<button
 							className={classNames("nav-link", {
 								active: playoffs,
 								"border-bottom": playoffs,
 							})}
-							onClick={event => {
-								event.preventDefault();
+							onClick={() => {
 								setPlayoffs(true);
 							}}
 						>
 							Playoffs
-						</a>
+						</button>
 					</li>
 				) : null}
 			</ul>
@@ -128,15 +202,13 @@ const StatsTable = ({
 				className="mb-3"
 				cols={cols}
 				defaultSort={[0, "asc"]}
-				footer={[
-					"Career",
-					null,
-					null,
-					...stats.map(stat => formatStatGameHigh(careerStats, stat)),
-				]}
+				defaultStickyCols={2}
+				footer={footer}
 				hideAllControls
 				name={`Player:${name}`}
 				rows={playerStats.map((ps, i) => {
+					const className = ps.hasTot ? "text-body-secondary" : undefined;
+
 					return {
 						key: i,
 						data: [
@@ -145,7 +217,11 @@ const StatsTable = ({
 								sortValue: i,
 								value: (
 									<>
-										<SeasonLink pid={p.pid} season={ps.season} />{" "}
+										<SeasonLink
+											className={className}
+											pid={p.pid}
+											season={ps.season}
+										/>{" "}
 										<SeasonIcons
 											season={ps.season}
 											awards={p.awards}
@@ -154,33 +230,46 @@ const StatsTable = ({
 									</>
 								),
 							},
-							<a
-								href={helpers.leagueUrl([
-									"roster",
-									`${ps.abbrev}_${ps.tid}`,
-									ps.season,
-								])}
-							>
-								{ps.abbrev}
-							</a>,
-							ps.age,
-							...stats.map(stat => formatStatGameHigh(ps, stat)),
+							<TeamAbbrevLink
+								abbrev={ps.abbrev}
+								className={className}
+								season={ps.season}
+								tid={ps.tid}
+							/>,
+							<MaybeBold bold={leaders[ps.season]?.attrs.has("age")}>
+								{ps.age}
+							</MaybeBold>,
+							...stats.map(stat => (
+								<MaybeBold
+									bold={
+										!ps.hasTot && leaders[ps.season]?.[leadersType].has(stat)
+									}
+								>
+									{formatStatGameHigh(ps, stat)}
+								</MaybeBold>
+							)),
 						],
+						classNames: className,
 					};
 				})}
 				superCols={superCols}
 			/>
-		</>
+		</HideableSection>
 	);
 };
 
-StatsTable.propTypes = {
-	name: PropTypes.string.isRequired,
-	onlyShowIf: PropTypes.arrayOf(PropTypes.string),
-	p: PropTypes.object.isRequired,
-	playoffs: PropTypes.bool,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	superCols: PropTypes.array,
+const MaybeBold = ({
+	bold,
+	children,
+}: {
+	bold: boolean | undefined;
+	children: ReactNode;
+}) => {
+	if (bold) {
+		return <span className="highlight-leader">{children}</span>;
+	}
+
+	return children as JSX.Element;
 };
 
 const Player2 = ({
@@ -189,9 +278,11 @@ const Player2 = ({
 	events,
 	feats,
 	freeAgent,
+	gender,
 	godMode,
 	injured,
 	jerseyNumberInfos,
+	leaders,
 	phase,
 	player,
 	ratings,
@@ -207,6 +298,7 @@ const Player2 = ({
 	teamJersey,
 	teamName,
 	teamURL,
+	userTid,
 	willingToSign,
 }: View<"player">) => {
 	useTitleBar({
@@ -222,9 +314,9 @@ const Player2 = ({
 		dropdownCustomURL: fields => {
 			let gameLogSeason;
 			if (player.stats.length > 0) {
-				gameLogSeason = player.stats.at(-1).season;
+				gameLogSeason = player.stats.at(-1)!.season;
 			} else if (player.ratings.length > 0) {
-				gameLogSeason = player.ratings.at(-1).season;
+				gameLogSeason = player.ratings.at(-1)!.season;
 			} else {
 				gameLogSeason = currentSeason;
 			}
@@ -240,11 +332,22 @@ const Player2 = ({
 
 	const awardsGrouped = groupAwards(player.awards);
 
+	const HideableSection = hideableSectionFactory(undefined);
+
+	let hasLeader = false;
+	for (const row of Object.values(leaders)) {
+		if (row && (row.attrs.has("age") || row.ratings.size > 0)) {
+			hasLeader = true;
+			break;
+		}
+	}
+
 	return (
 		<>
 			<TopStuff
 				currentSeason={currentSeason}
 				freeAgent={freeAgent}
+				gender={gender}
 				godMode={godMode}
 				injured={injured}
 				jerseyNumberInfos={jerseyNumberInfos}
@@ -261,6 +364,7 @@ const Player2 = ({
 				teamJersey={teamJersey}
 				teamName={teamName}
 				teamURL={teamURL}
+				userTid={userTid}
 				willingToSign={willingToSign}
 			/>
 
@@ -272,11 +376,15 @@ const Player2 = ({
 					stats={stats}
 					superCols={superCols}
 					p={player}
+					HideableSection={HideableSection}
+					leaders={leaders}
 				/>
 			))}
 
-			<>
-				<h2>Ratings</h2>
+			<HideableSection
+				title="Ratings"
+				description={hasLeader && showRatings ? highlightLeaderText : null}
+			>
 				<DataTable
 					className="mb-3"
 					cols={getCols([
@@ -290,6 +398,7 @@ const Player2 = ({
 						"Skills",
 					])}
 					defaultSort={[0, "asc"]}
+					defaultStickyCols={2}
 					hideAllControls
 					name="Player:Ratings"
 					rows={player.ratings.map((r, i) => {
@@ -305,166 +414,150 @@ const Player2 = ({
 											<SeasonIcons season={r.season} awards={player.awards} />
 											{r.injuryIndex !== undefined &&
 											player.injuries[r.injuryIndex] ? (
-												<span
-													className="badge bg-danger badge-injury"
-													title={player.injuries[r.injuryIndex].type}
-												>
-													+
-												</span>
+												<InjuryIcon
+													injury={{
+														type: player.injuries[r.injuryIndex].type,
+														gamesRemaining: -1,
+													}}
+												/>
 											) : null}
 										</>
 									),
 								},
-								r.abbrev ? (
-									<a
-										href={helpers.leagueUrl([
-											"roster",
-											`${r.abbrev}_${r.tid}`,
-											r.season,
-										])}
-									>
-										{r.abbrev}
-									</a>
-								) : null,
-								r.age,
+								<TeamAbbrevLink
+									abbrev={r.abbrev}
+									season={r.season}
+									tid={r.tid}
+								/>,
+								<MaybeBold bold={leaders[r.season]?.attrs.has("age")}>
+									{r.age}
+								</MaybeBold>,
 								r.pos,
-								showRatings ? r.ovr : null,
-								showRatings ? r.pot : null,
+								showRatings ? (
+									<MaybeBold bold={leaders[r.season]?.ratings.has("ovr")}>
+										{r.ovr}
+									</MaybeBold>
+								) : null,
+								showRatings ? (
+									<MaybeBold bold={leaders[r.season]?.ratings.has("pot")}>
+										{r.pot}
+									</MaybeBold>
+								) : null,
 								...ratings.map(rating =>
-									showRatings ? (r as any)[rating] : null,
+									showRatings ? (
+										<MaybeBold bold={leaders[r.season]?.ratings.has(rating)}>
+											{(r as any)[rating]}
+										</MaybeBold>
+									) : null,
 								),
 								<SkillsBlock className="skills-alone" skills={r.skills} />,
 							],
 						};
 					})}
 				/>
-			</>
+			</HideableSection>
 
 			<div className="row">
 				<div className="col-6 col-md-3">
-					<h2>Awards</h2>
-					{awardsGrouped.length > 0 ? (
-						<table className="table table-nonfluid table-striped table-bordered table-sm player-awards">
-							<tbody>
-								{awardsGrouped.map((a, i) => {
-									return (
-										<tr key={i}>
-											<td>
-												{a.count > 1 ? `${a.count}x ` : null}
-												{a.type} ({a.seasons.join(", ")})
-											</td>
-										</tr>
-									);
-								})}
-							</tbody>
-						</table>
-					) : null}
-					{awardsGrouped.length === 0 ? <p>None</p> : null}
+					<HideableSection title="Awards">
+						{awardsGrouped.length > 0 ? (
+							<table className="table table-nonfluid table-striped table-borderless table-sm player-awards">
+								<tbody>
+									{awardsGrouped.map((a, i) => {
+										return (
+											<tr key={i}>
+												<td>
+													{a.count > 1 ? `${a.count}x ` : null}
+													{a.type} ({a.seasons.join(", ")})
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
+						) : null}
+						{awardsGrouped.length === 0 ? <p>None</p> : null}
+					</HideableSection>
 				</div>
 				<div className="col-6 col-md-3">
-					<h2>Salaries</h2>
-					<DataTable
-						className="mb-3"
-						cols={getCols(["Year", "Amount"])}
-						defaultSort={[0, "asc"]}
-						footer={[
-							"Total",
-							helpers.formatCurrency(player.salariesTotal, "M"),
-						]}
-						hideAllControls
-						name="Player:Salaries"
-						rows={player.salaries.map((s, i) => {
-							return {
-								key: i,
-								data: [
-									{
-										searchValue: s.season,
-										sortValue: i,
-										value: (
-											<>
-												<SeasonLink pid={player.pid} season={s.season} />{" "}
-												<SeasonIcons season={s.season} awards={player.awards} />
-											</>
-										),
-									},
-									helpers.formatCurrency(s.amount, "M"),
-								],
-							};
-						})}
-					/>
+					<HideableSection title="Salaries">
+						<DataTable
+							className="mb-3"
+							cols={getCols(["Year", "Amount"])}
+							defaultSort={[0, "asc"]}
+							footer={[
+								"Total",
+								helpers.formatCurrency(player.salariesTotal, "M"),
+							]}
+							hideAllControls
+							name="Player:Salaries"
+							rows={player.salaries.map((s, i) => {
+								return {
+									key: i,
+									data: [
+										{
+											searchValue: s.season,
+											sortValue: i,
+											value: (
+												<>
+													<SeasonLink pid={player.pid} season={s.season} />{" "}
+													<SeasonIcons
+														season={s.season}
+														awards={player.awards}
+													/>
+												</>
+											),
+										},
+										helpers.formatCurrency(s.amount, "M"),
+									],
+								};
+							})}
+						/>
+					</HideableSection>
 				</div>
 				<div className="col-md-6">
-					<h2>Statistical Feats</h2>
-					<div
-						style={{
-							maxHeight: 500,
-							overflowY: "scroll",
-						}}
-					>
-						{feats.map(e => {
+					<HideableSection title="Statistical Feats">
+						<div
+							className="small-scrollbar"
+							style={{
+								maxHeight: 500,
+								overflowY: "auto",
+							}}
+						>
+							{feats.map(e => {
+								return (
+									<p key={e.eid}>
+										<b>{e.season}</b>: <SafeHtml dirty={e.text} />
+									</p>
+								);
+							})}
+						</div>
+						{feats.length === 0 ? <p>None</p> : null}
+					</HideableSection>
+				</div>
+			</div>
+
+			<div className="row" style={{ marginBottom: "-1rem" }}>
+				<div className="col-md-6 col-lg-4">
+					<HideableSection title="Injuries">
+						<Injuries injuries={player.injuries} showRatings={showRatings} />
+					</HideableSection>
+				</div>
+				<div className="col-md-6 col-lg-8">
+					<HideableSection title="Transactions">
+						{events.map(e => {
 							return (
 								<p key={e.eid}>
 									<b>{e.season}</b>: <SafeHtml dirty={e.text} />
 								</p>
 							);
 						})}
-					</div>
-					{feats.length === 0 ? <p>None</p> : null}
-				</div>
-			</div>
-
-			<div className="row" style={{ marginBottom: "-1rem" }}>
-				<div className="col-md-6 col-lg-4">
-					<h2>Injuries</h2>
-					<Injuries injuries={player.injuries} showRatings={showRatings} />
-				</div>
-				<div className="col-md-6 col-lg-8">
-					<h2>Transactions</h2>
-					{events.map(e => {
-						return (
-							<p key={e.eid}>
-								<b>{e.season}</b>: <SafeHtml dirty={e.text} />
-							</p>
-						);
-					})}
-					{events.length === 0 ? <p>None</p> : null}
+						{events.length === 0 ? <p>None</p> : null}
+					</HideableSection>
 				</div>
 			</div>
 		</>
 	);
-};
-
-Player2.propTypes = {
-	events: PropTypes.arrayOf(
-		PropTypes.shape({
-			eid: PropTypes.number.isRequired,
-			season: PropTypes.number.isRequired,
-			text: PropTypes.string.isRequired,
-		}),
-	).isRequired,
-	feats: PropTypes.arrayOf(
-		PropTypes.shape({
-			eid: PropTypes.number.isRequired,
-			season: PropTypes.number.isRequired,
-			text: PropTypes.string.isRequired,
-		}),
-	).isRequired,
-	freeAgent: PropTypes.bool.isRequired,
-	godMode: PropTypes.bool.isRequired,
-	injured: PropTypes.bool.isRequired,
-	player: PropTypes.object.isRequired,
-	ratings: PropTypes.arrayOf(PropTypes.string).isRequired,
-	retired: PropTypes.bool.isRequired,
-	showContract: PropTypes.bool.isRequired,
-	showTradeFor: PropTypes.bool.isRequired,
-	statTables: PropTypes.arrayOf(
-		PropTypes.shape({
-			name: PropTypes.string.isRequired,
-			stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-		}),
-	).isRequired,
-	teamColors: PropTypes.arrayOf(PropTypes.string),
-	willingToSign: PropTypes.bool.isRequired,
 };
 
 export default Player2;

@@ -1,12 +1,13 @@
-import PropTypes from "prop-types";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
-import { DataTable, PlayerNameLabels } from "../components";
+import { DataTable } from "../components";
 import type { View } from "../../common/types";
 import { frivolitiesMenu } from "./Frivolities";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const Relatives = ({
 	challengeNoRatings,
+	gender,
 	pid,
 	players,
 	stats,
@@ -15,7 +16,16 @@ const Relatives = ({
 	const target =
 		pid !== undefined ? players.find(p => p.pid === pid) : undefined;
 
-	const title = target === undefined ? "Relatives" : `${target.name}'s Family`;
+	let title;
+	if (target === undefined) {
+		title = "Relatives";
+	} else {
+		let name = target.firstName;
+		if (target.lastName) {
+			name += ` ${target.lastName}`;
+		}
+		title = `${name}'s Family`;
+	}
 
 	useTitleBar({ title, customMenu: frivolitiesMenu });
 
@@ -48,9 +58,9 @@ const Relatives = ({
 		"Peak Ovr",
 		...(target !== undefined ? ["Relation"] : []),
 		"Details",
-		"# Fathers",
-		"# Brothers",
-		"# Sons",
+		gender === "male" ? "# Fathers" : "# Mothers",
+		gender === "male" ? "# Brothers" : "# Sisters",
+		gender === "male" ? "# Sons" : "# Daughters",
 		"Year",
 		"Team",
 		...stats.map(stat => `stat:${stat}`),
@@ -60,16 +70,7 @@ const Relatives = ({
 	const rows = players.map(p => {
 		const relationArray: string[] = [];
 		if (target) {
-			if (p.pid === pid) {
-				relationArray.push("Self");
-			} else {
-				const relation = target.relatives.find((rel: any) => rel.pid === p.pid);
-				if (relation) {
-					relationArray.push(helpers.upperCaseFirstLetter(relation.type));
-				} else {
-					relationArray.push("???");
-				}
-			}
+			relationArray.push(p.relationText);
 		}
 
 		const showRatings = !challengeNoRatings || p.retiredYear !== Infinity;
@@ -79,9 +80,13 @@ const Relatives = ({
 		return {
 			key: p.pid,
 			data: [
-				<PlayerNameLabels pid={p.pid} jerseyNumber={p.jerseyNumber}>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					jerseyNumber: p.jerseyNumber,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.ratings.at(-1).pos,
 				p.draft.year,
 				p.retiredYear === Infinity ? null : p.retiredYear,
@@ -139,7 +144,7 @@ const Relatives = ({
 			) : (
 				<p>
 					These are the players with a relative in the league. Click "Details"
-					for a player to see his relatives.
+					for a player to see {helpers.pronoun(gender, "his")} relatives.
 				</p>
 			)}
 
@@ -153,6 +158,7 @@ const Relatives = ({
 			<DataTable
 				cols={cols}
 				defaultSort={[20, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="Relatives"
 				pagination
 				rows={rows}
@@ -160,13 +166,6 @@ const Relatives = ({
 			/>
 		</>
 	);
-};
-
-Relatives.propTypes = {
-	pid: PropTypes.number,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default Relatives;

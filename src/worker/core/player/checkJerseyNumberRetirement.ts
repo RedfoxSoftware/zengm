@@ -10,6 +10,7 @@ const MAX_RETIRED_JERSEY_NUMBERS_PER_AI_TEAM = isSport("basketball") ? 30 : 12;
 
 export const getValueStatsRow = (ps: any) => {
 	return bySport({
+		baseball: ps.war,
 		basketball: (() => {
 			let value = 0;
 			if (typeof ps.dws === "number") {
@@ -41,7 +42,7 @@ export const getMostCommonPosition = (p: Player, tid: number) => {
 	for (const pr of p.ratings) {
 		const ps = p.stats.find(ps => ps.season === pr.season && ps.tid === tid);
 		if (ps) {
-			const prevValue = positionCounts.get(pr.pos) || 0;
+			const prevValue = positionCounts.get(pr.pos) ?? 0;
 			positionCounts.set(pr.pos, prevValue + 1);
 		}
 	}
@@ -69,24 +70,28 @@ export const getScore = (p: Player, tid: number) => {
 		}
 	}
 
-	let threshold;
-	if (isSport("football")) {
-		const mostCommonPosition = getMostCommonPosition(p, tid);
+	const threshold = bySport({
+		baseball: 40,
+		basketball: 80,
+		football: (() => {
+			const mostCommonPosition = getMostCommonPosition(p, tid);
 
-		threshold = getThreshold(mostCommonPosition);
-		if (threshold > 80) {
-			threshold = 80;
-		}
-		if (mostCommonPosition === "WR" || mostCommonPosition === "TE") {
-			threshold -= 12;
-		} else if (mostCommonPosition === "LB") {
-			threshold -= 5;
-		} else if (mostCommonPosition === "CB") {
-			threshold += 4;
-		}
-	} else {
-		threshold = 80;
-	}
+			let threshold = getThreshold(mostCommonPosition);
+			if (threshold > 80) {
+				threshold = 80;
+			}
+			if (mostCommonPosition === "WR" || mostCommonPosition === "TE") {
+				threshold -= 12;
+			} else if (mostCommonPosition === "LB") {
+				threshold -= 5;
+			} else if (mostCommonPosition === "CB") {
+				threshold += 4;
+			}
+
+			return threshold;
+		})(),
+		hockey: 80,
+	});
 
 	const score = value / threshold;
 
@@ -137,7 +142,7 @@ const checkJerseyNumberRetirement = async (p: Player) => {
 				continue;
 			}
 			const value = getValueStatsRow(ps);
-			const prevValue = valuesByJerseyNumber.get(ps.jerseyNumber) || 0;
+			const prevValue = valuesByJerseyNumber.get(ps.jerseyNumber) ?? 0;
 			valuesByJerseyNumber.set(ps.jerseyNumber, prevValue + value);
 		}
 

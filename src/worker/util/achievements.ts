@@ -5,17 +5,25 @@ import { bySport, isSport, PLAYER } from "../../common";
 import helpers from "./helpers";
 
 const goldenOldiesCutoffs = bySport({
+	baseball: [30, 33, 36],
 	basketball: [30, 33, 36],
 	football: [28, 30, 32],
 	hockey: [30, 33, 36],
 });
 const youngGunsCutoffs = bySport({
+	baseball: [25, 22],
 	basketball: [25, 22],
 	football: [26, 24],
 	hockey: [25, 22],
 });
-const superTeamCutoff = bySport({ basketball: 3, football: 15, hockey: 4 });
+const superTeamCutoff = bySport({
+	baseball: 4,
+	basketball: 3,
+	football: 15,
+	hockey: 4,
+});
 const trustTheProcessCutoff = bySport({
+	baseball: 3,
 	basketball: 3,
 	football: 7,
 	hockey: 3,
@@ -60,10 +68,13 @@ const checkMoneyball = async (maxPayroll: number) => {
 		"noCopyCache",
 	);
 	return !!(
-		t &&
-		t.seasonAttrs.playoffRoundsWon ===
-			g.get("numGamesPlayoffSeries", "current").length &&
-		t.seasonAttrs.expenses.salary.amount <= maxPayroll
+		(
+			t &&
+			t.seasonAttrs.playoffRoundsWon ===
+				g.get("numGamesPlayoffSeries", "current").length &&
+			t.seasonAttrs.expenses.salary <= maxPayroll &&
+			t.seasonAttrs.expenses.salary > 0
+		) // To handle leagues started at the beginning of the playoffs
 	);
 };
 
@@ -241,11 +252,7 @@ const checkSevenGameFinals = async () => {
 		"noCopyCache",
 	);
 
-	if (!playoffSeries || playoffSeries.series.length === 0) {
-		return false;
-	}
-
-	const matchup = playoffSeries.series.at(-1)[0];
+	const matchup = playoffSeries?.series.at(-1)?.[0];
 
 	if (
 		matchup === undefined ||
@@ -278,20 +285,22 @@ const checkMvp = async (limit: number, overallLimit: number) => {
 	const season = g.get("season");
 	const userTid = g.get("userTid");
 
+	const currentAwards = await idb.cache.awards.get(season);
+
 	// If we have current season in cache, use it
 	if (checkMvpCache?.season === season) {
-		return checkMvpCache.count === limit;
+		return currentAwards.mvp?.tid === userTid && checkMvpCache.count === limit;
 	}
-
-	const currentAwards = await idb.cache.awards.get(season);
 
 	// If we have last season in cache, use it
 	if (checkMvpCache?.season === season - 1) {
 		checkMvpCache.season = season;
 		if (currentAwards.mvp?.tid === userTid) {
 			checkMvpCache.count += 1;
+
+			return checkMvpCache.count === limit;
 		}
-		return checkMvpCache.count === limit;
+		return false;
 	}
 
 	// Compute from scratch
@@ -729,11 +738,28 @@ const achievements: Achievement[] = [
 
 			const awards = await idb.cache.awards.get(g.get("season"));
 
-			if (awards && awards.allLeague) {
-				for (const team of awards.allLeague) {
-					for (const p of team.players) {
-						if (p.tid === g.get("userTid")) {
-							return false;
+			if (!awards) {
+				return false;
+			}
+
+			if (isSport("baseball")) {
+				const awardTeams = ["allOffense", "allDefense"];
+				for (const awardTeam of awardTeams) {
+					if (awards[awardTeam]) {
+						for (const p of awards[awardTeam]) {
+							if (p.tid === g.get("userTid")) {
+								return false;
+							}
+						}
+					}
+				}
+			} else {
+				if (awards.allLeague) {
+					for (const team of awards.allLeague) {
+						for (const p of team.players) {
+							if (p.tid === g.get("userTid")) {
+								return false;
+							}
 						}
 					}
 				}
@@ -893,6 +919,8 @@ const achievements: Achievement[] = [
 		slug: "hardware_store",
 		name: "Hardware Store",
 		desc: bySport({
+			baseball:
+				"Players on your team win MVP, POY, ROY, ROY, and Finals MVP in the same season.",
 			basketball:
 				"Players on your team win MVP, DPOY, SMOY, MIP, ROY, and Finals MVP in the same season.",
 			football:
@@ -908,45 +936,37 @@ const achievements: Achievement[] = [
 			const userTid = g.get("userTid");
 
 			return bySport({
+				baseball:
+					awards &&
+					awards.mvp?.tid === userTid &&
+					awards.poy?.tid === userTid &&
+					awards.roy?.tid === userTid &&
+					awards.goy?.tid === userTid &&
+					awards.roy?.tid === userTid &&
+					awards.finalsMvp?.tid === userTid,
 				basketball:
 					awards &&
-					awards.mvp &&
-					awards.dpoy &&
-					awards.smoy &&
-					awards.mip &&
-					awards.roy &&
-					awards.finalsMvp &&
-					awards.mvp.tid === userTid &&
-					awards.dpoy.tid === userTid &&
-					awards.smoy.tid === userTid &&
-					awards.mip.tid === userTid &&
-					awards.roy.tid === userTid &&
-					awards.finalsMvp.tid === userTid,
+					awards.mvp?.tid === userTid &&
+					awards.dpoy?.tid === userTid &&
+					awards.smoy?.tid === userTid &&
+					awards.mip?.tid === userTid &&
+					awards.roy?.tid === userTid &&
+					awards.finalsMvp?.tid === userTid,
 				football:
 					awards &&
-					awards.mvp &&
-					awards.dpoy &&
-					awards.oroy &&
-					awards.droy &&
-					awards.finalsMvp &&
-					awards.mvp.tid === userTid &&
-					awards.dpoy.tid === userTid &&
-					awards.oroy.tid === userTid &&
-					awards.droy.tid === userTid &&
-					awards.finalsMvp.tid === userTid,
+					awards.mvp?.tid === userTid &&
+					awards.dpoy?.tid === userTid &&
+					awards.oroy?.tid === userTid &&
+					awards.droy?.tid === userTid &&
+					awards.finalsMvp?.tid === userTid,
 				hockey:
 					awards &&
-					awards.mvp &&
-					awards.dpoy &&
-					awards.goy &&
-					awards.roy &&
-					awards.finalsMvp &&
-					awards.mvp.tid === userTid &&
-					awards.dpoy.tid === userTid &&
-					awards.dfoy.tid === userTid &&
-					awards.goy.tid === userTid &&
-					awards.roy.tid === userTid &&
-					awards.finalsMvp.tid === userTid,
+					awards.mvp?.tid === userTid &&
+					awards.dpoy?.tid === userTid &&
+					awards.dfoy?.tid === userTid &&
+					awards.goy?.tid === userTid &&
+					awards.roy?.tid === userTid &&
+					awards.finalsMvp?.tid === userTid,
 			});
 		},
 		when: "afterAwards",
@@ -954,7 +974,7 @@ const achievements: Achievement[] = [
 	{
 		slug: "mvp",
 		name: "10 MVPs",
-		desc: "Have your players collectively win 10 MVP awards.",
+		desc: "Have your players collectively win 10 MVP awards in a single league.",
 		category: "Awards",
 		check() {
 			return checkMvp(10, 1000);
@@ -964,7 +984,7 @@ const achievements: Achievement[] = [
 	{
 		slug: "mvp_2",
 		name: "100 MVPs",
-		desc: "Have your players collectively win 100 MVP awards.",
+		desc: "Have your players collectively win 100 MVP awards in a single league.",
 		category: "Awards",
 		check() {
 			return checkMvp(100, 1000);
@@ -974,7 +994,7 @@ const achievements: Achievement[] = [
 	{
 		slug: "mvp_3",
 		name: "1,000 MVPs",
-		desc: "Have your players collectively win 1,000 MVP awards.",
+		desc: "Have your players collectively win 1,000 MVP awards in a single league.",
 		category: "Awards",
 		check() {
 			return checkMvp(1000, 1000);
@@ -985,6 +1005,7 @@ const achievements: Achievement[] = [
 		slug: "sleeper_pick",
 		name: "Sleeper Pick",
 		desc: bySport({
+			baseball: "Draft the ROY in the 2nd round or later.",
 			basketball: "Use a non-lottery pick to draft the ROY.",
 			football: "Draft the ROY in the 3rd round or later.",
 			hockey: "Use a non-lottery pick to draft the ROY.",
@@ -1004,6 +1025,7 @@ const achievements: Achievement[] = [
 					p.draft.year === g.get("season") - 1
 				) {
 					return bySport({
+						baseball: p.draft.round >= 2,
 						basketball: p.draft.round > 1 || p.draft.pick >= 15,
 						football: p.draft.round >= 3,
 						hockey: p.draft.round > 1 || p.draft.pick >= 15,
@@ -1020,6 +1042,7 @@ const achievements: Achievement[] = [
 		slug: "sleeper_pick_2",
 		name: "Sleeper Pick 2",
 		desc: bySport({
+			baseball: "Draft the ROY in the 3nd round or later.",
 			basketball: "Use a second round pick to draft the ROY.",
 			football: "Draft the ROY in the 5th round or later.",
 			hockey: "Draft the ROY in the 2nd round or later.",
@@ -1040,6 +1063,7 @@ const achievements: Achievement[] = [
 					p.draft.round > 1
 				) {
 					return bySport({
+						baseball: p.draft.round >= 3,
 						basketball: p.draft.round > 1,
 						football: p.draft.round >= 5,
 						hockey: p.draft.round > 1,
@@ -1057,6 +1081,7 @@ const achievements: Achievement[] = [
 		slug: "clutch_finish",
 		name: "Clutch Finish",
 		desc: bySport({
+			baseball: "Win game 7 of the finals in extra innings.",
 			basketball: "Win game 7 of the finals in OT.",
 			football: "Win the championship in OT.",
 			hockey: "Win game 7 of the finals in OT.",
@@ -1064,27 +1089,18 @@ const achievements: Achievement[] = [
 		category: "Playoffs",
 
 		async check() {
-			if (isSport("football")) {
-				const games = await idb.cache.games.getAll();
-				const game = games.at(-1); // Last game of finals
+			if (!isSport("football")) {
+				const sevenGameFinals = await checkSevenGameFinals();
 
-				return game.overtimes >= 1 && game.won.tid === g.get("userTid");
-			}
-
-			const sevenGameFinals = await checkSevenGameFinals();
-
-			if (!sevenGameFinals) {
-				return false;
+				if (!sevenGameFinals) {
+					return false;
+				}
 			}
 
 			const games = await idb.cache.games.getAll();
-			if (games.length === 0) {
-				return false;
-			}
-
 			const game = games.at(-1); // Last game of finals
 
-			return game.overtimes >= 1 && game.won.tid === g.get("userTid");
+			return !!game && game.overtimes >= 1 && game.won.tid === g.get("userTid");
 		},
 
 		when: "afterPlayoffs",
@@ -1093,6 +1109,7 @@ const achievements: Achievement[] = [
 		slug: "unclutch_finish",
 		name: "Unclutch Finish",
 		desc: bySport({
+			baseball: "Lose game 7 of the finals in extra innings.",
 			basketball: "Lose game 7 of the finals in OT.",
 			football: "Lose the championship in OT.",
 			hockey: "Lose game 7 of the finals in OT.",
@@ -1100,23 +1117,20 @@ const achievements: Achievement[] = [
 		category: "Playoffs",
 
 		async check() {
-			if (isSport("football")) {
-				const games = await idb.cache.games.getAll();
-				const game = games.at(-1); // Last game of finals
+			if (!isSport("football")) {
+				const sevenGameFinals = await checkSevenGameFinals();
 
-				return game.overtimes >= 1 && game.lost.tid === g.get("userTid");
-			}
-
-			const sevenGameFinals = await checkSevenGameFinals();
-
-			if (!sevenGameFinals) {
-				return false;
+				if (!sevenGameFinals) {
+					return false;
+				}
 			}
 
 			const games = await idb.cache.games.getAll();
 			const game = games.at(-1); // Last game of finals
 
-			return game.overtimes >= 1 && game.lost.tid === g.get("userTid");
+			return (
+				!!game && game.overtimes >= 1 && game.lost.tid === g.get("userTid")
+			);
 		},
 
 		when: "afterPlayoffs",
@@ -1692,6 +1706,16 @@ if (isSport("basketball")) {
 			season: 2021,
 			srIDs: ["DET"],
 			name: "Detroit",
+		},
+		{
+			season: 2022,
+			srIDs: ["WAS"],
+			name: "Washington",
+		},
+		{
+			season: 2023,
+			srIDs: ["SAS"],
+			name: "San Antonio",
 		},
 	];
 

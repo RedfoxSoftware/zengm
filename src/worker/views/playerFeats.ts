@@ -56,6 +56,12 @@ const updatePlayers = async (
 				for (const stat of toAdd) {
 					feat.stats[stat] = processed[stat];
 				}
+			} else if (isSport("baseball")) {
+				const toAdd = ["ip"];
+				const processed = processPlayerStats(feat.stats, toAdd);
+				for (const stat of toAdd) {
+					feat.stats[stat] = processed[stat];
+				}
 			}
 
 			const pts = feat.score.split("-").map(x => parseInt(x));
@@ -64,10 +70,12 @@ const updatePlayers = async (
 				diff = pts[0] - pts[1];
 			}
 
-			if (feat.overtimes === 1) {
-				feat.score += " (OT)";
-			} else if (feat.overtimes > 1) {
-				feat.score += ` (${feat.overtimes}OT)`;
+			const overtimeText = helpers.overtimeText(
+				feat.overtimes,
+				feat.numPeriods,
+			);
+			if (overtimeText !== "") {
+				feat.score += ` (${overtimeText})`;
 			}
 
 			let type: string;
@@ -89,6 +97,25 @@ const updatePlayers = async (
 		});
 
 		const stats = bySport({
+			baseball: [
+				"ab",
+				"r",
+				"h",
+				"rbi",
+				"hr",
+				"sb",
+				"bb",
+				"so",
+				"pa",
+				"ip",
+				"hPit",
+				"rPit",
+				"er",
+				"bbPit",
+				"soPit",
+				"hrPit",
+				"pc",
+			],
 			basketball: [
 				"gs",
 				"min",

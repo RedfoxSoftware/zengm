@@ -87,7 +87,7 @@ class GameSim {
 		},
 	];
 
-	// @ts-ignore
+	// @ts-expect-error
 	lines: [TeamLines, TeamLines];
 
 	currentLine: [TeamCurrentLine, TeamCurrentLine];
@@ -97,6 +97,7 @@ class GameSim {
 	synergyFactor: number;
 
 	pulledGoalie: [boolean, boolean];
+	baseInjuryRate: number;
 
 	constructor({
 		gid,
@@ -104,17 +105,22 @@ class GameSim {
 		teams,
 		doPlayByPlay = false,
 		homeCourtFactor = 1,
+		baseInjuryRate,
+		disableHomeCourtAdvantage = false,
 	}: {
 		gid: number;
 		day?: number;
 		teams: [TeamGameSim, TeamGameSim];
 		doPlayByPlay?: boolean;
 		homeCourtFactor?: number;
+		baseInjuryRate: number;
+		disableHomeCourtAdvantage?: boolean;
 	}) {
 		this.playByPlay = new PlayByPlayLogger(doPlayByPlay);
 		this.id = gid;
 		this.day = day;
 		this.team = teams; // If a team plays twice in a day, this needs to be a deep copy
+		this.baseInjuryRate = baseInjuryRate;
 
 		this.synergyFactor = 1;
 
@@ -158,7 +164,9 @@ class GameSim {
 		this.clock = g.get("quarterLength"); // Game clock, in minutes
 		this.numPeriods = g.get("numPeriods");
 
-		this.homeCourtAdvantage(homeCourtFactor);
+		if (!disableHomeCourtAdvantage) {
+			this.homeCourtAdvantage(homeCourtFactor);
+		}
 
 		this.minutesSinceLineChange = [
 			{
@@ -221,7 +229,7 @@ class GameSim {
 				const players = this.team[t].depth[pos];
 
 				// Handle rest days for goalie
-				if (pos === "G" && g.get("phase") !== PHASE.PLAYOFFS) {
+				if (pos === "G") {
 					const starter = players.find(p => !p.injured);
 					if (
 						starter &&
@@ -443,16 +451,16 @@ class GameSim {
 		// Delete stuff that isn't needed before returning
 		for (let t = 0; t < 2; t++) {
 			delete this.team[t].compositeRating;
-			// @ts-ignore
+			// @ts-expect-error
 			delete this.team[t].pace;
 
 			for (let p = 0; p < this.team[t].player.length; p++) {
-				// @ts-ignore
+				// @ts-expect-error
 				delete this.team[t].player[p].age;
-				// @ts-ignore
+				// @ts-expect-error
 				delete this.team[t].player[p].valueNoPot;
 				delete this.team[t].player[p].compositeRating;
-				// @ts-ignore
+				// @ts-expect-error
 				delete this.team[t].player[p].ptModifier;
 				delete this.team[t].player[p].stat.benchTime;
 				delete this.team[t].player[p].stat.courtTime;
@@ -534,7 +542,6 @@ class GameSim {
 		this.updatePlayersOnIce({ type: "newPeriod" });
 		this.faceoff();
 
-		// @ts-ignore
 		while (this.clock > 0) {
 			this.simPossession();
 
@@ -562,7 +569,8 @@ class GameSim {
 			Math.random() <
 			0.3 *
 				(this.team[this.o].compositeRating.hitting +
-					this.team[this.d].compositeRating.hitting)
+					this.team[this.d].compositeRating.hitting) *
+				g.get("hitFactor")
 		);
 	}
 
@@ -604,8 +612,9 @@ class GameSim {
 		}
 		return (
 			Math.random() <
-			(baseOdds * this.team[this.d].compositeRating.takeaway) /
-				this.team[this.o].compositeRating.puckControl
+			((baseOdds * this.team[this.d].compositeRating.takeaway) /
+				this.team[this.o].compositeRating.puckControl) *
+				g.get("giveawayFactor")
 		);
 	}
 
@@ -620,8 +629,9 @@ class GameSim {
 		}
 		return (
 			Math.random() <
-			(baseOdds * this.team[this.d].compositeRating.takeaway) /
-				this.team[this.o].compositeRating.puckControl
+			((baseOdds * this.team[this.d].compositeRating.takeaway) /
+				this.team[this.o].compositeRating.puckControl) *
+				g.get("takeawayFactor")
 		);
 	}
 
@@ -660,6 +670,8 @@ class GameSim {
 		const maxLength = special === "rebound" ? 0.05 : 0.28;
 
 		let dt = Math.random() * (maxLength - 0.017) + 0.017;
+		dt /= g.get("pace");
+
 		if (this.clock - dt < 0) {
 			dt = this.clock;
 		}
@@ -736,7 +748,11 @@ class GameSim {
 			r -= 0.5 * pulledGoalieFactor;
 		}
 
-		if (r < 0.1 + 0.35 * this.team[this.d].compositeRating.blocking) {
+		if (
+			r <
+			(0.1 + 0.35 * this.team[this.d].compositeRating.blocking) *
+				g.get("blockFactor")
+		) {
 			const blocker = this.pickPlayer(this.d, "blocking", ["C", "W", "D"]);
 			this.recordStat(this.d, blocker, "blk", 1);
 			this.playByPlay.logEvent({
@@ -759,7 +775,10 @@ class GameSim {
 		}
 
 		let deflector;
-		if ((type === "slapshot" || type === "wristshot") && Math.random() < 0.05) {
+		if (
+			(type === "slapshot" || type === "wristshot") &&
+			Math.random() < 0.05 * g.get("deflectionFactor")
+		) {
 			deflector = this.pickPlayer(this.o, "playmaker", ["C", "W"], 1, [
 				shooter,
 			]);
@@ -799,13 +818,13 @@ class GameSim {
 			const r2 = Math.random();
 			if (deflector) {
 				assister1 = shooter;
-			} else if (r2 < 0.99) {
+			} else if (r2 < 0.99 * g.get("assistFactor")) {
 				// 20 power is to ensure top players get a lot
 				assister1 = this.pickPlayer(this.o, "playmaker", ["C", "W", "D"], 20, [
 					actualShooter,
 				]);
 			}
-			if (r2 < 0.8) {
+			if (r2 < 0.8 * g.get("assistFactor")) {
 				// 0.5 power is to ensure that everybody (including defensemen) at least get some
 				assister2 = this.pickPlayer(this.o, "playmaker", ["C", "W", "D"], 0.5, [
 					actualShooter,
@@ -840,9 +859,13 @@ class GameSim {
 			// Save percentage does not depend on defenders https://www.tsn.ca/defencemen-and-their-impact-on-team-save-percentage-1.567469
 			if (
 				r <
-				0.9 +
-					shotQualityProbComponent2 +
-					goalie.compositeRating.goalkeeping * 0.07
+				Math.min(
+					0.99,
+					(0.9 +
+						shotQualityProbComponent2 +
+						goalie.compositeRating.goalkeeping * 0.07) *
+						g.get("saveFactor"),
+				)
 			) {
 				const saveType = Math.random() < 0.5 ? "save-freeze" : "save";
 
@@ -1297,7 +1320,7 @@ class GameSim {
 					this.playersOnIce[t].C = newLine.slice(0, 1);
 					this.playersOnIce[t].W = newLine.slice(2, 3);
 				} else {
-					this.playersOnIce[t].C = newLine.slice(0, 1);
+					this.playersOnIce[t].C = [];
 					this.playersOnIce[t].W = newLine.slice(1, 3);
 				}
 			} else if (penaltyBoxCount === 2) {
@@ -1307,10 +1330,10 @@ class GameSim {
 					this.playersOnIce[t].C = newLine.slice(0, 1);
 					this.playersOnIce[t].W = [];
 				} else if (r < 0.67) {
-					this.playersOnIce[t].C = newLine.slice(0, 1);
+					this.playersOnIce[t].C = [];
 					this.playersOnIce[t].W = newLine.slice(1, 2);
 				} else {
-					this.playersOnIce[t].C = newLine.slice(0, 1);
+					this.playersOnIce[t].C = [];
 					this.playersOnIce[t].W = newLine.slice(2, 3);
 				}
 			} else {
@@ -1381,7 +1404,7 @@ class GameSim {
 				const sub = this.getPlayerFromNextLine(t, "F", currentlyOnIce);
 
 				this.playersOnIce[t].G = [];
-				this.playersOnIce[t].C[1] = sub;
+				this.playersOnIce[t].C.push(sub);
 
 				this.playByPlay.logEvent({
 					type: "pullGoalie",
@@ -1401,11 +1424,18 @@ class GameSim {
 				const goalie = this.lines[t].G.flat().find(
 					p => !currentlyOnIce.includes(p),
 				);
+				if (!goalie) {
+					throw new Error("noPullGoalie failed - goalie not found");
+				}
 
-				const sub = this.playersOnIce[t].C[1];
-
-				if (!goalie || !sub) {
-					return;
+				// Ideally sub out the 2nd center, since that is normally the extra skater. But in penalty situations, there may not be a 2nd center. Then look for the last winger, or the 1st center, or the last defenseman.
+				const sub =
+					this.playersOnIce[t].C[1] ??
+					this.playersOnIce[t].W.at(-1) ??
+					this.playersOnIce[t].C.at(-1) ??
+					this.playersOnIce[t].D.at(-1);
+				if (!sub) {
+					throw new Error("noPullGoalie failed - skater not found");
 				}
 
 				this.playersOnIce[t].G = [goalie];
@@ -1569,9 +1599,7 @@ class GameSim {
 					t: TeamNum;
 			  },
 	) {
-		const baseInjuryRate = g.get("injuryRate");
-
-		if ((g as any).disableInjuries || baseInjuryRate === 0) {
+		if ((g as any).disableInjuries || this.baseInjuryRate === 0) {
 			return;
 		}
 
@@ -1582,7 +1610,7 @@ class GameSim {
 			if (info.type === "hit") {
 				if (
 					Math.random() <
-					250 * info.hitter.compositeRating.enforcer * baseInjuryRate
+					250 * info.hitter.compositeRating.enforcer * this.baseInjuryRate
 				) {
 					info.target.injured = true;
 					info.target.newInjury = true;
@@ -1598,7 +1626,7 @@ class GameSim {
 			} else {
 				if (
 					Math.random() <
-					250 * info.shooter.compositeRating.sniper * baseInjuryRate
+					250 * info.shooter.compositeRating.sniper * this.baseInjuryRate
 				) {
 					info.target.injured = true;
 					info.target.newInjury = true;
@@ -1617,7 +1645,7 @@ class GameSim {
 				for (const pos of helpers.keys(this.playersOnIce[t])) {
 					for (const p of this.playersOnIce[t][pos]) {
 						let injuryRate = getInjuryRate(
-							baseInjuryRate,
+							this.baseInjuryRate,
 							p.age,
 							p.injury.playingThrough,
 						);
@@ -1758,6 +1786,10 @@ class GameSim {
 
 			if (p !== undefined) {
 				this.playByPlay.logStat(t, p.id, s, amt);
+			}
+
+			if (s === "ppo") {
+				this.playByPlay.logStat(t, undefined, s, amt);
 			}
 		}
 	}

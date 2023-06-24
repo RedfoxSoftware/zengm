@@ -1,5 +1,5 @@
-import create from "zustand";
-import shallow from "zustand/shallow";
+import { create } from "zustand";
+import { shallow } from "zustand/shallow";
 import type { LocalStateUI, GameAttributesLeague } from "../../common/types";
 import defaultGameAttributes from "../../common/defaultGameAttributes";
 import safeLocalStorage from "./safeLocalStorage";
@@ -11,7 +11,7 @@ type LocalActions = {
 	deleteGames: (gids: number[]) => void;
 	mergeGames: (games: LocalStateUI["games"]) => void;
 	resetLeague: () => void;
-	toggleSidebar: () => void;
+	setSidebarOpen: (sidebarOpen: boolean) => void;
 	update: (obj: Partial<LocalStateUI>) => void;
 	updateGameAttributes: (
 		gameAttributes: Partial<GameAttributesLeague>,
@@ -34,14 +34,25 @@ type LocalStateWithActions = LocalStateUI & {
 	actions: LocalActions;
 };
 
+let initialSidebarOpen: boolean;
+if (window.innerWidth >= 1200) {
+	// Large screen - default may be saved, if not default to open
+	const saved = safeLocalStorage.getItem("sidebarOpen");
+	initialSidebarOpen = saved !== "false";
+} else {
+	initialSidebarOpen = false;
+}
+
 const useLocal = create<LocalStateWithActions>(set => ({
 	challengeNoRatings: false,
 	customMenu: undefined,
 	dirtySettings: false,
 	fantasyPoints: undefined,
 	flagOverrides: {},
+	fullNames: false,
 	gameSimInProgress: false,
 	games: [],
+	gender: defaultGameAttributes.gender,
 	gold: undefined,
 	godMode: false,
 	hasViewedALeague: !!safeLocalStorage.getItem("hasViewedALeague"),
@@ -50,6 +61,7 @@ const useLocal = create<LocalStateWithActions>(set => ({
 	lid: undefined,
 	liveGameInProgress: false,
 	numPeriods: defaultGameAttributes.numPeriods,
+	numWatchColors: defaultGameAttributes.numWatchColors,
 	phase: 0,
 	phaseText: "",
 	playMenuOptions: [],
@@ -57,7 +69,7 @@ const useLocal = create<LocalStateWithActions>(set => ({
 	quarterLength: defaultGameAttributes.quarterLength,
 	season: 0,
 	showNagModal: false,
-	sidebarOpen: false,
+	sidebarOpen: initialSidebarOpen,
 	spectator: false,
 	startingSeason: 0,
 	statusText: "Idle",
@@ -77,7 +89,6 @@ const useLocal = create<LocalStateWithActions>(set => ({
 	moreInfoAbbrev: undefined,
 	moreInfoSeason: undefined,
 	moreInfoTid: undefined,
-	stickyMultiTeamMenu: false,
 	stickyFooterAd: false,
 	stickyFormButtons: false,
 
@@ -124,6 +135,7 @@ const useLocal = create<LocalStateWithActions>(set => ({
 				lid: undefined,
 				liveGameInProgress: false,
 				numPeriods: defaultGameAttributes.numPeriods,
+				numWatchColors: defaultGameAttributes.numWatchColors,
 				phase: 0,
 				playMenuOptions: [],
 				quarterLength: defaultGameAttributes.quarterLength,
@@ -136,16 +148,25 @@ const useLocal = create<LocalStateWithActions>(set => ({
 			window.removeEventListener("beforeunload", blockCloseTab);
 		},
 
-		toggleSidebar() {
-			set(state => ({ sidebarOpen: !state.sidebarOpen }));
+		setSidebarOpen(sidebarOpen: boolean) {
+			if (window.innerWidth >= 1200) {
+				if (sidebarOpen) {
+					// Don't save true, cause default is true
+					safeLocalStorage.removeItem("sidebarOpen");
+				} else {
+					safeLocalStorage.setItem("sidebarOpen", "false");
+				}
+			}
+
+			set({ sidebarOpen });
 		},
 
 		update(obj: Partial<LocalStateUI>) {
-			if (obj.hasOwnProperty("units") && obj.units === undefined) {
+			if (Object.hasOwn(obj, "units") && obj.units === undefined) {
 				obj.units = defaultUnits;
 			}
 
-			if (obj.hasOwnProperty("liveGameInProgress")) {
+			if (Object.hasOwn(obj, "liveGameInProgress")) {
 				if (obj.liveGameInProgress) {
 					window.addEventListener("beforeunload", blockCloseTab);
 				} else {
@@ -164,11 +185,13 @@ const useLocal = create<LocalStateWithActions>(set => ({
 			const keys = [
 				"challengeNoRatings",
 				"fantasyPoints",
+				"gender",
 				"godMode",
 				"hideDisabledTeams",
 				"homeCourtAdvantage",
 				"lid",
 				"numPeriods",
+				"numWatchColors",
 				"phase",
 				"quarterLength",
 				"season",
@@ -185,10 +208,10 @@ const useLocal = create<LocalStateWithActions>(set => ({
 
 			for (const key of keys) {
 				if (
-					gameAttributes.hasOwnProperty(key) &&
+					Object.hasOwn(gameAttributes, key) &&
 					updates[key] !== gameAttributes[key]
 				) {
-					// @ts-ignore
+					// @ts-expect-error
 					updates[key] = gameAttributes[key];
 					update = true;
 				}
@@ -205,8 +228,17 @@ const useLocal = create<LocalStateWithActions>(set => ({
 	},
 }));
 
-const useLocalShallow = <T>(selector: (a: LocalStateUI) => T) =>
-	useLocal<T>(selector, shallow);
+const useLocalPartial = <Key extends keyof LocalStateUI>(keys: Key[]) => {
+	const selector = (state: LocalStateUI) => {
+		const obj = {} as Pick<LocalStateUI, Key>;
+		for (const key of keys) {
+			obj[key] = state[key];
+		}
+		return obj;
+	};
+
+	return useLocal(selector, shallow);
+};
 
 // This assumes the actions object never changes!
 const useLocalActions = () => useLocal(state => state.actions);
@@ -214,4 +246,4 @@ const useLocalActions = () => useLocal(state => state.actions);
 const local = useLocal;
 const localActions = local.getState().actions;
 
-export { local, localActions, useLocal, useLocalActions, useLocalShallow };
+export { local, localActions, useLocal, useLocalActions, useLocalPartial };

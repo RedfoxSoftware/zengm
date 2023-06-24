@@ -1,11 +1,10 @@
 import classNames from "classnames";
 import { csvFormatRows } from "d3-dsv";
 import orderBy from "lodash-es/orderBy";
-import PropTypes from "prop-types";
 import {
-	SyntheticEvent,
-	MouseEvent,
-	ReactNode,
+	type SyntheticEvent,
+	type MouseEvent,
+	type ReactNode,
 	useState,
 	useEffect,
 	useCallback,
@@ -29,6 +28,7 @@ import type { Argument } from "classnames";
 import { arrayMoveImmutable } from "array-move";
 import type SettingsCache from "./SettingsCache";
 import updateSortBys from "./updateSortBys";
+import useStickyXX from "./useStickyXX";
 
 export type SortBy = [number, SortOrder];
 
@@ -40,6 +40,7 @@ export type Col = {
 	sortType?: SortType;
 	searchType?: SortType;
 	title: string;
+	titleReact?: ReactNode;
 	width?: string;
 };
 
@@ -56,22 +57,26 @@ export type DataTableRow = {
 		| {
 				classNames?: Argument;
 				value: ReactNode;
-				searchValue?: string;
+				searchValue?: string | number;
 				sortValue?: string | number;
 		  }
 	)[];
 	classNames?: Argument;
 };
 
+export type StickyCols = 0 | 1 | 2 | 3;
+
 export type Props = {
-	bordered?: boolean;
 	className?: string;
+	classNameWrapper?: string;
 	clickable?: boolean;
 	cols: Col[];
 	defaultSort: SortBy;
 	disableSettingsCache?: boolean;
+	defaultStickyCols?: StickyCols;
 	footer?: any[];
 	hideAllControls?: boolean;
+	hideMenuToo?: boolean;
 	name: string;
 	nonfluid?: boolean;
 	pagination?: boolean;
@@ -96,18 +101,21 @@ export type State = {
 	searchText: string;
 	showSelectColumnsModal: boolean;
 	sortBys: SortBy[];
+	stickyCols: StickyCols;
 	settingsCache: SettingsCache;
 };
 
 const DataTable = ({
-	bordered,
 	className,
+	classNameWrapper,
 	clickable = true,
 	cols,
 	defaultSort,
+	defaultStickyCols = 0,
 	disableSettingsCache,
 	footer,
 	hideAllControls,
+	hideMenuToo,
 	name,
 	nonfluid,
 	pagination,
@@ -122,6 +130,7 @@ const DataTable = ({
 		loadStateFromCache({
 			cols,
 			defaultSort,
+			defaultStickyCols,
 			disableSettingsCache,
 			name,
 		}),
@@ -154,7 +163,8 @@ const DataTable = ({
 						let found = false;
 
 						for (let i = 0; i < row.data.length; i++) {
-							if (cols[i].noSearch) {
+							// cols[i] might be undefined if number of columns in a table changed
+							if (cols[i]?.noSearch) {
 								continue;
 							}
 
@@ -172,7 +182,8 @@ const DataTable = ({
 					// Filter
 					if (state.enableFilters) {
 						for (let i = 0; i < row.data.length; i++) {
-							if (cols[i].noSearch) {
+							// cols[i] might be undefined if number of columns in a table changed
+							if (cols[i]?.noSearch) {
 								continue;
 							}
 
@@ -254,11 +265,13 @@ const DataTable = ({
 		state.settingsCache.clear("DataTableColOrder");
 		state.settingsCache.clear("DataTableFilters");
 		state.settingsCache.clear("DataTableSort");
+		state.settingsCache.clear("DataTableStickyCols");
 
 		setState(
 			loadStateFromCache({
 				cols,
 				defaultSort,
+				defaultStickyCols,
 				disableSettingsCache,
 				name,
 			}),
@@ -333,6 +346,7 @@ const DataTable = ({
 			loadStateFromCache({
 				cols,
 				defaultSort,
+				defaultStickyCols,
 				disableSettingsCache,
 				name,
 			}),
@@ -392,6 +406,26 @@ const DataTable = ({
 		({ hidden, colIndex }) => !hidden && cols[colIndex],
 	);
 
+	const highlightCols = state.sortBys
+		.map(sortBy => sortBy[0])
+		.map(i =>
+			colOrderFiltered.findIndex(({ colIndex }) => {
+				if (colIndex !== i) {
+					return false;
+				}
+
+				// Make sure sortSequence is not an empty array - same code is in Header
+				const sortSequence = cols[colIndex].sortSequence;
+				if (sortSequence && sortSequence.length === 0) {
+					return false;
+				}
+
+				return true;
+			}),
+		);
+
+	const { stickyClass, tableRef } = useStickyXX(state.stickyCols);
+
 	return (
 		<>
 			<CustomizeColumns
@@ -410,8 +444,10 @@ const DataTable = ({
 					}));
 					setStatePartial({
 						colOrder: newOrder,
+						stickyCols: defaultStickyCols,
 					});
 					state.settingsCache.set("DataTableColOrder", newOrder);
+					state.settingsCache.clear("DataTableStickyCols");
 				}}
 				onSortEnd={({ oldIndex, newIndex }) => {
 					const newOrder = arrayMoveImmutable(
@@ -441,100 +477,110 @@ const DataTable = ({
 						state.settingsCache.set("DataTableColOrder", newOrder);
 					}
 				}}
+				onChangeStickyCols={stickyCols => {
+					setStatePartial({
+						stickyCols,
+					});
+					state.settingsCache.set("DataTableStickyCols", stickyCols);
+				}}
+				stickyCols={state.stickyCols}
 			/>
-			<div
-				className={classNames(className, {
-					"table-nonfluid-wrapper": nonfluid,
-				})}
-			>
-				<>
-					{pagination && !hideAllControls ? (
-						<PerPage onChange={handlePerPage} value={state.perPage} />
-					) : null}
-					<Controls
-						enableFilters={state.enableFilters}
-						hideAllControls={hideAllControls}
-						name={name}
-						onExportCSV={handleExportCSV}
-						onResetTable={handleResetTable}
-						onSearch={handleSearch}
-						onSelectColumns={handleSelectColumns}
-						onToggleFilters={handleToggleFilters}
-						searchText={state.searchText}
-					/>
-					{nonfluid ? <div className="clearFix" /> : null}
-				</>
-				<ResponsiveTableWrapper
-					className={pagination ? "fix-margin-pagination" : null}
-					nonfluid={nonfluid}
+			<div className={className}>
+				<div
+					className={classNames({
+						"d-inline-block mw-100": nonfluid,
+					})}
 				>
-					<table
-						className={classNames("table table-hover", {
-							"table-bordered": bordered !== false,
-							"table-sm": small !== false,
-							"table-striped": striped !== false,
-						})}
-					>
-						<Header
-							colOrder={colOrderFiltered}
-							cols={cols}
-							enableFilters={state.enableFilters}
-							filters={state.filters}
-							handleColClick={handleColClick}
-							handleFilterUpdate={handleFilterUpdate}
-							sortBys={state.sortBys}
-							superCols={superCols}
-						/>
-						<tbody>
-							{processedRows.map(row => (
-								<Row key={row.key} row={row} clickable={clickable} />
-							))}
-						</tbody>
-						<Footer colOrder={colOrderFiltered} footer={footer} />
-					</table>
-				</ResponsiveTableWrapper>
-				{!hideAllControls ? (
 					<>
-						{nonfluid && pagination ? <div className="clearFix" /> : null}
-						{pagination ? (
-							<Info
-								end={end}
-								numRows={numRowsFiltered}
-								numRowsUnfiltered={rows.length}
-								start={start}
+						{pagination && !hideAllControls ? (
+							<PerPage onChange={handlePerPage} value={state.perPage} />
+						) : null}
+						{!hideMenuToo ? (
+							<Controls
+								enableFilters={state.enableFilters}
+								hideAllControls={hideAllControls}
+								name={name}
+								onExportCSV={handleExportCSV}
+								onResetTable={handleResetTable}
+								onSearch={handleSearch}
+								onSelectColumns={handleSelectColumns}
+								onToggleFilters={handleToggleFilters}
+								searchText={state.searchText}
 							/>
 						) : null}
-						{pagination ? (
-							<Pagination
-								currentPage={state.currentPage}
-								numRows={numRowsFiltered}
-								onClick={handlePagination}
-								perPage={state.perPage}
-							/>
-						) : null}
+						{nonfluid ? <div className="clearFix" /> : null}
 					</>
-				) : null}
+					<ResponsiveTableWrapper
+						className={classNames(
+							classNameWrapper,
+							pagination ? "fix-margin-pagination" : null,
+						)}
+						nonfluid={nonfluid}
+					>
+						<table
+							className={classNames(
+								"table table-hover",
+								{
+									"table-sm": small !== false,
+									"table-striped": striped !== false,
+									"table-borderless": striped !== false,
+								},
+								stickyClass,
+							)}
+							ref={tableRef}
+						>
+							<Header
+								colOrder={colOrderFiltered}
+								cols={cols}
+								enableFilters={state.enableFilters}
+								filters={state.filters}
+								handleColClick={handleColClick}
+								handleFilterUpdate={handleFilterUpdate}
+								sortBys={state.sortBys}
+								superCols={superCols}
+							/>
+							<tbody>
+								{processedRows.map(row => (
+									<Row
+										key={row.key}
+										row={row}
+										clickable={clickable}
+										highlightCols={highlightCols}
+									/>
+								))}
+							</tbody>
+							<Footer
+								colOrder={colOrderFiltered}
+								footer={footer}
+								highlightCols={highlightCols}
+							/>
+						</table>
+					</ResponsiveTableWrapper>
+					{!hideAllControls ? (
+						<>
+							{nonfluid && pagination ? <div className="clearFix" /> : null}
+							{pagination ? (
+								<Info
+									end={end}
+									numRows={numRowsFiltered}
+									numRowsUnfiltered={rows.length}
+									start={start}
+								/>
+							) : null}
+							{pagination ? (
+								<Pagination
+									currentPage={state.currentPage}
+									numRows={numRowsFiltered}
+									onClick={handlePagination}
+									perPage={state.perPage}
+								/>
+							) : null}
+						</>
+					) : null}
+				</div>
 			</div>
 		</>
 	);
-};
-
-DataTable.propTypes = {
-	bordered: PropTypes.bool,
-	className: PropTypes.string,
-	cols: PropTypes.array.isRequired,
-	defaultSort: PropTypes.arrayOf(
-		PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-	).isRequired,
-	disableSettingsCache: PropTypes.bool,
-	footer: PropTypes.array,
-	name: PropTypes.string.isRequired,
-	nonfluid: PropTypes.bool,
-	hideAllControls: PropTypes.bool,
-	pagination: PropTypes.bool,
-	rows: PropTypes.arrayOf(PropTypes.object).isRequired,
-	small: PropTypes.bool,
-	superCols: PropTypes.array,
 };
 
 export default DataTable;

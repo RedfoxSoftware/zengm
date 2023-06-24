@@ -1,8 +1,6 @@
-import { display } from "facesjs";
 import type { Face } from "facesjs";
-import PropTypes from "prop-types";
 import { useEffect, useState } from "react";
-import { DEFAULT_JERSEY } from "../../common";
+import { displayFace } from "../util";
 
 const imgStyle = {
 	maxHeight: "100%",
@@ -23,13 +21,12 @@ const PlayerPicture = ({
 	const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
 	useEffect(() => {
 		if (face && !imgURL && wrapper) {
-			const overrides = {
-				teamColors: colors ?? ["#000000", "#cccccc", "#ffffff"],
-				jersey: {
-					id: jersey ?? DEFAULT_JERSEY,
-				},
-			};
-			display(wrapper, face, overrides);
+			displayFace({
+				colors,
+				face,
+				jersey,
+				wrapper,
+			});
 		}
 	}, [face, imgURL, colors, jersey, wrapper]);
 
@@ -42,12 +39,6 @@ const PlayerPicture = ({
 	}
 
 	return null;
-};
-
-PlayerPicture.propTypes = {
-	face: PropTypes.object,
-	imgURL: PropTypes.string,
-	teamColors: PropTypes.arrayOf(PropTypes.string),
 };
 
 export default PlayerPicture;

@@ -194,7 +194,7 @@ export const getTopPlayers = async (
 		const playersRaw = orderBy(
 			await idb.cache.players.indexGetAll("playersByTid", tid),
 			t => {
-				const ratings = t.ratings.at(-1);
+				const ratings = t.ratings.at(-1)!;
 				const ovr = player.fuzzRating(ratings.ovr, ratings.fuzz);
 				return ovr;
 			},
@@ -208,6 +208,7 @@ export const getTopPlayers = async (
 			ratings: ["ovr", "pos"],
 			season: g.get("season"),
 			stats: bySport({
+				baseball: ["keyStatsShort"],
 				basketball: ["pts", "trb", "ast"],
 				football: undefined, // football keyStats is too long
 				hockey: ["keyStats"],

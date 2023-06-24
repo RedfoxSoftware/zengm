@@ -1,17 +1,21 @@
-import { useState, FormEvent } from "react";
-import type { ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import useTitleBar from "../hooks/useTitleBar";
 import {
 	confirm,
 	helpers,
 	toWorker,
-	logEvent,
 	realtimeUpdate,
 	getCols,
+	useLocalPartial,
 } from "../util";
 import type { View } from "../../common/types";
-import { PlayerNameLabels, SafeHtml, DataTable } from "../components";
+import { SafeHtml, DataTable } from "../components";
 import { PHASE } from "../../common";
+import {
+	wrappedContractAmount,
+	wrappedContractExp,
+} from "../components/contract";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const PlayerList = ({
 	challengeNoRatings,
@@ -31,6 +35,8 @@ const PlayerList = ({
 	tid: number;
 	upcomingFreeAgentsText: ReactNode;
 }) => {
+	const { gender } = useLocalPartial(["gender"]);
+
 	const cols = getCols([
 		"",
 		"Name",
@@ -49,6 +55,7 @@ const PlayerList = ({
 			key: p.pid,
 			data: [
 				<input
+					className="form-check-input"
 					type="checkbox"
 					title={p.untradableMsg}
 					checked={protectedPids.includes(p.pid)}
@@ -61,21 +68,22 @@ const PlayerList = ({
 						}
 					}}
 				/>,
-				<PlayerNameLabels
-					pid={p.pid}
-					injury={p.injury}
-					jerseyNumber={p.jerseyNumber}
-					skills={p.ratings.skills}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					pid: p.pid,
+					injury: p.injury,
+					jerseyNumber: p.jerseyNumber,
+					skills: p.ratings.skills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.ratings.pos,
 				p.age,
 				!challengeNoRatings ? p.ratings.ovr : null,
 				!challengeNoRatings ? p.ratings.pot : null,
-				helpers.formatCurrency(p.contract.amount, "M"),
-				p.contract.exp,
+				wrappedContractAmount(p),
+				wrappedContractExp(p),
 				...stats.map(stat => helpers.roundStat(p.stats[stat], stat)),
 				{
 					value: <SafeHtml dirty={p.latestTransaction} />,
@@ -92,8 +100,9 @@ const PlayerList = ({
 	return (
 		<>
 			<p>
-				Check the box to the left of a player to protect him. Any players who
-				are not protected may be selected in the expansion draft.
+				Check the box to the left of a player to protect{" "}
+				{helpers.pronoun(gender, "him")}. Any players who are not protected may
+				be selected in the expansion draft.
 			</p>
 			{upcomingFreeAgentsText}
 			<p>
@@ -125,6 +134,7 @@ const PlayerList = ({
 				<DataTable
 					cols={cols}
 					defaultSort={[5, "desc"]}
+					defaultStickyCols={window.mobile ? 1 : 2}
 					name="ProtectPlayers"
 					rows={rows}
 					hideAllControls
@@ -215,26 +225,19 @@ const ProtectPlayers = ({
 			}
 		}
 
-		const errors = await toWorker("main", "startExpansionDraft");
-
-		if (errors) {
-			logEvent({
-				type: "error",
-				text: `- ${errors.join("<br>- ")}`,
-				saveToDb: false,
-			});
-			setSaving(false);
-		} else {
-			realtimeUpdate([], helpers.leagueUrl(["draft"]));
-		}
+		await toWorker("main", "startExpansionDraft", undefined);
+		realtimeUpdate([], helpers.leagueUrl(["draft"]));
 	};
 
 	const updateProtectedPids = async (newProtectedPids: number[]) => {
-		await toWorker("main", "updateProtectedPlayers", userTid, newProtectedPids);
+		await toWorker("main", "updateProtectedPlayers", {
+			tid: userTid,
+			protectedPids: newProtectedPids,
+		});
 	};
 
 	const handleCancel = async () => {
-		await toWorker("main", "cancelExpansionDraft");
+		await toWorker("main", "cancelExpansionDraft", undefined);
 		realtimeUpdate([], helpers.leagueUrl([]));
 	};
 

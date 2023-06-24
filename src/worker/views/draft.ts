@@ -3,6 +3,7 @@ import type { UpdateEvents } from "../../common/types";
 import { draft } from "../core";
 import { idb } from "../db";
 import { g, local } from "../util";
+import addFirstNameShort from "../util/addFirstNameShort";
 
 const updateDraft = async (inputs: unknown, updateEvents: UpdateEvents) => {
 	if (
@@ -67,31 +68,35 @@ const updateDraft = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			);
 		}
 
-		drafted = await idb.getCopies.playersPlus(drafted, {
-			attrs: [
-				"pid",
-				"tid",
-				"name",
-				"age",
-				"draft",
-				"injury",
-				"contract",
-				"watch",
-				"prevTid",
-				"prevAbbrev",
-			],
-			ratings: ["ovr", "pot", "skills", "pos"],
-			stats: ["per", "ewa"],
-			season: g.get("season"),
-			showRookies: true,
-			fuzz: true,
-		});
+		drafted = addFirstNameShort(
+			await idb.getCopies.playersPlus(drafted, {
+				attrs: [
+					"pid",
+					"tid",
+					"firstName",
+					"lastName",
+					"age",
+					"draft",
+					"injury",
+					"contract",
+					"watch",
+					"prevTid",
+					"prevAbbrev",
+				],
+				ratings: ["ovr", "pot", "skills", "pos"],
+				stats: ["per", "ewa"],
+				season: g.get("season"),
+				showRookies: true,
+				fuzz: true,
+			}),
+		);
 
 		let stats: string[];
 		let undrafted: any[];
 
 		if (fantasyDraft) {
 			stats = bySport({
+				baseball: ["gp", "keyStats", "war"],
 				basketball: ["per", "ewa"],
 				football: ["gp", "keyStats", "av"],
 				hockey: ["gp", "keyStats", "ops", "dps", "ps"],
@@ -110,6 +115,7 @@ const updateDraft = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			expansionDraft.phase === "draft"
 		) {
 			stats = bySport({
+				baseball: ["gp", "keyStats", "war"],
 				basketball: ["per", "ewa"],
 				football: ["gp", "keyStats", "av"],
 				hockey: ["gp", "keyStats", "ops", "dps", "ps"],
@@ -170,25 +176,29 @@ const updateDraft = async (inputs: unknown, updateEvents: UpdateEvents) => {
 		}
 
 		undrafted.sort((a, b) => b.valueFuzz - a.valueFuzz);
-		undrafted = await idb.getCopies.playersPlus(undrafted, {
-			attrs: [
-				"pid",
-				"name",
-				"age",
-				"injury",
-				"contract",
-				"watch",
-				"abbrev",
-				"tid",
-				"valueFuzz",
-			],
-			ratings: ["ovr", "pot", "skills", "pos"],
-			stats,
-			season: g.get("season"),
-			showNoStats: true,
-			showRookies: true,
-			fuzz: true,
-		});
+		undrafted = addFirstNameShort(
+			await idb.getCopies.playersPlus(undrafted, {
+				attrs: [
+					"pid",
+					"firstName",
+					"lastName",
+					"age",
+					"injury",
+					"contract",
+					"watch",
+					"abbrev",
+					"tid",
+					"valueFuzz",
+					"draft",
+				],
+				ratings: ["ovr", "pot", "skills", "pos"],
+				stats,
+				season: g.get("season"),
+				showNoStats: true,
+				showRookies: true,
+				fuzz: true,
+			}),
+		);
 		undrafted.sort((a, b) => b.valueFuzz - a.valueFuzz);
 		undrafted = undrafted.map((p, i) => ({
 			...p,
@@ -227,6 +237,7 @@ const updateDraft = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			stats,
 			undrafted,
 			userPlayers,
+			userTid: g.get("userTid"),
 			userTids: g.get("userTids"),
 		};
 	}

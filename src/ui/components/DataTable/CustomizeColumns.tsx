@@ -1,8 +1,8 @@
-import type { Col } from ".";
+import type { Col, StickyCols } from ".";
 import { useState } from "react";
-import { Modal } from "react-bootstrap";
 import { SortableContainer, SortableElement } from "react-sortable-hoc";
 import classNames from "classnames";
+import Modal from "../Modal";
 
 const Item = SortableElement(
 	({
@@ -24,7 +24,9 @@ const Item = SortableElement(
 				title = "No Title";
 			}
 		} else {
-			title = <span className="text-muted">Not Currently Available</span>;
+			title = (
+				<span className="text-body-secondary">Not Currently Available</span>
+			);
 		}
 
 		return (
@@ -62,11 +64,13 @@ const CustomizeColumns = ({
 	colOrder,
 	cols,
 	hasSuperCols,
+	onChangeStickyCols,
 	onHide,
 	onReset,
 	onSortEnd,
 	onToggleHidden,
 	show,
+	stickyCols,
 }: {
 	colOrder: {
 		colIndex: number;
@@ -74,18 +78,40 @@ const CustomizeColumns = ({
 	}[];
 	cols: Col[];
 	hasSuperCols: boolean;
+	onChangeStickyCols: (stickyCols: StickyCols) => void;
 	onHide: () => void;
 	onReset: () => void;
 	onSortEnd: (arg: { oldIndex: number; newIndex: number }) => void;
 	onToggleHidden: (i: number) => () => void;
 	show: boolean;
+	stickyCols: StickyCols;
 }) => {
 	const [isDragged, setIsDragged] = useState(false);
+
+	const stickyColsOptions = [0, 1, 2, 3] as StickyCols[];
 
 	return (
 		<Modal animation={false} centered show={show} onHide={onHide}>
 			<Modal.Header closeButton>Customize Columns</Modal.Header>
 			<Modal.Body>
+				<div className="d-flex mb-3 align-items-center">
+					<div>Number of sticky columns:</div>
+					<div className="btn-group ms-2">
+						{stickyColsOptions.map(i => (
+							<button
+								key={i}
+								className={`btn ${
+									stickyCols === i ? "btn-primary" : "btn-secondary"
+								}`}
+								onClick={() => {
+									onChangeStickyCols(i);
+								}}
+							>
+								{i}
+							</button>
+						))}
+					</div>
+				</div>
 				<p>
 					Click and drag to reorder columns, or use the checkboxes to show/hide
 					columns.

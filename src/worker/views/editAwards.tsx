@@ -35,6 +35,9 @@ const updateAwards = async (
 			);
 		}
 	}
+	if (awards && !awards.sfmvp) {
+		awards.sfmvp = [];
+	}
 	if (
 		(season === g.get("season") && updateEvents.includes("newPhase")) ||
 		season !== state.season
@@ -53,6 +56,7 @@ const updateAwards = async (
 			attrs: ["pid", "name"],
 			ratings: ["pos"],
 			stats: bySport({
+				baseball: ["abbrev", "tid", "keyStats"],
 				basketball: ["abbrev", "tid", "pts", "trb", "ast", "blk", "stl"],
 				football: ["abbrev", "tid", "keyStats"],
 				hockey: [
@@ -72,7 +76,7 @@ const updateAwards = async (
 				],
 			}),
 			fuzz: true,
-			mergeStats: true,
+			mergeStats: "totOnly",
 			season,
 		});
 

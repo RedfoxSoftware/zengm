@@ -1,12 +1,22 @@
-import PropTypes from "prop-types";
-import { WEBSITE_PLAY } from "../../../common";
-import { HelpPopover, RatingsStatsPopover } from "../../components";
+import { useMemo, useState } from "react";
+import { groupByUnique } from "../../../common/groupBy";
+import type { GameAttributesLeague } from "../../../common/types";
+import {
+	ActionButton,
+	HelpPopover,
+	RatingsStatsPopover,
+} from "../../components";
+import SelectMultiple from "../../components/SelectMultiple";
+import { helpers, toWorker } from "../../util";
 
 const RelativesForm = ({
+	gender,
 	godMode,
 	handleChange,
+	initialPlayers,
 	relatives,
 }: {
+	gender: GameAttributesLeague["gender"];
 	godMode: boolean;
 	handleChange: (
 		type: string,
@@ -17,16 +27,33 @@ const RelativesForm = ({
 			};
 		},
 	) => void;
+	initialPlayers: {
+		name: string;
+		pid: number;
+	}[];
 	relatives: {
 		name: string;
 		pid: number | string;
 		type: string;
 	}[];
 }) => {
+	const [allPlayersState, setAllPlayersState] = useState<
+		"init" | "loading" | "done"
+	>("init");
+	const [allPlayers, setAllPlayers] = useState<
+		{ pid: number; name: string }[] | undefined
+	>();
+	const candidateRelatives = allPlayers ?? initialPlayers;
+
+	const playersByPid = useMemo(
+		() => groupByUnique(candidateRelatives, "pid"),
+		[candidateRelatives],
+	);
+
 	const handleRelativesChange = (
 		index: number,
 		field: "pid" | "type" | "add" | "delete",
-		event?: any,
+		value?: string,
 	) => {
 		if (field === "delete") {
 			relatives.splice(index, 1);
@@ -37,8 +64,7 @@ const RelativesForm = ({
 				type: "brother",
 			});
 		} else {
-			// @ts-ignore
-			relatives[index][field] = event.target.value;
+			relatives[index][field] = value!;
 		}
 		handleChange("root", "relatives", {
 			target: {
@@ -54,49 +80,40 @@ const RelativesForm = ({
 
 				return (
 					<div className="d-flex align-items-end mb-3" key={i}>
-						<div className="me-3">
+						<div className="me-3 flex-shrink-0">
 							{i === 0 ? <label className="form-label">Type</label> : null}
 							<select
 								className="form-select"
 								onChange={event => {
-									handleRelativesChange(i, "type", event);
+									handleRelativesChange(i, "type", event.target.value);
 								}}
 								value={type}
 								disabled={!godMode}
 							>
-								<option value="brother">Brother</option>
-								<option value="father">Father</option>
-								<option value="son">Son</option>
+								<option value="brother">
+									{helpers.getRelativeType(gender, "brother")}
+								</option>
+								<option value="father">
+									{helpers.getRelativeType(gender, "father")}
+								</option>
+								<option value="son">
+									{helpers.getRelativeType(gender, "son")}
+								</option>
 							</select>
 						</div>
-						<div className="me-2">
-							{i === 0 ? (
-								<label className="form-label">
-									Player ID number{" "}
-									<HelpPopover title="Player ID number">
-										<p>Enter the player ID number of the relative here.</p>
-										<p>
-											To find a player ID number, go to the player page for that
-											player and look at the end of the URL. For instance, if
-											the URL is https://{WEBSITE_PLAY}/l/19/player/6937, then
-											the player ID number is 6937.
-										</p>
-										<p>
-											Ideally this would be a search box that would
-											automatically find the ID number when you type in a
-											player's name, but oh well.
-										</p>
-									</HelpPopover>
-								</label>
-							) : null}
-							<input
-								type="text"
-								className="form-control"
-								onChange={event => {
-									handleRelativesChange(i, "pid", event);
+						<div className="me-2 flex-grow-1">
+							{i === 0 ? <label className="form-label">Player</label> : null}
+							<SelectMultiple
+								value={playersByPid[pid]}
+								options={candidateRelatives}
+								onChange={p => {
+									handleRelativesChange(i, "pid", String(p!.pid));
 								}}
-								value={pid}
+								getOptionLabel={p => p.name}
+								getOptionValue={p => String(p.pid)}
 								disabled={!godMode}
+								loading={allPlayersState === "loading"}
+								isClearable={false}
 							/>
 						</div>
 						<div className="flex-shrink-0" style={{ fontSize: 20 }}>
@@ -117,28 +134,55 @@ const RelativesForm = ({
 					</div>
 				);
 			})}
-			<button
-				type="button"
-				className="btn btn-secondary"
-				onClick={() => {
-					handleRelativesChange(-1, "add");
-				}}
-				disabled={!godMode}
-			>
-				Add
-			</button>
+			<div className="d-flex align-items-center">
+				<button
+					type="button"
+					className="btn btn-secondary"
+					onClick={() => {
+						handleRelativesChange(-1, "add");
+					}}
+					disabled={!godMode}
+				>
+					Add
+				</button>
+				<ActionButton
+					className="ms-3 me-2"
+					processing={allPlayersState === "loading"}
+					disabled={allPlayersState === "done"}
+					onClick={async () => {
+						setAllPlayersState("loading");
+						try {
+							const newPlayers = await toWorker(
+								"main",
+								"loadRetiredPlayers",
+								undefined,
+							);
+							setAllPlayers(newPlayers);
+							setAllPlayersState("done");
+						} catch (error) {
+							setAllPlayersState("init");
+							throw error;
+						}
+					}}
+					type="button"
+					variant="secondary"
+				>
+					{allPlayersState === "done" ? "Done!" : "Load Retired Players"}
+				</ActionButton>
+				<HelpPopover title="Load Retired Players">
+					<p>
+						By default, only active players are shown as selectable options in
+						the relatives form. This is for performance reasons, to handle
+						leagues where people have played many seasons.
+					</p>
+					<p>
+						If you press the "Load Retired Players" button and wait for it to
+						load, then retired players will be available to select as well.
+					</p>
+				</HelpPopover>
+			</div>
 		</>
 	);
-};
-
-RelativesForm.propTypes = {
-	handleChange: PropTypes.func.isRequired,
-	relatives: PropTypes.arrayOf(
-		PropTypes.shape({
-			pid: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
-			type: PropTypes.oneOf(["brother", "father", "son"]).isRequired,
-		}),
-	).isRequired,
 };
 
 export default RelativesForm;

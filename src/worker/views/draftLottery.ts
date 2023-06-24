@@ -10,18 +10,7 @@ import type {
 	DraftLotteryResult,
 	GameAttributesLeague,
 } from "../../common/types";
-import { draftHasLottey, getLotteryInfo } from "../core/draft/genOrder";
-
-const getNumToPick = (
-	draftType: DraftType | "dummy" | undefined,
-	numLotteryTeams: number,
-) => {
-	if (draftHasLottey(draftType)) {
-		return getLotteryInfo(draftType, numLotteryTeams).numToPick;
-	}
-
-	return 0;
-};
+import { getNumToPick } from "../core/draft/genOrder";
 
 const updateDraftLottery = async (
 	{ season }: ViewInput<"draftLottery">,
@@ -37,6 +26,7 @@ const updateDraftLottery = async (
 	rigged: GameAttributesLeague["riggedLottery"];
 	season: number;
 	showExpansionTeamMessage: boolean;
+	spectator: boolean;
 	type: "completed" | "projected" | "readyToRun";
 	userTid: number;
 } | void> => {
@@ -84,7 +74,7 @@ const updateDraftLottery = async (
 				let rigged: GameAttributesLeague["riggedLottery"];
 
 				if (draftLotteryResult) {
-					draftType = draftLotteryResult.draftType || "nba1994";
+					draftType = draftLotteryResult.draftType ?? "nba1994";
 					rigged = draftLotteryResult.rigged;
 				}
 
@@ -95,6 +85,7 @@ const updateDraftLottery = async (
 					rigged,
 					season,
 					showExpansionTeamMessage,
+					spectator: g.get("spectator"),
 					type: "completed",
 					userTid: g.get("userTid"),
 				};
@@ -109,6 +100,7 @@ const updateDraftLottery = async (
 					rigged: undefined,
 					season,
 					showExpansionTeamMessage,
+					spectator: g.get("spectator"),
 					type: "completed",
 					userTid: g.get("userTid"),
 				};
@@ -123,6 +115,7 @@ const updateDraftLottery = async (
 				rigged: undefined,
 				season,
 				showExpansionTeamMessage,
+				spectator: g.get("spectator"),
 				type: "projected",
 				userTid: g.get("userTid"),
 			};
@@ -169,6 +162,7 @@ const updateDraftLottery = async (
 			result: draftLotteryResult ? draftLotteryResult.result : undefined,
 			rigged: g.get("riggedLottery"),
 			season: draftLotteryResult ? draftLotteryResult.season : season,
+			spectator: g.get("spectator"),
 			showExpansionTeamMessage,
 			type,
 			userTid: g.get("userTid"),

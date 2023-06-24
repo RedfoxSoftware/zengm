@@ -1,9 +1,10 @@
 import classNames from "classnames";
 import { m, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { emitter, Message } from "../util/notify";
+import { emitter, type Message } from "../util/notify";
 import SafeHtml from "./SafeHtml";
-import { useLocalShallow } from "../util";
+import { useLocalPartial } from "../util";
+import { MOBILE_AD_BOTTOM_MARGIN } from "../../common";
 
 const MAX_NUM_NOTIFICATIONS = 5;
 
@@ -83,13 +84,11 @@ const unbind = emitter.on("notification", notification => {
 });
 
 const Notifications = () => {
-	const { stickyFooterAd, stickyFormButtons, userTids } = useLocalShallow(
-		state => ({
-			stickyFooterAd: state.stickyFooterAd,
-			stickyFormButtons: state.stickyFormButtons,
-			userTids: state.userTids,
-		}),
-	);
+	const { stickyFooterAd, stickyFormButtons, userTids } = useLocalPartial([
+		"stickyFooterAd",
+		"stickyFormButtons",
+		"userTids",
+	]);
 
 	const [notifications, setNotifications] = useState<Message[]>([]);
 
@@ -158,8 +157,8 @@ const Notifications = () => {
 		buttonBottom += 49;
 	}
 	if (stickyFooterAd) {
-		ulBottom += 52;
-		buttonBottom += 52;
+		ulBottom += MOBILE_AD_BOTTOM_MARGIN;
+		buttonBottom += MOBILE_AD_BOTTOM_MARGIN;
 	}
 
 	return (

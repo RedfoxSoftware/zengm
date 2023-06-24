@@ -1,10 +1,10 @@
-import PropTypes from "prop-types";
 import { PHASE } from "../../common";
-import { DataTable, MoreLinks, PlayerNameLabels } from "../components";
+import { DataTable, MoreLinks } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
-import { getCols, helpers } from "../util";
+import { getCols, helpers, useLocalPartial } from "../util";
 import type { View } from "../../common/types";
 import { dataTableWrappedMood } from "../components/Mood";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
 
 const UpcomingFreeAgents = ({
 	challengeNoRatings,
@@ -20,6 +20,8 @@ const UpcomingFreeAgents = ({
 		dropdownView: "upcoming_free_agents",
 		dropdownFields: { seasonsUpcoming: season },
 	});
+
+	const { gender } = useLocalPartial(["gender"]);
 
 	const superCols = [
 		{
@@ -56,15 +58,16 @@ const UpcomingFreeAgents = ({
 		return {
 			key: p.pid,
 			data: [
-				<PlayerNameLabels
-					injury={p.injury}
-					jerseyNumber={p.jerseyNumber}
-					pid={p.pid}
-					skills={p.ratings.skills}
-					watch={p.watch}
-				>
-					{p.name}
-				</PlayerNameLabels>,
+				wrappedPlayerNameLabels({
+					injury: p.injury,
+					jerseyNumber: p.jerseyNumber,
+					pid: p.pid,
+					skills: p.ratings.skills,
+					watch: p.watch,
+					firstName: p.firstName,
+					firstNameShort: p.firstNameShort,
+					lastName: p.lastName,
+				}),
 				p.ratings.pos,
 				<a href={helpers.leagueUrl(["roster", `${p.abbrev}_${p.tid}`])}>
 					{p.abbrev}
@@ -107,8 +110,10 @@ const UpcomingFreeAgents = ({
 				<p>
 					Keep in mind that many of these players will choose to re-sign with
 					their current team rather than become free agents. Also, even if a
-					player is &gt;99% willing to re-sign with his team, he still may
-					become a free agent if his team does not want him.
+					player is &gt;99% willing to re-sign with{" "}
+					{helpers.pronoun(gender, "his")} team, {helpers.pronoun(gender, "he")}{" "}
+					still may become a free agent if {helpers.pronoun(gender, "his")} team
+					does not want {helpers.pronoun(gender, "him")}.
 				</p>
 			) : null}
 
@@ -127,13 +132,6 @@ const UpcomingFreeAgents = ({
 			/>
 		</>
 	);
-};
-
-UpcomingFreeAgents.propTypes = {
-	phase: PropTypes.number.isRequired,
-	players: PropTypes.arrayOf(PropTypes.object).isRequired,
-	season: PropTypes.number.isRequired,
-	stats: PropTypes.arrayOf(PropTypes.string).isRequired,
 };
 
 export default UpcomingFreeAgents;

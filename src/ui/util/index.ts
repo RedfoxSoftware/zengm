@@ -26,10 +26,12 @@ promiseWorker.registerError(error => {
 });
 
 export { default as ads } from "./ads";
+export { default as analyticsEvent } from "./analyticsEvent";
 export { default as autoPlayDialog } from "./autoPlayDialog";
 export { default as compareVersions } from "./compareVersions";
 export { default as confirm } from "./confirm";
 export { default as confirmDeleteAllLeagues } from "./confirmDeleteAllLeagues";
+export { default as displayFace } from "./displayFace";
 export { default as downloadFile } from "./downloadFile";
 export { default as genStaticPage } from "./genStaticPage";
 export { default as getCols } from "../../common/getCols";
@@ -43,7 +45,7 @@ export {
 	localActions,
 	useLocal,
 	useLocalActions,
-	useLocalShallow,
+	useLocalPartial,
 } from "./local";
 export { default as leagueNotFoundMessage } from "./leagueNotFoundMessage";
 export { default as logEvent } from "./logEvent";

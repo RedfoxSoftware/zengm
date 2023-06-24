@@ -1,30 +1,23 @@
-import PropTypes from "prop-types";
 import { DataTable, MoreLinks } from "../components";
 import useTitleBar from "../hooks/useTitleBar";
 import { getCols, helpers } from "../util";
 import type { View } from "../../common/types";
+import { wrappedPlayerNameLabels } from "../components/PlayerNameLabels";
+import { isSport } from "../../common";
 
-const PlayerName = ({
-	p,
-}: {
-	p: {
-		pid: number;
-		name: string;
-	};
-}) => {
+const playerName = (p?: { pid: number; name: string; count: number }) => {
 	if (!p) {
-		return "???";
+		return {
+			value: "",
+			sortValue: undefined,
+		};
 	}
 
-	return <a href={helpers.leagueUrl(["player", p.pid])}>{p.name}</a>;
-};
-PlayerName.propTypes = {
-	p: PropTypes.shape({
-		abbrev: PropTypes.string.isRequired,
-		name: PropTypes.string.isRequired,
-		pid: PropTypes.number.isRequired,
-		tid: PropTypes.number.isRequired,
-	}),
+	return wrappedPlayerNameLabels({
+		pid: p.pid,
+		legacyName: p.name,
+		count: p.count,
+	});
 };
 
 const PlayerTeam = ({
@@ -38,7 +31,7 @@ const PlayerTeam = ({
 	season: number;
 }) => {
 	if (!p) {
-		return "???";
+		return "";
 	}
 
 	return (
@@ -46,13 +39,6 @@ const PlayerTeam = ({
 			{p.abbrev}
 		</a>
 	);
-};
-PlayerTeam.propTypes = {
-	p: PropTypes.shape({
-		abbrev: PropTypes.string.isRequired,
-		tid: PropTypes.number.isRequired,
-	}),
-	season: PropTypes.number.isRequired,
 };
 
 const resultText = ({
@@ -75,10 +61,14 @@ const resultText = ({
 	const tl = tw === 0 ? 1 : 0;
 
 	let overtimeText = "";
-	if (overtimes === 1) {
-		overtimeText = " (OT)";
-	} else if (overtimes > 1) {
-		overtimeText = ` (${overtimes}OT)`;
+
+	// Ignore baseball, don't want to worry about numPeriods
+	if (!isSport("baseball")) {
+		if (overtimes === 1) {
+			overtimeText = " (OT)";
+		} else if (overtimes > 1) {
+			overtimeText = ` (${overtimes}OT)`;
+		}
 	}
 
 	return `${teamNames[tw]} ${score[tw]}, ${teamNames[tl]} ${score[tl]}${{
@@ -121,13 +111,6 @@ const ResultText = ({
 		</>
 	);
 };
-ResultText.propTypes = {
-	gid: PropTypes.number,
-	overtimes: PropTypes.number,
-	score: PropTypes.arrayOf(PropTypes.number),
-	season: PropTypes.number.isRequired,
-	teamNames: PropTypes.arrayOf(PropTypes.string).isRequired,
-};
 
 const AllStarHistory = ({ allAllStars, userTid }: View<"allStarHistory">) => {
 	useTitleBar({ title: "All-Star History" });
@@ -139,12 +122,11 @@ const AllStarHistory = ({ allAllStars, userTid }: View<"allStarHistory">) => {
 		"Team",
 		"Captain 2",
 		"Team",
-		"MVP",
+		"award:mvp",
 		"Team",
-		"Dunk Winner",
-		"Team",
-		"Three-Point Winner",
-		"Team",
+		...(isSport("basketball")
+			? ["Dunk Winner", "Team", "Three-Point Winner", "Team"]
+			: []),
 		"Links",
 	]);
 
@@ -170,8 +152,6 @@ const AllStarHistory = ({ allAllStars, userTid }: View<"allStarHistory">) => {
 					searchValue: rowResultText,
 					sortValue: rowResultText,
 					value: (
-						// https://github.com/DefinitelyTyped/DefinitelyTyped/issues/20544
-						// @ts-ignore
 						<ResultText
 							gid={row.gid}
 							overtimes={row.overtimes}
@@ -182,107 +162,102 @@ const AllStarHistory = ({ allAllStars, userTid }: View<"allStarHistory">) => {
 					),
 				},
 				{
+					...playerName(row.captain1),
 					classNames: classNamesCaptain1,
-					value: (
-						// @ts-ignore
-						<PlayerName p={row.captain1}>
-							{row.captain1 ? row.captain1.name : "???"}
-						</PlayerName>
-					),
 				},
 				{
 					classNames: classNamesCaptain1,
 					value: (
-						// @ts-ignore
+						// @ts-expect-error
 						<PlayerTeam p={row.captain1} season={row.season}>
 							{row.captain1 ? row.captain1.abbrev : "???"}
 						</PlayerTeam>
 					),
 				},
 				{
+					...playerName(row.captain2),
 					classNames: classNamesCaptain2,
-					value: (
-						// @ts-ignore
-						<PlayerName p={row.captain2}>
-							{row.captain2 ? row.captain2.name : "???"}
-						</PlayerName>
-					),
 				},
 				{
 					classNames: classNamesCaptain2,
 					value: (
-						// @ts-ignore
+						// @ts-expect-error
 						<PlayerTeam p={row.captain2} season={row.season}>
 							{row.captain2 ? row.captain2.abbrev : "???"}
 						</PlayerTeam>
 					),
 				},
 				{
+					...playerName(row.mvp),
 					classNames: classNamesMVP,
-					value: (
-						// @ts-ignore
-						<PlayerName p={row.mvp}>
-							{row.mvp ? row.mvp.name : "???"}
-						</PlayerName>
-					),
 				},
 				{
 					classNames: classNamesMVP,
 					value: (
-						// @ts-ignore
+						// @ts-expect-error
 						<PlayerTeam p={row.mvp} season={row.season}>
 							{row.mvp ? row.mvp.abbrev : "???"}
 						</PlayerTeam>
 					),
 				},
-				{
-					classNames: classNamesDunk,
-					value: (
-						// @ts-ignore
-						<PlayerName p={row.dunk}>
-							{row.dunk ? row.dunk.name : "???"}
-						</PlayerName>
-					),
-				},
-				{
-					classNames: classNamesDunk,
-					value: (
-						// @ts-ignore
-						<PlayerTeam p={row.dunk} season={row.season}>
-							{row.dunk ? row.dunk.abbrev : "???"}
-						</PlayerTeam>
-					),
-				},
-				{
-					classNames: classNamesThree,
-					value: (
-						// @ts-ignore
-						<PlayerName p={row.three}>
-							{row.three ? row.three.name : "???"}
-						</PlayerName>
-					),
-				},
-				{
-					classNames: classNamesThree,
-					value: (
-						// @ts-ignore
-						<PlayerTeam p={row.three} season={row.season}>
-							{row.three ? row.three.abbrev : "???"}
-						</PlayerTeam>
-					),
-				},
+				...(isSport("basketball")
+					? [
+							{
+								...playerName(row.dunk),
+								classNames: classNamesDunk,
+							},
+							{
+								classNames: classNamesDunk,
+								value: (
+									// @ts-expect-error
+									<PlayerTeam p={row.dunk} season={row.season}>
+										{row.dunk ? row.dunk.abbrev : "???"}
+									</PlayerTeam>
+								),
+							},
+							{
+								...playerName(row.three),
+								classNames: classNamesThree,
+							},
+							{
+								classNames: classNamesThree,
+								value: (
+									// @ts-expect-error
+									<PlayerTeam p={row.three} season={row.season}>
+										{row.three ? row.three.abbrev : "???"}
+									</PlayerTeam>
+								),
+							},
+					  ]
+					: []),
 				<>
-					<a href={helpers.leagueUrl(["all_star", "draft", row.season])}>
-						Draft Results
-					</a>{" "}
-					|{" "}
-					<a href={helpers.leagueUrl(["all_star", "dunk", row.season])}>
-						Dunk Contest
-					</a>{" "}
-					|{" "}
-					<a href={helpers.leagueUrl(["all_star", "three", row.season])}>
-						Three-Point Contest
+					<a href={helpers.leagueUrl(["all_star", "teams", row.season])}>
+						{row.type === "draft" ? "Draft Results" : "View Teams"}
 					</a>
+					{isSport("basketball") ? (
+						<>
+							{row.dunk ? (
+								<>
+									{" "}
+									|{" "}
+									<a href={helpers.leagueUrl(["all_star", "dunk", row.season])}>
+										Dunk Contest
+									</a>
+								</>
+							) : null}
+							{row.three ? (
+								<>
+									{" "}
+									|{" "}
+									<a
+										href={helpers.leagueUrl(["all_star", "three", row.season])}
+									>
+										Three-Point Contest
+									</a>
+								</>
+							) : null}
+						</>
+					) : null}
 				</>,
 			],
 		};
@@ -297,17 +272,13 @@ const AllStarHistory = ({ allAllStars, userTid }: View<"allStarHistory">) => {
 			<DataTable
 				cols={cols}
 				defaultSort={[0, "desc"]}
+				defaultStickyCols={window.mobile ? 0 : 1}
 				name="AllStarHistory"
 				pagination={pagination}
 				rows={rows}
 			/>
 		</>
 	);
-};
-
-AllStarHistory.propTypes = {
-	allAllStars: PropTypes.arrayOf(PropTypes.object).isRequired,
-	userTid: PropTypes.number.isRequired,
 };
 
 export default AllStarHistory;

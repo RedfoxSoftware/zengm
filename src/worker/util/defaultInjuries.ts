@@ -54,7 +54,7 @@ const defaultInjuries = [
 		games: 1.09,
 	},
 	{
-		name: "Sprained Calf",
+		name: "Strained Calf",
 		frequency: 259,
 		games: 8.02,
 	},
@@ -254,6 +254,10 @@ const defaultInjuries = [
 if (isSport("football")) {
 	for (const row of defaultInjuries) {
 		row.games = parseFloat((row.games / 3).toFixed(2));
+	}
+} else if (isSport("baseball")) {
+	for (const row of defaultInjuries) {
+		row.games *= 1.5;
 	}
 }
 
